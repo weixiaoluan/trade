@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  --background: #020617; /* Deep Navy */
+  --card-bg: rgba(15, 23, 42, 0.5);
+  
+  /* Semantic Colors */
+  --bullish: #10B981; /* Emerald-500 */
+  --bearish: #F43F5E; /* Rose-500 */
+  --accent: #6366f1;  /* Indigo-500 */
+  --accent-glow: rgba(99, 102, 241, 0.5);
+}
+
+@layer base {
+  body {
+    @apply bg-gradient-to-br from-slate-950 via-[#0B1121] to-slate-900 min-h-screen text-slate-300 antialiased font-sans;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-sans tracking-tight text-white;
+  }
+
+  /* Monospace for ALL financial data */
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  /* High-end Glassmorphism Card */
+  .glass-card {
+    @apply bg-slate-900/50 backdrop-blur-md border border-white/10 shadow-xl shadow-black/20;
+  }
+
+  /* Tech Badge */
+  .badge-tech {
+    @apply px-2 py-0.5 rounded text-[10px] font-mono tracking-wider border border-white/10 bg-white/5 text-slate-400 uppercase;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+/* Markdown Styles - "Structured Intelligence" */
+.markdown-content {
+  @apply text-base leading-relaxed;
+}
+
+.markdown-content h1 {
+  @apply text-2xl font-bold text-white mb-6 mt-8 flex items-center gap-2;
+}
+
+.markdown-content h2 {
+  @apply text-lg font-semibold text-indigo-200 mb-4 mt-8 flex items-center gap-2 border-b border-white/5 pb-2;
+}
+
+.markdown-content h3 {
+  @apply text-base font-medium text-slate-200 mb-3 mt-6;
+}
+
+.markdown-content p {
+  @apply text-slate-300 mb-4 leading-7;
+}
+
+.markdown-content ul {
+  @apply space-y-2 mb-6;
+}
+
+.markdown-content li {
+  @apply text-slate-300 pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:bg-indigo-500 before:rounded-full;
+}
+
+.markdown-content strong {
+  @apply text-white font-semibold;
+}
+
+.markdown-content table {
+  @apply w-full border-collapse mb-6 text-sm bg-slate-900/40 rounded-lg overflow-hidden border border-white/5;
+}
+
+.markdown-content th {
+  @apply bg-slate-800/50 text-slate-400 px-4 py-3 text-left text-xs uppercase tracking-wider font-medium border-b border-white/10;
+}
+
+.markdown-content td {
+  @apply px-4 py-4 text-slate-300 border-b border-white/5;
+}
+
+.markdown-content tr:last-child td {
+  @apply border-b-0;
+}
+
+.markdown-content tr:hover td {
+  @apply bg-white/[0.02];
+}
+
+.markdown-content code {
+  @apply font-mono text-sm bg-slate-800/80 px-1.5 py-0.5 rounded text-indigo-300 border border-white/5;
+}
+
+.markdown-content blockquote {
+  @apply border-l-2 border-indigo-500 pl-4 py-1 my-6 bg-indigo-500/5 italic text-slate-400 rounded-r;
+}

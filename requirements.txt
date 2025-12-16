@@ -1,0 +1,45 @@
+# ============================================
+# 智能多维度证券分析系统 - 依赖配置
+# Smart Multi-Dimensional Securities Analysis System
+# ============================================
+
+# AutoGen 框架 (Microsoft)
+pyautogen>=0.2.35
+
+# Google Generative AI SDK (Gemini API)
+google-generativeai>=0.8.0
+
+# 金融数据获取
+yfinance>=0.2.40
+akshare>=1.12.0
+
+# 网页解析与爬虫
+beautifulsoup4>=4.12.3
+requests>=2.31.0
+lxml>=5.2.0
+
+# 技术分析指标计算
+pandas>=2.2.0
+numpy>=1.26.0
+ta>=0.11.0  # Technical Analysis Library
+
+# 数据可视化 (可选)
+matplotlib>=3.8.0
+plotly>=5.22.0
+
+# 环境变量管理
+python-dotenv>=1.0.1
+
+# 异步支持
+aiohttp>=3.9.0
+
+# 日期处理
+python-dateutil>=2.9.0
+
+# 日志美化
+rich>=13.7.0
+
+# Web 框架
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-multipart>=0.0.6

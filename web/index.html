@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 智能多维度证券分析系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            min-height: 100vh;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .glow-effect {
+            box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+        }
+        
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #3b82f6);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .markdown-body h1 { font-size: 1.75rem; font-weight: 700; margin: 1.5rem 0 1rem; color: #f1f5f9; }
+        .markdown-body h2 { font-size: 1.35rem; font-weight: 600; margin: 1.25rem 0 0.75rem; color: #e2e8f0; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
+        .markdown-body h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.5rem; color: #cbd5e1; }
+        .markdown-body p { margin: 0.75rem 0; color: #94a3b8; line-height: 1.7; }
+        .markdown-body ul, .markdown-body ol { margin: 0.5rem 0; padding-left: 1.5rem; color: #94a3b8; }
+        .markdown-body li { margin: 0.25rem 0; }
+        .markdown-body table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+        .markdown-body th { background: #1e293b; color: #e2e8f0; padding: 0.75rem; text-align: left; border: 1px solid #334155; }
+        .markdown-body td { padding: 0.75rem; border: 1px solid #334155; color: #cbd5e1; }
+        .markdown-body tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+        .markdown-body strong { color: #f1f5f9; font-weight: 600; }
+        .markdown-body code { background: #1e293b; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.85rem; color: #a5b4fc; }
+        .markdown-body blockquote { border-left: 3px solid #3b82f6; padding-left: 1rem; color: #64748b; font-style: italic; }
+    </style>
+</head>
+<body class="text-gray-100">
+    <!-- Header -->
+    <header class="glass-card border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <span class="text-xl">🤖</span>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                            智能多维度证券分析系统
+                        </h1>
+                        <p class="text-xs text-gray-500">Powered by AutoGen + DeepSeek-R1</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span id="status-dot" class="w-2 h-2 rounded-full bg-green-500 pulse-dot"></span>
+                    <span id="status-text" class="text-sm text-gray-400">系统就绪</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Left Panel: Input & Quick Info -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Search Card -->
+                <div class="glass-card rounded-2xl p-6">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <span class="mr-2">🔍</span> 股票分析
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">输入股票代码或名称</label>
+                            <div class="relative">
+                                <input 
+                                    type="text" 
+                                    id="ticker-input"
+                                    placeholder="AAPL, TSLA, SPY, 600519..."
+                                    class="w-full bg-gray-800/50 border border-gray-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                >
+                            </div>
+                        </div>
+                        
+                        <button 
+                            id="analyze-btn"
+                            onclick="startAnalysis()"
+                            class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 glow-effect"
+                        >
+                            <span>🚀</span>
+                            <span>开始分析</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Quick Stats Card -->
+                <div id="quick-stats" class="glass-card rounded-2xl p-6 hidden">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <span class="mr-2">📊</span> 快速概览
+                    </h2>
+                    <div id="stats-content" class="space-y-3">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+                
+                <!-- Progress Card -->
+                <div id="progress-card" class="glass-card rounded-2xl p-6 hidden">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <span class="mr-2">⏳</span> 分析进度
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="relative">
+                            <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                                <div id="progress-bar" class="h-full progress-bar rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <span id="progress-percent" class="absolute right-0 top-4 text-sm text-gray-400">0%</span>
+                        </div>
+                        <p id="progress-step" class="text-sm text-gray-400">等待开始...</p>
+                    </div>
+                </div>
+                
+                <!-- Example Stocks -->
+                <div class="glass-card rounded-2xl p-6">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <span class="mr-2">⭐</span> 热门标的
+                    </h2>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setTicker('AAPL')" class="bg-gray-800/50 hover:bg-gray-700/50 text-sm py-2 px-3 rounded-lg transition-colors text-left">
+                            <div class="font-medium">AAPL</div>
+                            <div class="text-xs text-gray-500">苹果公司</div>
+                        </button>
+                        <button onclick="setTicker('TSLA')" class="bg-gray-800/50 hover:bg-gray-700/50 text-sm py-2 px-3 rounded-lg transition-colors text-left">
+                            <div class="font-medium">TSLA</div>
+                            <div class="text-xs text-gray-500">特斯拉</div>
+                        </button>
+                        <button onclick="setTicker('NVDA')" class="bg-gray-800/50 hover:bg-gray-700/50 text-sm py-2 px-3 rounded-lg transition-colors text-left">
+                            <div class="font-medium">NVDA</div>
+                            <div class="text-xs text-gray-500">英伟达</div>
+                        </button>
+                        <button onclick="setTicker('SPY')" class="bg-gray-800/50 hover:bg-gray-700/50 text-sm py-2 px-3 rounded-lg transition-colors text-left">
+                            <div class="font-medium">SPY</div>
+                            <div class="text-xs text-gray-500">标普500 ETF</div>
+                        </button>
+                        <button onclick="setTicker('GOOGL')" class="bg-gray-800/50 hover:bg-gray-700/50 text-sm py-2 px-3 rounded-lg transition-colors text-left">
+                            <div class="font-medium">GOOGL</div>
+                            <div class="text-xs text-gray-500">谷歌</div>
+                        </button>
+                        <button onclick="setTicker('MSFT')" class="bg-gray-800/50 hover:bg-gray-700/50 text-sm py-2 px-3 rounded-lg transition-colors text-left">
+                            <div class="font-medium">MSFT</div>
+                            <div class="text-xs text-gray-500">微软</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Panel: Analysis Report -->
+            <div class="lg:col-span-2">
+                <div class="glass-card rounded-2xl p-6 min-h-[600px]">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <span class="mr-2">📋</span> 分析报告
+                        </h2>
+                        <div id="report-actions" class="hidden space-x-2">
+                            <button onclick="copyReport()" class="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded-lg transition-colors">
+                                📋 复制
+                            </button>
+                            <button onclick="downloadReport()" class="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded-lg transition-colors">
+                                💾 下载
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Welcome State -->
+                    <div id="welcome-state" class="flex flex-col items-center justify-center h-96 text-center">
+                        <div class="text-6xl mb-4">📈</div>
+                        <h3 class="text-xl font-semibold text-gray-300 mb-2">欢迎使用智能证券分析系统</h3>
+                        <p class="text-gray-500 max-w-md">
+                            输入股票代码，AI 将为您生成包含技术分析、基本面分析和多周期预测的专业投资报告
+                        </p>
+                        <div class="mt-6 flex items-center space-x-4 text-sm text-gray-500">
+                            <span class="flex items-center"><span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>技术分析</span>
+                            <span class="flex items-center"><span class="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>基本面分析</span>
+                            <span class="flex items-center"><span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>AI 预测</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Loading State -->
+                    <div id="loading-state" class="hidden flex flex-col items-center justify-center h-96">
+                        <div class="relative">
+                            <div class="w-16 h-16 border-4 border-blue-500/30 rounded-full"></div>
+                            <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full absolute top-0 animate-spin"></div>
+                        </div>
+                        <p id="loading-text" class="mt-4 text-gray-400">正在分析...</p>
+                    </div>
+                    
+                    <!-- Report Content -->
+                    <div id="report-content" class="hidden markdown-body prose prose-invert max-w-none">
+                        <!-- Dynamic markdown content -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Footer -->
+    <footer class="text-center py-6 text-sm text-gray-600">
+        <p>⚠️ 免责声明：本系统生成的分析报告仅供参考，不构成投资建议。投资有风险，入市需谨慎。</p>
+    </footer>
+
+    <script>
+        // Global state
+        let currentTaskId = null;
+        let currentTicker = null;
+        let reportContent = '';
+        
+        // Set ticker from quick buttons
+        function setTicker(ticker) {
+            document.getElementById('ticker-input').value = ticker;
+        }
+        
+        // Start analysis
+        async function startAnalysis() {
+            const ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+            if (!ticker) {
+                alert('请输入股票代码');
+                return;
+            }
+            
+            currentTicker = ticker;
+            
+            // Update UI
+            document.getElementById('welcome-state').classList.add('hidden');
+            document.getElementById('report-content').classList.add('hidden');
+            document.getElementById('loading-state').classList.remove('hidden');
+            document.getElementById('progress-card').classList.remove('hidden');
+            document.getElementById('report-actions').classList.add('hidden');
+            document.getElementById('analyze-btn').disabled = true;
+            document.getElementById('analyze-btn').innerHTML = '<span class="animate-spin">⏳</span><span>分析中...</span>';
+            
+            try {
+                // Fetch quick stats first
+                await fetchQuickStats(ticker);
+                
+                // Start analysis task
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker: ticker })
+                });
+                
+                const data = await response.json();
+                currentTaskId = data.task_id;
+                
+                // Poll for status
+                pollTaskStatus(data.task_id);
+                
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+        
+        // Fetch quick stats
+        async function fetchQuickStats(ticker) {
+            try {
+                const response = await fetch(`/api/stock/${ticker}/quote`);
+                const data = await response.json();
+                
+                if (data.quote?.status === 'success') {
+                    const summary = data.quote.summary || {};
+                    const info = data.info?.basic_info || {};
+                    const priceInfo = data.info?.price_info || {};
+                    
+                    document.getElementById('quick-stats').classList.remove('hidden');
+                    document.getElementById('stats-content').innerHTML = `
+                        <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                            <span class="text-gray-400">名称</span>
+                            <span class="font-medium">${info.name || ticker}</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                            <span class="text-gray-400">当前价格</span>
+                            <span class="font-medium text-green-400">$${summary.latest_price?.toFixed(2) || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                            <span class="text-gray-400">涨跌幅</span>
+                            <span class="font-medium ${summary.period_change_pct >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                ${summary.period_change_pct >= 0 ? '+' : ''}${summary.period_change_pct?.toFixed(2) || 0}%
+                            </span>
+                        </div>
+                        <div class="flex justify-between items-center py-2">
+                            <span class="text-gray-400">52周区间</span>
+                            <span class="text-sm">$${priceInfo['52_week_low']?.toFixed(2) || 'N/A'} - $${priceInfo['52_week_high']?.toFixed(2) || 'N/A'}</span>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                console.error('Failed to fetch quick stats:', e);
+            }
+        }
+        
+        // Poll task status
+        async function pollTaskStatus(taskId) {
+            try {
+                const response = await fetch(`/api/task/${taskId}`);
+                const data = await response.json();
+                
+                // Update progress
+                updateProgress(data.progress, data.current_step);
+                
+                if (data.status === 'completed') {
+                    showReport(data.result);
+                } else if (data.status === 'failed') {
+                    showError(data.error);
+                } else {
+                    // Continue polling
+                    setTimeout(() => pollTaskStatus(taskId), 1000);
+                }
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+        
+        // Update progress bar
+        function updateProgress(percent, step) {
+            document.getElementById('progress-bar').style.width = `${percent}%`;
+            document.getElementById('progress-percent').textContent = `${percent}%`;
+            document.getElementById('progress-step').textContent = step;
+            document.getElementById('loading-text').textContent = step;
+        }
+        
+        // Show report
+        function showReport(markdown) {
+            reportContent = markdown;
+            
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('report-content').classList.remove('hidden');
+            document.getElementById('report-actions').classList.remove('hidden');
+            document.getElementById('report-content').innerHTML = marked.parse(markdown);
+            
+            // Reset button
+            document.getElementById('analyze-btn').disabled = false;
+            document.getElementById('analyze-btn').innerHTML = '<span>🚀</span><span>开始分析</span>';
+            
+            updateStatus('分析完成', 'green');
+        }
+        
+        // Show error
+        function showError(message) {
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('report-content').classList.remove('hidden');
+            document.getElementById('report-content').innerHTML = `
+                <div class="text-center py-12">
+                    <div class="text-4xl mb-4">❌</div>
+                    <h3 class="text-xl text-red-400 mb-2">分析失败</h3>
+                    <p class="text-gray-500">${message}</p>
+                </div>
+            `;
+            
+            // Reset button
+            document.getElementById('analyze-btn').disabled = false;
+            document.getElementById('analyze-btn').innerHTML = '<span>🚀</span><span>开始分析</span>';
+            
+            updateStatus('分析失败', 'red');
+        }
+        
+        // Update status indicator
+        function updateStatus(text, color) {
+            const dot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            
+            dot.className = `w-2 h-2 rounded-full pulse-dot bg-${color}-500`;
+            statusText.textContent = text;
+        }
+        
+        // Copy report
+        function copyReport() {
+            navigator.clipboard.writeText(reportContent).then(() => {
+                alert('报告已复制到剪贴板');
+            });
+        }
+        
+        // Download report
+        function downloadReport() {
+            const blob = new Blob([reportContent], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${currentTicker}_analysis_${new Date().toISOString().slice(0,10)}.md`;
+            a.click();
+        }
+        
+        // Health check on load
+        async function checkHealth() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                if (data.status === 'healthy') {
+                    updateStatus(`已连接 (${data.llm_provider})`, 'green');
+                } else {
+                    updateStatus('服务异常', 'red');
+                }
+            } catch (e) {
+                updateStatus('无法连接服务', 'red');
+            }
+        }
+        
+        // Enter key to search
+        document.getElementById('ticker-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') startAnalysis();
+        });
+        
+        // Check health on load
+        checkHealth();
+    </script>
+</body>
+</html>
