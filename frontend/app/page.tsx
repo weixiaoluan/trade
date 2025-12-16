@@ -13,6 +13,7 @@ import { StockCard } from '@/components/ui/StockCard';
 import { PredictionTimeline } from '@/components/ui/PredictionTimeline';
 import { AIRecommendationCard } from '@/components/ui/AIRecommendationCard';
 import { QuantDashboardCard } from '@/components/ui/QuantDashboardCard';
+import { MultiPeriodPerformance } from '@/components/ui/MultiPeriodPerformance';
 
 // Types
 interface PredictionItem {
@@ -49,6 +50,7 @@ interface AnalysisResult {
   adxTrendStrength?: string;
   atrPct?: number;
   signalDetails?: string[];
+  periodReturns?: { period: string; label: string; return: number; }[];
 }
 
 type ViewState = 'hero' | 'loading' | 'dashboard';
@@ -125,6 +127,7 @@ export default function Home() {
             report = resultData.report || status.result || '';
             predictions = resultData.predictions || [];
             quantAnalysis = resultData.quant_analysis || null;
+            const trendAnalysis = resultData.trend_analysis || null;
             aiSummary = resultData.ai_summary || '';
             indicatorOverview = resultData.indicator_overview || null;
             signalDetails = Array.isArray(resultData.signal_details)
@@ -133,6 +136,9 @@ export default function Home() {
           } catch {
             report = status.result || '';
           }
+          
+          // 定义 trendAnalysis 以便后续使用
+          const trendAnalysis = quantAnalysis?.trend_analysis || null;
           
           // 获取资产类型
           const assetType = info.basic_info?.quote_type || 'EQUITY';
@@ -143,8 +149,8 @@ export default function Home() {
           // 获取成交额
           const volumeDisplay = info.volume_info?.amount_str;
           
-          // 获取净值(ETF)
-          const navValue = info.valuation?.nav || info.etf_specific?.nav;
+          // 获取净值(ETF/基金) - 多来源fallback
+          const navValue = info.valuation?.nav || info.etf_specific?.nav || info.fund_specific?.nav || info.fund_specific?.estimated_nav;
           
           // 获取价格数据 - 优先使用 info 数据（更准确）
           const currentPrice = info.price_info?.current_price || quote.latest_price || 0;
@@ -180,6 +186,37 @@ export default function Home() {
             aiSummary ||
             '基于量化评分和多维技术指标，系统已综合评估该标的当前趋势与风险水平，请参考下方详细报告。';
           
+          // 解析多周期表现数据
+          const periodReturnsData = [];
+          // 尝试从 trend_analysis 或 quant_analysis 中获取 period_returns
+          let periodReturnsObj: any = {};
+          if (quantAnalysis?.period_returns) {
+            periodReturnsObj = quantAnalysis.period_returns;
+          } else if (trendAnalysis?.period_returns) {
+            periodReturnsObj = trendAnalysis.period_returns;
+          }
+          
+          const periodMapping = [
+            { key: '1日', label: '周期 | 涨跌幅', period: '1d' },
+            { key: '5日', label: '5日', period: '5d' },
+            { key: '10日', label: '10日', period: '10d' },
+            { key: '20日', label: '20日', period: '20d' },
+            { key: '60日', label: '60日', period: '60d' },
+            { key: '120日', label: '120日', period: '120d' },
+            { key: '250日', label: '250日', period: '250d' },
+          ];
+          
+          for (const mapping of periodMapping) {
+            const value = periodReturnsObj[mapping.key];
+            if (typeof value === 'number') {
+              periodReturnsData.push({
+                period: mapping.period,
+                label: mapping.label,
+                return: value
+              });
+            }
+          }
+          
           setResult({
             ticker: query,
             name: info.basic_info?.name || query,
@@ -206,11 +243,13 @@ export default function Home() {
             adxTrendStrength,
             atrPct,
             signalDetails: signalDetails || undefined,
+            periodReturns: periodReturnsData.length > 0 ? periodReturnsData : undefined,
           });
           
           setViewState('dashboard');
         } else if (status.status === 'failed') {
-          alert('分析失败: ' + status.error);
+          const errorMsg = status.error || '未知错误';
+          alert(`❌ 分析失败\n\n${errorMsg}\n\n请检查：\n1. 股票代码是否正确\n2. A股请使用完整代码（如：600519.SS 或 000001.SZ）\n3. ETF/基金代码是否有效`);
           setViewState('hero');
         } else {
           setTimeout(pollStatus, 1000);
@@ -475,13 +514,13 @@ export default function Home() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <span className="badge-tech text-indigo-300 border-indigo-500/30 bg-indigo-500/10 text-[10px]">
-                            QUANT STRATEGY SIGNALS
+                            量化策略信号
                           </span>
                           <span className="text-xs text-slate-500">量化策略信号（核心打分依据）</span>
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {result.signalDetails.slice(0, 12).map((signal, idx) => {
+                        {result.signalDetails.slice(0, 24).map((signal, idx) => {
                           const s = signal as string;
                           const bullish = /多头|金叉|支撑|超卖|放量确认上涨|资金流入/.test(s);
                           const bearish = /空头|死叉|压力|超买|放量确认下跌|资金流出/.test(s);
@@ -504,11 +543,23 @@ export default function Home() {
                   )}
                 </motion.div>
 
-                {/* Prediction Timeline - Full Width */}
+                {/* Multi-Period Performance - 1 column */}
+                {result.periodReturns && result.periodReturns.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="lg:col-span-1"
+                  >
+                    <MultiPeriodPerformance data={result.periodReturns} />
+                  </motion.div>
+                )}
+
+                {/* Prediction Timeline - 3 columns全宽，右侧完全对齐 */}
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
+                  transition={{ delay: 0.25 }}
                   className="lg:col-span-3"
                 >
                   <div className="glass-card rounded-xl p-5 border border-white/[0.06]">
@@ -535,8 +586,8 @@ export default function Home() {
                           <FileText className="w-4 h-4 text-indigo-400" />
                         </div>
                         <div>
-                          <h3 className="text-sm font-bold text-white tracking-wide">INTELLIGENCE REPORT</h3>
-                          <span className="text-[10px] uppercase tracking-wider text-slate-500">AI QUANTITATIVE ANALYSIS</span>
+                          <h3 className="text-sm font-bold text-white tracking-wide">智能研报</h3>
+                          <span className="text-[10px] uppercase tracking-wider text-slate-500">AI量化分析</span>
                         </div>
                       </div>
                       <button

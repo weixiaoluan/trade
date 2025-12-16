@@ -92,9 +92,9 @@ export function PredictionTimeline({ predictions = defaultPredictions, onHoverHo
           </div>
           <div>
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              Multi-Period Trend Analysis
+              多周期趋势预测
             </h3>
-            <p className="text-[10px] text-slate-500 font-mono mt-0.5">AI PROBABILISTIC MODEL</p>
+            <p className="text-[10px] text-slate-500 font-mono mt-0.5">AI概率模型</p>
           </div>
         </div>
       </div>
@@ -169,7 +169,7 @@ export function PredictionTimeline({ predictions = defaultPredictions, onHoverHo
                       {prediction.label}
                     </span>
                     <div className={`text-[8px] font-mono px-1.5 py-0.5 rounded border ${confColor}`}>
-                      {prediction.confidence === 'high' ? '高' : prediction.confidence === 'medium' ? '中' : '低'}
+                      置信度{prediction.confidence === 'high' ? '高' : prediction.confidence === 'medium' ? '中' : '低'}
                     </div>
                   </div>
                 </div>

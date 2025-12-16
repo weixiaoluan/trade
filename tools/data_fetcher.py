@@ -505,15 +505,17 @@ def get_cn_etf_info(etf_code: str) -> str:
 
 def search_ticker(query: str) -> str:
     """
-    根据股票名称或代码搜索对应的 ticker symbol
+    智能搜索和识别标的代码（支持股票、ETF、基金、期货等多市场）
     
     Args:
-        query: 股票名称或代码 (如: "苹果", "AAPL", "贵州茅台", "600519")
+        query: 标的名称或代码
     
     Returns:
-        JSON 格式的搜索结果
+        JSON 格式的搜索结果，包含标的类型和市场信息
     """
-    # 常见中国股票映射
+    query = query.strip().upper()
+    
+    # 常见中国股票/港股映射
     cn_stock_mapping = {
         "贵州茅台": "600519.SS",
         "茅台": "600519.SS",
@@ -522,53 +524,102 @@ def search_ticker(query: str) -> str:
         "招商银行": "600036.SS",
         "工商银行": "601398.SS",
         "腾讯": "0700.HK",
+        "腾讯控股": "0700.HK",
         "阿里巴巴": "BABA",
         "阿里": "BABA",
         "比亚迪": "002594.SZ",
         "宁德时代": "300750.SZ",
+        "小米": "1810.HK",
+        "美团": "3690.HK",
     }
     
-    # 检查是否有直接映射
-    if query in cn_stock_mapping:
-        ticker = cn_stock_mapping[query]
+    query_lower = query.lower()
+    if query_lower in cn_stock_mapping:
+        ticker = cn_stock_mapping[query_lower]
         return json.dumps({
             "status": "success",
             "query": query,
             "ticker": ticker,
+            "asset_type": "stock",
+            "market": "HK" if ".HK" in ticker else ("SH" if ".SS" in ticker else "SZ"),
             "source": "local_mapping"
         }, ensure_ascii=False)
     
-    # 检查是否为纯数字代码
+    # 1. 检查是否已经包含市场后缀
+    if ".SS" in query or ".SZ" in query or ".HK" in query:
+        return json.dumps({
+            "status": "success",
+            "query": query,
+            "ticker": query,
+            "asset_type": "stock",
+            "market": "HK" if ".HK" in query else ("SH" if ".SS" in query else "SZ"),
+            "source": "direct_input"
+        }, ensure_ascii=False)
+    
+    # 2. 港股代码识别（4-5位数字）
+    if query.isdigit() and 4 <= len(query) <= 5:
+        ticker = f"{query.zfill(4)}.HK"  # 港股代码补齐到4位
+        return json.dumps({
+            "status": "success",
+            "query": query,
+            "ticker": ticker,
+            "asset_type": "stock",
+            "market": "HK",
+            "source": "hk_stock_inference"
+        }, ensure_ascii=False)
+    
+    # 3. A股/ETF/基金代码识别（6位数字）
     if query.isdigit() and len(query) == 6:
-        # 判断是股票还是基金
-        if query.startswith("6"):
-            ticker = f"{query}.SS"  # 上交所股票
+        # 上交所
+        if query.startswith(("6", "688")):
+            ticker = f"{query}.SS"
             asset_type = "stock"
+            market = "SH"
+        # 上交所ETF
+        elif query.startswith(("51", "56")):
+            ticker = query  # ETF使用特殊处理
+            asset_type = "ETF"
+            market = "SH"
+        # 深交所股票
         elif query.startswith(("00", "30")):
-            ticker = f"{query}.SZ"  # 深交所股票
+            ticker = f"{query}.SZ"
             asset_type = "stock"
-        else:
-            # 可能是场外基金 (如 001234, 020398, 110011 等)
+            market = "SZ"
+        # 深交所ETF
+        elif query.startswith("15"):
             ticker = query
-            asset_type = "cn_fund"
+            asset_type = "ETF"
+            market = "SZ"
+        # 场外基金
+        else:
+            ticker = query
+            asset_type = "fund"
+            market = "CN"
+        
         return json.dumps({
             "status": "success",
             "query": query,
             "ticker": ticker,
             "asset_type": asset_type,
+            "market": market,
             "source": "code_inference"
         }, ensure_ascii=False)
     
-    # 尝试直接使用作为美股代码
+    # 4. 美股/其他市场代码（字母或字母+数字）
     try:
-        stock = yf.Ticker(query.upper())
+        stock = yf.Ticker(query)
         info = stock.info
-        if info.get("regularMarketPrice"):
+        if info and info.get("regularMarketPrice"):
+            quote_type = info.get("quoteType", "EQUITY")
+            asset_type = "ETF" if quote_type == "ETF" else "stock"
+            
             return json.dumps({
                 "status": "success",
                 "query": query,
-                "ticker": query.upper(),
-                "name": info.get("longName", ""),
+                "ticker": query,
+                "name": info.get("longName", info.get("shortName", "")),
+                "asset_type": asset_type,
+                "market": "US",
                 "source": "yfinance_lookup"
             }, ensure_ascii=False)
     except Exception:
@@ -577,7 +628,7 @@ def search_ticker(query: str) -> str:
     return json.dumps({
         "status": "not_found",
         "query": query,
-        "message": "未找到匹配的股票代码，请提供准确的 ticker symbol"
+        "message": "未找到匹配的标的代码。支持：\n- A股（如：600519.SS 或 600519）\n- 港股（如：0700.HK 或 700）\n- 美股/ETF（如：AAPL、SPY）\n- 场内ETF（如：513120、159857）\n- 场外基金（如：001234）"
     }, ensure_ascii=False)
 
 

@@ -109,7 +109,7 @@ export function AIRecommendationCard({
               
               <div>
                 <div className="flex items-center gap-2 mb-1.5">
-                  <span className="badge-tech text-indigo-300 border-indigo-500/30 bg-indigo-500/10">AI ANALYSIS</span>
+                  <span className="badge-tech text-indigo-300 border-indigo-500/30 bg-indigo-500/10">AI深度解读</span>
                   <span className="text-[10px] text-slate-500 font-mono">{new Date().toLocaleDateString()}</span>
                 </div>
                 <div className="flex items-baseline gap-2">

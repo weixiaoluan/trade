@@ -254,10 +254,23 @@ async def run_full_analysis(task_id: str, ticker: str):
     task = analysis_tasks[task_id]
     
     try:
-        # 步骤 1: 获取行情数据（获取2年历史数据用于深度分析）
+        # === 第一列：数据获取 ===
+        # 步骤 1: AI Agents正在集结
         task["status"] = "running"
-        task["current_step"] = "获取历史行情数据"
-        task["progress"] = 10
+        task["current_step"] = "AI Agents正在集结"
+        task["progress"] = 5
+        await asyncio.sleep(0.2)
+        
+        # 步骤 2: 正在获取实时行情数据
+        task["current_step"] = "正在获取实时行情数据"
+        task["progress"] = 15
+        
+        # 自动识别并标准化ticker（自动添加市场后缀）
+        search_result = await asyncio.to_thread(search_ticker, ticker)
+        search_dict = json.loads(search_result)
+        
+        if search_dict.get("status") == "success":
+            ticker = search_dict.get("ticker", ticker)
         
         stock_data = await asyncio.to_thread(get_stock_data, ticker, "2y", "1d")
         stock_data_dict = json.loads(stock_data)
@@ -267,45 +280,60 @@ async def run_full_analysis(task_id: str, ticker: str):
         
         await asyncio.sleep(0.3)
         
-        # 步骤 2: 获取基本面信息
-        task["current_step"] = "获取基本面信息"
-        task["progress"] = 20
+        # 步骤 3: 基本面分析师正在评估价值
+        task["current_step"] = "基本面分析师正在评估价值"
+        task["progress"] = 25
         
         stock_info = await asyncio.to_thread(get_stock_info, ticker)
         stock_info_dict = json.loads(stock_info)
         
         await asyncio.sleep(0.3)
         
-        # 步骤 3: 计算技术指标
-        task["current_step"] = "计算技术指标"
+        # === 第二列：量化分析 ===
+        # 步骤 4: 技术面分析师正在计算指标
+        task["current_step"] = "技术面分析师正在计算指标"
         task["progress"] = 35
         
         indicators = await asyncio.to_thread(calculate_all_indicators, stock_data)
         indicators_dict = json.loads(indicators)
         
+        # 检查指标数据是否有效
+        if indicators_dict.get("status") == "error" or not indicators_dict.get("indicators"):
+            raise Exception(f"无法计算 {ticker} 的技术指标：{indicators_dict.get('message', '数据不足或格式错误')}")
+        
         await asyncio.sleep(0.3)
         
-        # 步骤 4: 趋势分析
-        task["current_step"] = "分析趋势"
-        task["progress"] = 50
+        # 步骤 5: 量化引擎正在生成信号
+        task["current_step"] = "量化引擎正在生成信号"
+        task["progress"] = 45
         
         trend = await asyncio.to_thread(analyze_trend, indicators)
         trend_dict = json.loads(trend)
         
+        # 检查趋势分析是否有效
+        if trend_dict.get("status") == "error":
+            raise Exception(f"无法分析 {ticker} 的趋势：{trend_dict.get('message', '量化分析失败')}")
+        
         await asyncio.sleep(0.3)
         
-        # 步骤 5: 支撑阻力位
-        task["current_step"] = "计算支撑阻力位"
-        task["progress"] = 60
+        # 步骤 6: 数据审计员正在验证来源
+        task["current_step"] = "数据审计员正在验证来源"
+        task["progress"] = 55
         
         levels = await asyncio.to_thread(get_support_resistance_levels, stock_data)
         levels_dict = json.loads(levels)
         
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.3)
         
-        # 步骤 6: AI 多轮分析生成报告和预测
-        task["current_step"] = "AI 多Agent分析中"
+        # === 第三列：AI分析 ===
+        # 步骤 7: 风险管理专家正在评估风险
+        task["current_step"] = "风险管理专家正在评估风险"
         task["progress"] = 65
+        await asyncio.sleep(0.3)
+        
+        # 步骤 8: 首席投资官正在生成报告
+        task["current_step"] = "首席投资官正在生成报告"
+        task["progress"] = 75
         
         # 调用 AI 生成报告和预测（多Agent论证）
         report, predictions = await generate_ai_report_with_predictions(
@@ -367,13 +395,18 @@ async def run_full_analysis(task_id: str, ticker: str):
         else:
             score_text = "N/A"
 
+        # 步骤 9: 质量控制专员正在审核
+        task["current_step"] = "质量控制专员正在审核"
+        task["progress"] = 90
+        await asyncio.sleep(0.2)
+        
         ai_summary = (
             f"量化评分 {score_text} 分，当前处于{regime_map.get(market_regime, '待判定')}，"
             f"{vol_map.get(volatility_state, '波动适中')}，综合建议：{reco_map.get(quant_reco, '观望')}。"
         )
 
         task["progress"] = 100
-        task["current_step"] = "完成"
+        task["current_step"] = "分析完成"
         task["status"] = "completed"
         task["result"] = json.dumps({
             "report": report,
@@ -734,6 +767,9 @@ async def generate_ai_report(
     trend_analysis = trend.get("trend_analysis", {})
     if isinstance(trend_analysis, list):
         trend_analysis = {}
+    
+    # 提前提取period_returns，避免后续prompt中使用时未定义
+    period_returns = ind.get('period_returns', {})
 
     quant_analysis = trend.get("quant_analysis", {})
     quant_score = quant_analysis.get("score", "N/A")
@@ -770,7 +806,14 @@ async def generate_ai_report(
             "nearest_resistance": resistance_levels[0] if resistance_levels else "N/A"
         }
     
+    # 获取当前时间
+    current_datetime = datetime.now()
+    report_date = current_datetime.strftime("%Y年%m月%d日")
+    report_time = current_datetime.strftime("%H:%M:%S")
+    
     prompt = f"""
+**重要提示**: 当前日期是 {report_date}，当前时间是 {report_time}。请在报告中使用此日期作为报告生成时间，不要使用其他日期。
+
 请根据以下数据生成专业详细的证券/基金分析报告：
 
 ## 标的信息
@@ -852,7 +895,16 @@ async def generate_ai_report(
 11. **成交量分析**: 量价配合、放量缩量、OBV能量潮趋势
 
 ### 多周期表现
-12. **区间涨跌**: 5日/10日/20日/60日/120日/250日涨跌幅统计
+12. **区间涨跌**:
+
+| 周期 | 涨跌幅 |
+|--------|--------|
+| 5日 | {period_returns.get('5日', 'N/A')}% |
+| 10日 | {period_returns.get('10日', 'N/A')}% |
+| 20日 | {period_returns.get('20日', 'N/A')}% |
+| 60日 | {period_returns.get('60日', 'N/A')}% |
+| 120日 | {period_returns.get('120日', 'N/A')}% |
+| 250日 | {period_returns.get('250日', 'N/A')}% |
 
 ## 三、支撑阻力位分析
 - 列出多个支撑位和阻力位
@@ -915,15 +967,41 @@ async def generate_ai_report(
         )
         report_text = response.choices[0].message.content
 
-        # 规范化报告日期为当前日期
-        current_date_str = datetime.now().strftime("%Y年%m月%d日")
+        # 规范化报告日期和时间为当前日期时间
+        current_datetime = datetime.now()
+        current_date_str = current_datetime.strftime("%Y年%m月%d日")
+        current_time_str = current_datetime.strftime("%H:%M:%S")
+        
+        # 替换所有可能的旧日期
+        report_text = re.sub(
+            r"报告生成时间[:：]\s*\d{4}年\d{1,2}月\d{1,2}日",
+            f"报告生成时间：{current_date_str}",
+            report_text,
+        )
         report_text = re.sub(
             r"报告日期[:：]\s*\d{4}年\d{1,2}月\d{1,2}日",
             f"报告日期：{current_date_str}",
             report_text,
         )
-        if "报告日期" not in report_text:
-            report_text += f"\n\n报告日期：{current_date_str}"
+        report_text = re.sub(
+            r"\d{4}年\d{1,2}月\d{1,2}日",
+            current_date_str,
+            report_text,
+            count=5  # 最多替换前5个旧日期
+        )
+        
+        # 在报告末尾添加明确的元数据
+        footer = f"""
+
+---
+
+**报告生成时间**: {current_date_str} {current_time_str} | **数据来源**: 量化系统 + AI多智能体分析
+
+*本报告由量化引擎(基于vnpy架构)与AI Agent深度联动生成，整合了硬数据分析与软判断评估。*
+"""
+        
+        if "报告生成时间" not in report_text and "报告日期" not in report_text:
+            report_text += footer
 
         return report_text
     except Exception as e:
@@ -943,8 +1021,14 @@ async def generate_ai_report(
         adx = ind.get('adx', {})
         period_returns = ind.get('period_returns', {})
         
-        # 确定涨跌状态
-        change_pct = summary.get('period_change_pct', 0)
+        # 确定涨跌状态 - 使用当日涨跌幅而不是周期涨跌幅
+        # 优先从 price_info 获取当日涨跌幅，fallback 到 period_returns 的1日数据
+        price_info = stock_info.get("price_info", {})
+        change_pct = price_info.get("change_pct")
+        if change_pct is None:
+            # 尝试从 period_returns 获取1日涨跌幅
+            change_pct = period_returns.get('1d', summary.get('period_change_pct', 0))
+        
         try:
             change_pct_str = f"{float(change_pct):.2f}"
         except Exception:

@@ -5,12 +5,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, Database, Brain, MessageSquare, Shield, BarChart3 } from 'lucide-react';
 
 const loadingStages = [
-  { icon: Bot, text: 'AI Agents 正在集结...', color: 'text-electric-blue' },
-  { icon: Database, text: '正在获取实时行情数据...', color: 'text-emerald' },
-  { icon: Brain, text: '技术面分析师正在计算指标...', color: 'text-purple-400' },
-  { icon: BarChart3, text: '基本面分析师正在评估价值...', color: 'text-gold' },
-  { icon: Shield, text: '数据审计员正在验证来源...', color: 'text-rose' },
-  { icon: MessageSquare, text: '首席投资官正在生成报告...', color: 'text-neon-cyan' },
+  // 第一列：数据获取
+  { icon: Bot, text: 'AI Agents正在集结', color: 'text-electric-blue', column: 1 },
+  { icon: Database, text: '正在获取实时行情数据', color: 'text-emerald-400', column: 1 },
+  { icon: BarChart3, text: '基本面分析师正在评估价值', color: 'text-amber-400', column: 1 },
+  // 第二列：量化分析
+  { icon: Brain, text: '技术面分析师正在计算指标', color: 'text-purple-400', column: 2 },
+  { icon: BarChart3, text: '量化引擎正在生成信号', color: 'text-cyan-400', column: 2 },
+  { icon: Shield, text: '数据审计员正在验证来源', color: 'text-rose-400', column: 2 },
+  // 第三列：AI分析
+  { icon: Shield, text: '风险管理专家正在评估风险', color: 'text-orange-400', column: 3 },
+  { icon: MessageSquare, text: '首席投资官正在生成报告', color: 'text-indigo-400', column: 3 },
+  { icon: Bot, text: '质量控制专员正在审核', color: 'text-teal-400', column: 3 },
 ];
 
 interface LoadingStateProps {
@@ -137,26 +143,40 @@ export function LoadingState({ progress = 0, currentStep }: LoadingStateProps) {
         </div>
       </div>
 
-      {/* Agent Status Grid */}
-      <div className="grid grid-cols-3 gap-4 mt-8">
-        {loadingStages.slice(0, 6).map((stage, index) => {
+      {/* Agent Status Grid - 3列×3行 */}
+      <div className="grid grid-cols-3 gap-3 mt-8 max-w-4xl">
+        {loadingStages.map((stage, index) => {
           const StageIcon = stage.icon;
-          const isActive = index <= Math.floor((progress / 100) * 5);
+          const isActive = index <= Math.floor((progress / 100) * 8);
+          const isCompleted = index < Math.floor((progress / 100) * 8);
           return (
             <motion.div
               key={index}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                isActive ? 'bg-slate-800/50' : 'bg-slate-900/30'
+              className={`flex flex-col gap-2 px-4 py-3 rounded-lg border transition-all ${
+                isActive 
+                  ? 'bg-slate-800/60 border-white/10 shadow-lg' 
+                  : 'bg-slate-900/30 border-white/5'
               }`}
-              animate={isActive ? { opacity: 1 } : { opacity: 0.4 }}
+              animate={isActive ? { opacity: 1, scale: 1 } : { opacity: 0.5, scale: 0.98 }}
             >
-              <StageIcon
-                className={`w-4 h-4 ${isActive ? stage.color : 'text-slate-600'}`}
-              />
+              <div className="flex items-center gap-2">
+                <StageIcon
+                  className={`w-4 h-4 ${isActive ? stage.color : 'text-slate-600'}`}
+                />
+                {isCompleted && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="ml-auto w-2 h-2 rounded-full bg-emerald-500"
+                  />
+                )}
+              </div>
               <span
-                className={`text-xs ${isActive ? 'text-slate-300' : 'text-slate-600'}`}
+                className={`text-xs leading-tight ${
+                  isActive ? 'text-slate-300 font-medium' : 'text-slate-600'
+                }`}
               >
-                {stage.text.split('...')[0]}
+                {stage.text}
               </span>
             </motion.div>
           );

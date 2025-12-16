@@ -93,7 +93,7 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
                 setIsFocused(false);
                 setTimeout(() => setShowSuggestions(false), 200);
               }}
-              placeholder="输入代码或名称..."
+              placeholder="输入标的代码 (如: AAPL、600519、0700、513120、159857)"
               className={`
                 flex-1 bg-transparent border-none outline-none 
                 text-slate-100 placeholder-slate-500 font-medium
