@@ -685,37 +685,42 @@ async def generate_ai_report_with_predictions(
 5. target涨跌幅要合理：短期(1D-1W)±0.5%~5%，中期(15D-1M)±3%~15%，长期(3M-1Y)±10%~50%
 6. 如果多空信号冲突严重，选择neutral并降低置信度"""
 
-    predictions = []
-    
-    try:
-        # Agent 1 调用
-        pred_response = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-V3",
-            messages=[
-                {"role": "system", "content": "你是量化分析师，只输出JSON格式的预测数据，不要输出其他内容。"},
-                {"role": "user", "content": prediction_prompt}
-            ],
-            max_tokens=1000,
-            temperature=0.2,
-            timeout=120
-        )
+    async def call_predictions() -> list:
+        """调用 DeepSeek 生成多周期预测，如失败则使用本地量化规则回退。"""
+        predictions_local: list = []
+        try:
+            # Agent 1 调用
+            pred_response = client.chat.completions.create(
+                model="deepseek-ai/DeepSeek-V3",
+                messages=[
+                    {"role": "system", "content": "你是量化分析师，只输出JSON格式的预测数据，不要输出其他内容。"},
+                    {"role": "user", "content": prediction_prompt}
+                ],
+                max_tokens=1000,
+                temperature=0.2,
+                timeout=120
+            )
+            
+            pred_text = pred_response.choices[0].message.content
+            # 提取 JSON
+            json_match = re.search(r'\[[\s\S]*\]', pred_text)
+            if json_match:
+                predictions_local = json.loads(json_match.group())
+        except Exception as e:
+            print(f"Agent 1 预测失败: {e}")
+            # 使用基于规则的预测作为备用
+            predictions_local = generate_predictions(indicators, trend, levels, stock_data)
         
-        pred_text = pred_response.choices[0].message.content
-        # 提取 JSON
-        json_match = re.search(r'\[[\s\S]*\]', pred_text)
-        if json_match:
-            predictions = json.loads(json_match.group())
-    except Exception as e:
-        print(f"Agent 1 预测失败: {e}")
-        # 使用基于规则的预测作为备用
-        predictions = generate_predictions(indicators, trend, levels, stock_data)
+        return predictions_local
     
-    # ============================================
-    # Agent 2: 报告撰写师 - 生成详细报告
-    # ============================================
-    report = await generate_ai_report(
-        ticker, stock_data, stock_info, indicators, trend, levels
+    # 并行运行预测和报告生成，以减少整体等待时间
+    predictions_task = asyncio.create_task(call_predictions())
+    report_task = asyncio.create_task(
+        generate_ai_report(ticker, stock_data, stock_info, indicators, trend, levels)
     )
+    
+    predictions = await predictions_task
+    report = await report_task
     
     return report, predictions
 
@@ -1006,57 +1011,9 @@ async def generate_ai_report(
 
         return report_text
     except Exception as e:
-        # LLM 连接失败时返回详细的本地分析报告
+        # LLM 连接失败时仅记录错误并向上抛出，让上层标记任务失败
         print(f"LLM API Error: {e}")
-        
-        # 获取更多指标数据
-        macd = ind.get('macd', {})
-        rsi = ind.get('rsi', {})
-        kdj = ind.get('kdj', {})
-        bb = ind.get('bollinger_bands', {})
-        ma_data = ind.get('moving_averages', {})
-        atr = ind.get('atr', {})
-        obv = ind.get('obv', {})
-        cci = ind.get('cci', {})
-        williams = ind.get('williams_r', {})
-        adx = ind.get('adx', {})
-        period_returns = ind.get('period_returns', {})
-        
-        # 确定涨跌状态 - 使用当日涨跌幅而不是周期涨跌幅
-        # 优先从 price_info 获取当日涨跌幅，fallback 到 period_returns 的1日数据
-        price_info = stock_info.get("price_info", {})
-        change_pct = price_info.get("change_pct")
-        if change_pct is None:
-            # 尝试从 period_returns 获取1日涨跌幅
-            change_pct = period_returns.get('1d', summary.get('period_change_pct', 0))
-        
-        try:
-            change_pct_str = f"{float(change_pct):.2f}"
-        except Exception:
-            change_pct_str = str(change_pct)
-        trend_emoji = "📈" if change_pct >= 0 else "📉"
-        trend_text = "上涨" if change_pct >= 0 else "下跌"
-        
-        # 生成信号解读
-        rsi_value = rsi.get('value', 50) if isinstance(rsi, dict) else 50
-        try:
-            rsi_value_str = f"{float(rsi_value):.2f}"
-        except Exception:
-            rsi_value_str = str(rsi_value)
-        rsi_signal = "超买区域，注意回调风险" if float(rsi_value) > 70 else "超卖区域，可能反弹" if float(rsi_value) < 30 else "中性区域"
-        
-        macd_signal = macd.get('signal', '中性') if isinstance(macd, dict) else '中性'
-        kdj_signal = kdj.get('status', '中性') if isinstance(kdj, dict) else '中性'
-
-        # Simplified ASCII-only fallback report to avoid encoding issues
-        return (
-            f"# {ticker} Technical Analysis Report {trend_emoji}\n\n"
-            f"Latest price: {summary.get('latest_price', 'N/A')}\n"
-            f"Change: {change_pct_str}% ({trend_text})\n\n"
-            "Key technical highlights (MACD/RSI/KDJ/Bollinger/ATR/ADX) could not be fully "
-            "described because the LLM API call failed. This is a minimal fallback report "
-            "generated locally based on quantitative indicators."
-        )
+        raise
 
 
 # ============================================
