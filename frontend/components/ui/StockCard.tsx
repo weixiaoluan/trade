@@ -47,17 +47,7 @@ export function StockCard({
     setDisplayPrice(price);
   }, [price]);
 
-  // Subtle price tick animation
-  useEffect(() => {
-    if (price <= 0) return;
-    const interval = setInterval(() => {
-      setDisplayPrice((prev) => {
-        const variance = prev * 0.00008;
-        return prev + (Math.random() - 0.5) * variance;
-      });
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [price]);
+  // 移除模拟价格波动，保持真实价格
 
   const pricePosition = high52w && low52w && high52w !== low52w 
     ? Math.min(Math.max(((price - low52w) / (high52w - low52w)) * 100, 0), 100)

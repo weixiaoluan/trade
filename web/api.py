@@ -409,6 +409,7 @@ async def run_full_analysis(task_id: str, ticker: str):
         task["current_step"] = "分析完成"
         task["status"] = "completed"
         task["result"] = json.dumps({
+            "ticker": ticker,  # 标准化后的 ticker
             "report": report,
             "predictions": predictions,
             "quant_analysis": quant_analysis,
@@ -602,7 +603,7 @@ async def generate_ai_report_with_predictions(
     transport = httpx.HTTPTransport(proxy=None)
     http_client = httpx.Client(
         transport=transport,
-        timeout=httpx.Timeout(180.0, connect=30.0)
+        timeout=httpx.Timeout(300.0, connect=60.0)
     )
     
     client = OpenAI(
@@ -696,7 +697,7 @@ async def generate_ai_report_with_predictions(
             ],
             max_tokens=1000,
             temperature=0.2,
-            timeout=60
+            timeout=120
         )
         
         pred_text = pred_response.choices[0].message.content
@@ -744,7 +745,7 @@ async def generate_ai_report(
     transport = httpx.HTTPTransport(proxy=None)
     http_client = httpx.Client(
         transport=transport,
-        timeout=httpx.Timeout(120.0, connect=30.0)
+        timeout=httpx.Timeout(300.0, connect=60.0)
     )
     
     client = OpenAI(

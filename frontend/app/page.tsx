@@ -107,8 +107,18 @@ export default function Home() {
         setCurrentStep(status.current_step || '处理中');
 
         if (status.status === 'completed') {
-          // Fetch stock data for display
-          const quoteRes = await fetch(`/api/stock/${query}/quote`);
+          // 解析结果获取标准化的 ticker
+          let normalizedTicker = query;
+          try {
+            const resultPreview = JSON.parse(status.result || '{}');
+            // 从分析结果中获取标准化的 ticker（后端已转换）
+            if (resultPreview.ticker) {
+              normalizedTicker = resultPreview.ticker;
+            }
+          } catch {}
+          
+          // Fetch stock data for display - 使用标准化的 ticker
+          const quoteRes = await fetch(`/api/stock/${normalizedTicker}/quote`);
           const quoteData = await quoteRes.json();
           
           const quote = quoteData.quote?.summary || {};
@@ -592,86 +602,48 @@ export default function Home() {
                       </div>
                       <button
                         onClick={() => {
-                          // 生成 HTML 报告
-                          const reportHtml = `
-<!DOCTYPE html>
+                          // 直接克隆当前页面HTML下载
+                          const htmlContent = document.documentElement.outerHTML;
+                          
+                          // 获取所有样式表内容
+                          let styles = '';
+                          const styleSheets = document.styleSheets;
+                          for (let i = 0; i < styleSheets.length; i++) {
+                            try {
+                              const rules = styleSheets[i].cssRules || styleSheets[i].rules;
+                              if (rules) {
+                                for (let j = 0; j < rules.length; j++) {
+                                  styles += rules[j].cssText + '\n';
+                                }
+                              }
+                            } catch (e) {
+                              // 跨域样式表无法访问，跳过
+                            }
+                          }
+                          
+                          // 构建完整的HTML文档
+                          const fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${result.ticker} - ${result.name} 分析报告</title>
+  <title>${result.ticker} - ${result.name} AI智能分析报告</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #e2e8f0; min-height: 100vh; padding: 40px 20px; line-height: 1.6; }
-    .container { max-width: 900px; margin: 0 auto; }
-    .header { text-align: center; margin-bottom: 40px; padding: 30px; background: rgba(30, 41, 59, 0.8); border-radius: 16px; border: 1px solid rgba(56, 189, 248, 0.2); }
-    .header h1 { font-size: 28px; color: #38bdf8; margin-bottom: 8px; }
-    .header .subtitle { color: #94a3b8; font-size: 14px; }
-    .card { background: rgba(30, 41, 59, 0.6); border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid rgba(71, 85, 105, 0.5); }
-    .card h2 { color: #38bdf8; font-size: 18px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid rgba(71, 85, 105, 0.5); }
-    .card h3 { color: #f8fafc; font-size: 15px; margin: 16px 0 8px; }
-    .card p { color: #cbd5e1; margin-bottom: 12px; font-size: 14px; }
-    .card ul, .card ol { color: #cbd5e1; padding-left: 20px; margin-bottom: 12px; }
-    .card li { margin-bottom: 6px; font-size: 14px; }
-    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
-    th, td { padding: 10px 12px; text-align: left; border: 1px solid rgba(71, 85, 105, 0.5); }
-    th { background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-weight: 600; }
-    td { color: #e2e8f0; }
-    tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
-    .predictions { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin: 20px 0; }
-    .pred-card { background: rgba(15, 23, 42, 0.6); border-radius: 8px; padding: 12px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3); }
-    .pred-card .period { font-size: 12px; color: #64748b; margin-bottom: 4px; }
-    .pred-card .label { font-size: 14px; color: #f8fafc; font-weight: 500; }
-    .pred-card .target { font-size: 16px; font-weight: 600; margin-top: 6px; }
-    .pred-card .target.bullish { color: #10b981; }
-    .pred-card .target.bearish { color: #f43f5e; }
-    .pred-card .target.neutral { color: #f59e0b; }
-    .pred-card .confidence { font-size: 11px; color: #64748b; margin-top: 4px; }
-    .footer { text-align: center; margin-top: 40px; padding: 20px; color: #64748b; font-size: 12px; }
-    strong { color: #f8fafc; }
-    code { background: rgba(56, 189, 248, 0.1); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
-    blockquote { border-left: 3px solid #38bdf8; padding-left: 16px; margin: 16px 0; color: #94a3b8; font-style: italic; }
+    ${styles}
+    /* 额外的内联样式确保显示正确 */
+    body { background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #1e1b4b 100%); min-height: 100vh; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>${result.ticker} - ${result.name}</h1>
-      <p class="subtitle">生成时间: ${new Date().toLocaleString('zh-CN')} | AI 多维度分析报告</p>
-    </div>
-    
-    ${result.predictions && result.predictions.length > 0 ? `
-    <div class="card">
-      <h2>📈 多周期趋势预测</h2>
-      <div class="predictions">
-        ${result.predictions.map(p => `
-          <div class="pred-card">
-            <div class="period">${p.period}</div>
-            <div class="label">${p.label}</div>
-            <div class="target ${p.trend}">${p.target}</div>
-            <div class="confidence">置信度: ${p.confidence}</div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-    ` : ''}
-    
-    <div class="card">
-      <h2>📊 详细分析报告</h2>
-      ${result.report.replace(/^# /gm, '<h2>').replace(/^## /gm, '<h3>').replace(/^### /gm, '<h4>').replace(/\n/g, '<br>')}
-    </div>
-    
-    <div class="footer">
-      <p>ℹ️ 本报告由 AI 多智能体系统生成，仅供参考，不构成投资建议。</p>
-    </div>
-  </div>
+  ${document.body.innerHTML}
 </body>
 </html>`;
-                          const blob = new Blob([reportHtml], { type: 'text/html;charset=utf-8' });
+                          
+                          const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
                           const url = URL.createObjectURL(blob);
                           const a = document.createElement('a');
                           a.href = url;
-                          a.download = `${result.ticker}_分析报告.html`;
+                          a.download = `${result.ticker}_AI智能分析报告.html`;
                           a.click();
                           URL.revokeObjectURL(url);
                         }}

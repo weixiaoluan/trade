@@ -517,12 +517,12 @@ def search_ticker(query: str) -> str:
     
     # 常见中国股票/港股映射
     cn_stock_mapping = {
-        "贵州茅台": "600519.SS",
-        "茅台": "600519.SS",
-        "中国平安": "601318.SS",
-        "平安": "601318.SS",
-        "招商银行": "600036.SS",
-        "工商银行": "601398.SS",
+        "贵州茅台": "600519.SH",
+        "茅台": "600519.SH",
+        "中国平安": "601318.SH",
+        "平安": "601318.SH",
+        "招商银行": "600036.SH",
+        "工商银行": "601398.SH",
         "腾讯": "0700.HK",
         "腾讯控股": "0700.HK",
         "阿里巴巴": "BABA",
@@ -541,18 +541,20 @@ def search_ticker(query: str) -> str:
             "query": query,
             "ticker": ticker,
             "asset_type": "stock",
-            "market": "HK" if ".HK" in ticker else ("SH" if ".SS" in ticker else "SZ"),
+            "market": "HK" if ".HK" in ticker else ("SH" if ".SH" in ticker else "SZ"),
             "source": "local_mapping"
         }, ensure_ascii=False)
     
     # 1. 检查是否已经包含市场后缀
-    if ".SS" in query or ".SZ" in query or ".HK" in query:
+    if ".SH" in query or ".SZ" in query or ".HK" in query or ".SS" in query:
+        # 将 .SS 转换为 .SH
+        normalized_ticker = query.replace(".SS", ".SH")
         return json.dumps({
             "status": "success",
             "query": query,
-            "ticker": query,
+            "ticker": normalized_ticker,
             "asset_type": "stock",
-            "market": "HK" if ".HK" in query else ("SH" if ".SS" in query else "SZ"),
+            "market": "HK" if ".HK" in query else ("SH" if (".SH" in query or ".SS" in query) else "SZ"),
             "source": "direct_input"
         }, ensure_ascii=False)
     
@@ -572,7 +574,7 @@ def search_ticker(query: str) -> str:
     if query.isdigit() and len(query) == 6:
         # 上交所
         if query.startswith(("6", "688")):
-            ticker = f"{query}.SS"
+            ticker = f"{query}.SH"
             asset_type = "stock"
             market = "SH"
         # 上交所ETF
@@ -628,7 +630,7 @@ def search_ticker(query: str) -> str:
     return json.dumps({
         "status": "not_found",
         "query": query,
-        "message": "未找到匹配的标的代码。支持：\n- A股（如：600519.SS 或 600519）\n- 港股（如：0700.HK 或 700）\n- 美股/ETF（如：AAPL、SPY）\n- 场内ETF（如：513120、159857）\n- 场外基金（如：001234）"
+        "message": "未找到匹配的标的代码。支持：\n- A股（如：600519.SH 或 600519）\n- 港股（如：0700.HK 或 700）\n- 美股/ETF（如：AAPL、SPY）\n- 场内ETF（如：513120、159857）\n- 场外基金（如：001234）"
     }, ensure_ascii=False)
 
 
@@ -646,12 +648,17 @@ def is_cn_offexchange_fund(code: str) -> bool:
     """判断是否为中国场外基金代码"""
     if not code.isdigit() or len(code) != 6:
         return False
-    # 场外基金代码通常以 0, 1, 2, 3 开头，但排除场内ETF
+    # 排除场内ETF
     if is_cn_onexchange_etf(code):
         return False
-    # 场外基金: 000xxx, 001xxx, 002xxx, 003xxx, 004xxx, 005xxx, 006xxx, 007xxx, 008xxx, 009xxx
-    # 以及部分 1xxxxx, 2xxxxx 开头的
-    return code.startswith(('0', '1', '2', '3', '4', '5', '6', '7', '8', '9'))
+    # 排除A股代码
+    # 上交所: 600xxx, 601xxx, 603xxx, 605xxx (主板), 688xxx (科创板)
+    # 深交所: 000xxx, 001xxx (主板), 002xxx, 003xxx (中小板), 300xxx, 301xxx (创业板)
+    a_stock_prefixes = ('600', '601', '603', '605', '688', '000', '001', '002', '003', '300', '301')
+    if code.startswith(a_stock_prefixes):
+        return False
+    # 剩下的6位数字代码视为场外基金
+    return True
 
 
 def get_cn_etf_suffix(code: str) -> str:
@@ -659,7 +666,364 @@ def get_cn_etf_suffix(code: str) -> str:
     if code.startswith('159'):  # 深交所
         return '.SZ'
     else:  # 上交所
-        return '.SS'
+        return '.SH'
+
+
+def is_cn_a_stock(ticker: str) -> bool:
+    """
+    判断是否为中国A股代码
+    
+    Args:
+        ticker: 股票代码，可能带有 .SH/.SZ 或 .HK 后缀
+    
+    Returns:
+        是否为A股
+    """
+    # 移除后缀
+    code = ticker.replace('.SH', '').replace('.SZ', '').replace('.HK', '').replace('.sh', '').replace('.sz', '').replace('.hk', '')
+    if not code.isdigit() or len(code) != 6:
+        return False
+    # 排除场内ETF和场外基金
+    if is_cn_onexchange_etf(code) or is_cn_offexchange_fund(code):
+        return False
+    # 上交所: 6开头 (主板60xxxx, 科创板688xxx)
+    # 深交所: 0开头 (主板000xxx, 中小板002xxx), 3开头 (创业板300xxx)
+    return code.startswith(('6', '0', '3'))
+
+
+def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
+    """
+    使用东方财富API获取中国A股的历史行情数据
+    
+    Args:
+        ticker: 股票代码 (如: 605289.SH, 600519.SH, 000001.SZ)
+        period: 数据周期
+    
+    Returns:
+        JSON 格式的行情数据，包含 OHLCV
+    """
+    import os
+    os.environ['NO_PROXY'] = '*'
+    os.environ['no_proxy'] = '*'
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://quote.eastmoney.com/"
+    }
+    proxies = {"http": None, "https": None}
+    
+    # 提取纯数字代码
+    code = ticker.replace('.SH', '').replace('.SZ', '').replace('.sh', '').replace('.sz', '')
+    
+    # 判断交易所: 6开头是上海(1)，0/3开头是深圳(0)
+    if code.startswith('6'):
+        market = "1"
+        secid = f"1.{code}"
+    else:
+        market = "0"
+        secid = f"0.{code}"
+    
+    # 计算数据量
+    limit_map = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "max": 1500}
+    limit = limit_map.get(period, 365)
+    
+    stock_name = f"股票 {code}"
+    ohlcv_data = []
+    
+    try:
+        # 获取股票名称
+        info_url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f57,f58"
+        info_resp = requests.get(info_url, headers=headers, timeout=10, proxies=proxies)
+        if info_resp.status_code == 200:
+            info_data = info_resp.json().get("data", {})
+            if info_data:
+                stock_name = info_data.get("f58", stock_name)
+        
+        # 获取历史K线数据
+        kline_url = f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        params = {
+            "secid": secid,
+            "fields1": "f1,f2,f3,f4,f5,f6",
+            "fields2": "f51,f52,f53,f54,f55,f56,f57",
+            "klt": "101",  # 日K
+            "fqt": "1",    # 前复权
+            "end": "20500101",
+            "lmt": limit
+        }
+        
+        kline_resp = requests.get(kline_url, headers=headers, params=params, timeout=15, proxies=proxies)
+        
+        if kline_resp.status_code == 200:
+            kline_data = kline_resp.json().get("data", {})
+            if kline_data:
+                stock_name = kline_data.get("name", stock_name)
+                klines = kline_data.get("klines", [])
+                
+                for kline in klines:
+                    # 格式: 日期,开盘,收盘,最高,最低,成交量,成交额
+                    parts = kline.split(",")
+                    if len(parts) >= 7:
+                        ohlcv_data.append({
+                            "Date": parts[0],
+                            "Open": float(parts[1]),
+                            "Close": float(parts[2]),
+                            "High": float(parts[3]),
+                            "Low": float(parts[4]),
+                            "Volume": int(float(parts[5])),
+                        })
+        
+        if not ohlcv_data:
+            return json.dumps({
+                "status": "error",
+                "ticker": ticker,
+                "message": f"无法获取 {ticker} 的行情数据"
+            }, ensure_ascii=False)
+        
+        # 计算统计数据
+        latest_price = ohlcv_data[-1]["Close"]
+        first_price = ohlcv_data[0]["Close"]
+        price_change = latest_price - first_price
+        price_change_pct = (price_change / first_price) * 100 if first_price else 0
+        avg_volume = sum(d["Volume"] for d in ohlcv_data) / len(ohlcv_data)
+        high_52w = max(d["High"] for d in ohlcv_data[-252:]) if len(ohlcv_data) >= 252 else max(d["High"] for d in ohlcv_data)
+        low_52w = min(d["Low"] for d in ohlcv_data[-252:]) if len(ohlcv_data) >= 252 else min(d["Low"] for d in ohlcv_data)
+        
+        return json.dumps({
+            "status": "success",
+            "ticker": ticker,
+            "name": stock_name,
+            "asset_type": "stock",
+            "data_period": period,
+            "data_interval": "1d",
+            "data_points": len(ohlcv_data),
+            "date_range": {
+                "start": ohlcv_data[0]["Date"],
+                "end": ohlcv_data[-1]["Date"]
+            },
+            "summary": {
+                "latest_price": latest_price,
+                "period_change": round(price_change, 4),
+                "period_change_pct": round(price_change_pct, 2),
+                "average_volume": int(avg_volume),
+                "period_high": max(d["High"] for d in ohlcv_data),
+                "period_low": min(d["Low"] for d in ohlcv_data),
+                "52_week_high": high_52w,
+                "52_week_low": low_52w,
+            },
+            "ohlcv": ohlcv_data,
+            "source": "eastmoney"
+        }, ensure_ascii=False)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "ticker": ticker,
+            "message": f"获取A股数据失败: {str(e)}"
+        }, ensure_ascii=False)
+
+
+def get_cn_a_stock_info(ticker: str) -> str:
+    """
+    使用东方财富API获取中国A股的基本信息
+    
+    Args:
+        ticker: 股票代码 (如: 605289.SH, 600519.SH, 000001.SZ)
+    
+    Returns:
+        JSON 格式的股票信息
+    """
+    import os
+    os.environ['NO_PROXY'] = '*'
+    os.environ['no_proxy'] = '*'
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://quote.eastmoney.com/"
+    }
+    proxies = {"http": None, "https": None}
+    
+    # 提取纯数字代码
+    code = ticker.replace('.SH', '').replace('.SZ', '').replace('.sh', '').replace('.sz', '')
+    
+    # 判断交易所: 6开头是上海(1)，0/3开头是深圳(0)
+    if code.startswith('6'):
+        market = "1"
+        secid = f"1.{code}"
+        exchange = "上交所"
+    else:
+        market = "0"
+        secid = f"0.{code}"
+        exchange = "深交所"
+    
+    stock_name = f"股票 {code}"
+    current_price = 0
+    prev_close = 0
+    change_pct = 0.0
+    day_high = 0
+    day_low = 0
+    day_open = 0
+    high_52w = 0
+    low_52w = 0
+    volume = 0
+    amount = 0
+    market_cap = None
+    pe_ratio = None
+    
+    try:
+        # 获取股票实时行情
+        quote_url = f"https://push2.eastmoney.com/api/qt/stock/get"
+        quote_params = {
+            "secid": secid,
+            "fields": "f43,f44,f45,f46,f47,f48,f57,f58,f60,f116,f117,f162,f167,f169,f170"
+        }
+        response = requests.get(quote_url, headers=headers, params=quote_params, timeout=10, proxies=proxies)
+        
+        if response.status_code == 200:
+            data = response.json().get("data", {})
+            if data:
+                stock_name = data.get("f58", stock_name)
+                # 价格数据（东财返回的是整数，需要除以1000或100）
+                raw_price = data.get("f43")
+                if raw_price and raw_price > 0:
+                    current_price = raw_price / 100
+                raw_prev = data.get("f60")
+                if raw_prev and raw_prev > 0:
+                    prev_close = raw_prev / 100
+                raw_high = data.get("f44")
+                if raw_high and raw_high > 0:
+                    day_high = raw_high / 100
+                raw_low = data.get("f45")
+                if raw_low and raw_low > 0:
+                    day_low = raw_low / 100
+                raw_open = data.get("f46")
+                if raw_open and raw_open > 0:
+                    day_open = raw_open / 100
+                # 涨跌幅
+                raw_change = data.get("f170")
+                if raw_change:
+                    change_pct = raw_change / 100
+                volume = data.get("f47", 0)
+                amount = data.get("f48", 0)
+                # 市值
+                raw_cap = data.get("f116") or data.get("f117")
+                if raw_cap and raw_cap > 0:
+                    market_cap = raw_cap
+                # 市盈率
+                raw_pe = data.get("f162") or data.get("f167")
+                if raw_pe and raw_pe > 0:
+                    pe_ratio = raw_pe / 100
+        
+        # 获取52周高低点 (通过K线数据)
+        kline_url = f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        kline_params = {
+            "secid": secid,
+            "fields1": "f1,f2,f3,f4,f5,f6",
+            "fields2": "f51,f52,f53,f54,f55,f56",
+            "klt": "101",
+            "fqt": "1",
+            "end": "20500101",
+            "lmt": "252"
+        }
+        try:
+            kline_resp = requests.get(kline_url, headers=headers, params=kline_params, timeout=10, proxies=proxies)
+            if kline_resp.status_code == 200:
+                kline_data = kline_resp.json().get("data", {})
+                if kline_data:
+                    klines = kline_data.get("klines", [])
+                    if klines:
+                        highs = []
+                        lows = []
+                        for kline in klines:
+                            parts = kline.split(",")
+                            if len(parts) >= 5:
+                                highs.append(float(parts[3]))
+                                lows.append(float(parts[4]))
+                        if highs:
+                            high_52w = max(highs)
+                        if lows:
+                            low_52w = min(lows)
+        except:
+            pass
+        
+        # 如果没有获取到52周数据，用当日数据估算
+        if high_52w == 0 and current_price > 0:
+            high_52w = current_price * 1.3
+        if low_52w == 0 and current_price > 0:
+            low_52w = current_price * 0.7
+        
+        # 格式化市值
+        market_cap_str = None
+        if market_cap:
+            if market_cap >= 1e12:
+                market_cap_str = f"¥{market_cap/1e12:.2f}万亿"
+            elif market_cap >= 1e8:
+                market_cap_str = f"¥{market_cap/1e8:.2f}亿"
+            elif market_cap >= 1e4:
+                market_cap_str = f"¥{market_cap/1e4:.2f}万"
+            else:
+                market_cap_str = f"¥{market_cap:.0f}"
+        
+        return json.dumps({
+            "status": "success",
+            "ticker": ticker,
+            "basic_info": {
+                "name": stock_name,
+                "symbol": code,
+                "exchange": exchange,
+                "currency": "CNY",
+                "quote_type": "EQUITY",
+            },
+            "price_info": {
+                "current_price": current_price,
+                "previous_close": prev_close,
+                "open": day_open,
+                "day_high": day_high,
+                "day_low": day_low,
+                "52_week_high": high_52w,
+                "52_week_low": low_52w,
+                "change_pct": change_pct,
+            },
+            "volume_info": {
+                "volume": volume,
+                "amount": amount,
+                "amount_str": f"¥{amount/1e8:.2f}亿" if amount >= 1e8 else f"¥{amount/1e4:.2f}万" if amount >= 1e4 else f"¥{amount:.0f}",
+            },
+            "valuation": {
+                "market_cap": market_cap,
+                "market_cap_str": market_cap_str,
+                "pe_ratio": pe_ratio,
+            },
+            "source": "eastmoney",
+            "timestamp": datetime.now().isoformat()
+        }, ensure_ascii=False)
+        
+    except Exception as e:
+        pass
+    
+    # 返回基本信息
+    return json.dumps({
+        "status": "success",
+        "ticker": ticker,
+        "basic_info": {
+            "name": stock_name,
+            "symbol": code,
+            "exchange": exchange,
+            "currency": "CNY",
+            "quote_type": "EQUITY",
+        },
+        "price_info": {
+            "current_price": current_price,
+            "previous_close": prev_close,
+            "52_week_high": high_52w,
+            "52_week_low": low_52w,
+        },
+        "valuation": {
+            "market_cap": None,
+            "pe_ratio": None,
+        },
+        "source": "estimated",
+        "timestamp": datetime.now().isoformat()
+    }, ensure_ascii=False)
 
 
 def get_cn_etf_data(etf_code: str, period: str = "1y") -> str:
@@ -797,7 +1161,7 @@ def get_stock_data(
     获取股票/ETF/基金的历史行情数据
     
     Args:
-        ticker: 股票代码 (如: AAPL, 600519.SS, SPY, 159857)
+        ticker: 股票代码 (如: AAPL, 600519.SH, SPY, 159857)
         period: 数据周期 (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, max)
         interval: 数据间隔 (1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo)
     
@@ -810,16 +1174,22 @@ def get_stock_data(
     # 如果是中国场外基金代码，使用东财接口
     elif is_cn_offexchange_fund(ticker):
         return get_cn_fund_data(ticker, period)
+    # 如果是中国A股，优先使用东方财富API（更稳定）
+    elif is_cn_a_stock(ticker):
+        return get_cn_a_stock_data(ticker, period)
 
     try:
         stock = yf.Ticker(ticker)
         df = stock.history(period=period, interval=interval)
         
         if df.empty:
+            # 如果yfinance失败，尝试东方财富API
+            if is_cn_a_stock(ticker):
+                return get_cn_a_stock_data(ticker, period)
             return json.dumps({
                 "status": "error",
                 "ticker": ticker,
-                "message": f"无法获取 {ticker} 的行情数据。如果是中国A股请使用 .SS 或 .SZ 后缀，如 600519.SS"
+                "message": f"无法获取 {ticker} 的行情数据。如果是中国A股请使用 .SH 或 .SZ 后缀，如 600519.SH"
             }, ensure_ascii=False)
         
         # 转换为可序列化格式
@@ -884,13 +1254,18 @@ def get_stock_info(ticker: str) -> str:
     # 如果是中国场外基金，直接使用东财接口
     elif is_cn_offexchange_fund(ticker):
         return get_cn_fund_info(ticker)
+    # 如果是中国A股，优先使用东方财富API（更稳定）
+    elif is_cn_a_stock(ticker):
+        return get_cn_a_stock_info(ticker)
     
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
         if not info or not info.get("regularMarketPrice"):
-            # 如果yfinance失败，尝试用东财接口获取中国ETF信息
+            # 如果yfinance失败，尝试用东财接口
+            if is_cn_a_stock(original_ticker):
+                return get_cn_a_stock_info(original_ticker)
             if original_ticker.isdigit() and len(original_ticker) == 6:
                 return get_cn_etf_info(original_ticker)
             return json.dumps({
