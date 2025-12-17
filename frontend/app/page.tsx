@@ -393,31 +393,32 @@ export default function Home() {
             animate={{ opacity: 1 }}
             className="min-h-screen bg-[#020617]"
           >
-            {/* Sticky Header */}
+            {/* Sticky Header - 响应式 */}
             <div className="sticky top-0 z-40 bg-[#020617]/90 backdrop-blur-md border-b border-white/[0.06]">
-              <div className="max-w-7xl mx-auto px-4 py-3">
-                <div className="flex items-center justify-between">
+              <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-3">
+                <div className="flex items-center justify-between gap-2">
                   <button
                     onClick={() => {
                       setViewState('hero');
                       setResult(null);
                     }}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-sm text-slate-400 hover:text-slate-200 transition-all"
+                    className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-xs sm:text-sm text-slate-400 hover:text-slate-200 transition-all shrink-0"
                   >
-                    <Bot className="w-4 h-4" />
-                    <span>新建分析</span>
+                    <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span className="hidden sm:inline">新建分析</span>
+                    <span className="sm:hidden">新建</span>
                   </button>
                   
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] uppercase tracking-wider text-slate-600">标的</span>
-                      <span className="font-mono font-bold text-indigo-400">{result.ticker}</span>
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                      <span className="hidden sm:inline text-[10px] uppercase tracking-wider text-slate-600">标的</span>
+                      <span className="font-mono font-bold text-indigo-400 text-sm sm:text-base">{result.ticker}</span>
                     </div>
-                    <div className="w-px h-4 bg-white/10" />
-                    <span className="text-sm text-slate-400 max-w-[200px] truncate">{result.name}</span>
+                    <div className="hidden sm:block w-px h-4 bg-white/10" />
+                    <span className="hidden md:block text-sm text-slate-400 max-w-[200px] truncate">{result.name}</span>
                     {typeof result.quantScore === 'number' && (
                       <div
-                        className={`ml-2 px-2.5 py-1 rounded-full border text-[10px] flex items-center gap-1 whitespace-nowrap
+                        className={`hidden sm:flex ml-1 sm:ml-2 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full border text-[9px] sm:text-[10px] items-center gap-1 whitespace-nowrap
                           ${
                             result.quantScore >= 80
                               ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
@@ -429,10 +430,10 @@ export default function Home() {
                           }
                         `}
                       >
-                        <span className="font-mono text-[11px]">{result.quantScore.toFixed(1)}</span>
+                        <span className="font-mono text-[10px] sm:text-[11px]">{result.quantScore.toFixed(1)}</span>
                         <span className="opacity-70">分</span>
-                        <span className="w-px h-3 bg-white/10 mx-1" />
-                        <span className="truncate max-w-[80px]">
+                        <span className="hidden md:inline w-px h-3 bg-white/10 mx-1" />
+                        <span className="hidden md:inline truncate max-w-[80px]">
                           {result.marketRegime === 'trending'
                             ? '趋势市'
                             : result.marketRegime === 'ranging'
@@ -441,7 +442,7 @@ export default function Home() {
                             ? '窄幅整理'
                             : '待判定'}
                         </span>
-                        <span className="hidden sm:inline text-[9px] opacity-60">
+                        <span className="hidden lg:inline text-[9px] opacity-60">
                           ·
                           {result.volatilityState === 'low'
                             ? '低波动'
@@ -457,9 +458,9 @@ export default function Home() {
             </div>
 
             {/* Main Content */}
-            <div className="max-w-7xl mx-auto px-4 py-6">
-              {/* Bento Grid Layout */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
+              {/* Bento Grid Layout - 响应式网格 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {/* Stock Overview Card */}
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
@@ -580,24 +581,24 @@ export default function Home() {
                   </div>
                 </motion.div>
 
-                {/* Analysis Report */}
+                {/* Analysis Report - 响应式 */}
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.25 }}
-                  className="lg:col-span-3"
+                  className="md:col-span-2 lg:col-span-3"
                   id="analysis-report-section"
                 >
                   <div className="glass-card rounded-xl border border-white/[0.06] overflow-hidden">
-                    {/* Report Header */}
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] bg-white/[0.02]">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                          <FileText className="w-4 h-4 text-indigo-400" />
+                    {/* Report Header - 响应式 */}
+                    <div className="flex items-center justify-between px-3 sm:px-5 py-3 sm:py-4 border-b border-white/[0.06] bg-white/[0.02]">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                          <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
                         </div>
                         <div>
-                          <h3 className="text-sm font-bold text-white tracking-wide">智能研报</h3>
-                          <span className="text-[10px] uppercase tracking-wider text-slate-500">AI量化分析</span>
+                          <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide">智能研报</h3>
+                          <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500">AI量化分析</span>
                         </div>
                       </div>
                       <button
@@ -654,11 +655,11 @@ export default function Home() {
                       </button>
                     </div>
 
-                    {/* Report Content */}
-                    <div className="p-8">
+                    {/* Report Content - 响应式 */}
+                    <div className="p-4 sm:p-6 md:p-8">
                       <div 
                         className="markdown-content prose prose-invert prose-sm max-w-none overflow-y-auto scrollbar-thin" 
-                        style={{ maxHeight: 'calc(100vh - 400px)', minHeight: '450px' }}
+                        style={{ maxHeight: 'calc(100vh - 350px)', minHeight: '300px' }}
                       >
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {result.report || '报告生成中...'}

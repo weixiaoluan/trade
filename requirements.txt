@@ -41,5 +41,14 @@ rich>=13.7.0
 
 # Web 框架
 fastapi>=0.109.0
-uvicorn>=0.27.0
+uvicorn[standard]>=0.27.0
 python-multipart>=0.0.6
+
+# HTTP 客户端
+httpx>=0.26.0
+
+# OpenAI 兼容接口
+openai>=1.0.0
+
+# Pydantic 数据验证
+pydantic>=2.0.0

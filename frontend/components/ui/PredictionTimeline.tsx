@@ -84,23 +84,23 @@ const horizonMap: Record<string, 'short' | 'mid' | 'long'> = {
 export function PredictionTimeline({ predictions = defaultPredictions, onHoverHorizon }: PredictionTimelineProps) {
   return (
     <div className="w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
-            <TrendingUp className="w-4 h-4 text-indigo-400" />
+      {/* Header - 响应式 */}
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="p-1 sm:p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+            <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
               多周期趋势预测
             </h3>
-            <p className="text-[10px] text-slate-500 font-mono mt-0.5">AI概率模型</p>
+            <p className="text-[9px] sm:text-[10px] text-slate-500 font-mono mt-0.5">AI概率模型</p>
           </div>
         </div>
       </div>
 
-      {/* Grid Layout */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+      {/* Grid Layout - 响应式 */}
+      <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
         {predictions.map((prediction, index) => {
           const isBullish = prediction.trend === 'bullish';
           const isBearish = prediction.trend === 'bearish';
@@ -143,33 +143,33 @@ export function PredictionTimeline({ predictions = defaultPredictions, onHoverHo
                 {/* Top accent line */}
                 <div className={`absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r ${glowClass}`} />
                 
-                <div className="p-4 relative z-10">
-                  {/* Header */}
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-xs font-bold text-white font-mono tracking-wider">
+                <div className="p-2 sm:p-3 md:p-4 relative z-10">
+                  {/* Header - 响应式 */}
+                  <div className="flex justify-between items-center mb-1.5 sm:mb-3">
+                    <span className="text-[10px] sm:text-xs font-bold text-white font-mono tracking-wider">
                       {prediction.period}
                     </span>
-                    <div className={`p-1 rounded ${isBullish ? 'bg-emerald-500/20' : isBearish ? 'bg-rose-500/20' : 'bg-amber-500/20'}`}>
-                      {isBullish && <ArrowUpRight className="w-3 h-3 text-emerald-400" />}
-                      {isBearish && <ArrowDownRight className="w-3 h-3 text-rose-400" />}
-                      {!isBullish && !isBearish && <Minus className="w-3 h-3 text-amber-400" />}
+                    <div className={`p-0.5 sm:p-1 rounded ${isBullish ? 'bg-emerald-500/20' : isBearish ? 'bg-rose-500/20' : 'bg-amber-500/20'}`}>
+                      {isBullish && <ArrowUpRight className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-400" />}
+                      {isBearish && <ArrowDownRight className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-rose-400" />}
+                      {!isBullish && !isBearish && <Minus className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400" />}
                     </div>
                   </div>
 
-                  {/* Target Percentage - LARGE */}
-                  <div className={`text-2xl lg:text-3xl font-bold font-mono tracking-tighter ${textClass} mb-3`}
+                  {/* Target Percentage - 响应式 */}
+                  <div className={`text-base sm:text-xl md:text-2xl lg:text-3xl font-bold font-mono tracking-tighter ${textClass} mb-1.5 sm:mb-3`}
                     style={{ textShadow: `0 0 30px ${color}40` }}
                   >
                     {prediction.target}
                   </div>
 
-                  {/* Footer Info */}
-                  <div className="flex justify-between items-end">
-                    <span className="text-[10px] text-slate-400 font-medium">
+                  {/* Footer Info - 响应式 */}
+                  <div className="flex justify-between items-end gap-1">
+                    <span className="text-[8px] sm:text-[10px] text-slate-400 font-medium truncate">
                       {prediction.label}
                     </span>
-                    <div className={`text-[8px] font-mono px-1.5 py-0.5 rounded border ${confColor}`}>
-                      置信度{prediction.confidence === 'high' ? '高' : prediction.confidence === 'medium' ? '中' : '低'}
+                    <div className={`text-[7px] sm:text-[8px] font-mono px-1 sm:px-1.5 py-0.5 rounded border shrink-0 ${confColor}`}>
+                      {prediction.confidence === 'high' ? '高' : prediction.confidence === 'medium' ? '中' : '低'}
                     </div>
                   </div>
                 </div>
