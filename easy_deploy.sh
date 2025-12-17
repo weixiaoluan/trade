@@ -17,7 +17,26 @@ echo -e "${GREEN}=== 开始部署 AI 证券分析系统 ===${NC}"
 # 1. 检查 Docker 环境
 if ! command -v docker &> /dev/null; then
     echo -e "${YELLOW}未检测到 Docker，正在安装...${NC}"
-    curl -fsSL https://get.docker.com | bash
+    
+    # 检测是否为 CentOS/RHEL
+    if [ -f /etc/redhat-release ]; then
+        echo -e "${YELLOW}检测到 CentOS/RHEL 系统，使用 yum 安装...${NC}"
+        # 安装工具
+        yum install -y yum-utils
+        
+        # 使用阿里云镜像源（国内更稳定）
+        yum-config-manager --add-repo http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+        
+        # 安装 Docker (使用 --nogpgcheck 避免 GPG Key 验证卡住)
+        echo -e "${YELLOW}正在安装 Docker 软件包...${NC}"
+        yum install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin --nogpgcheck
+    else
+        # 其他系统使用官方脚本
+        echo -e "${YELLOW}使用官方脚本安装...${NC}"
+        curl -fsSL https://get.docker.com | bash
+    fi
+    
+    # 启动 Docker
     systemctl start docker
     systemctl enable docker
     echo -e "${GREEN}Docker 安装完成${NC}"
