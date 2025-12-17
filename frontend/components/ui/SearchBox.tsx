@@ -69,7 +69,7 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
           `}
         >
           <div className="flex items-center">
-            <div className="pl-5 text-slate-500">
+            <div className="pl-3 sm:pl-5 text-slate-500">
               {isLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
               ) : (
@@ -93,11 +93,12 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
                 setIsFocused(false);
                 setTimeout(() => setShowSuggestions(false), 200);
               }}
-              placeholder="输入标的代码 (如: AAPL、600519、0700、513120、159857)"
+              placeholder="输入代码 (如: AAPL、600519)"
               className={`
                 flex-1 bg-transparent border-none outline-none 
                 text-slate-100 placeholder-slate-500 font-medium
-                ${isCompact ? 'py-3 px-3 text-sm' : 'py-4 px-4 text-base'}
+                w-full min-w-0
+                ${isCompact ? 'py-3 px-2 text-sm' : 'py-4 px-3 text-sm sm:text-base'}
               `}
               disabled={isLoading}
             />
@@ -108,24 +109,25 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className={`
-                ${isCompact ? 'mx-2 px-4 py-2' : 'mx-3 px-5 py-2.5'}
+                shrink-0
+                ${isCompact ? 'mx-1 px-3 py-2' : 'mx-1.5 sm:mx-3 px-3 sm:px-5 py-2 sm:py-2.5'}
                 bg-gradient-to-r from-indigo-600 to-violet-600 
                 hover:from-indigo-500 hover:to-violet-500
-                text-white text-sm font-medium rounded-xl 
+                text-white text-xs sm:text-sm font-medium rounded-xl 
                 transition-all duration-300 
                 disabled:opacity-40 disabled:cursor-not-allowed 
-                flex items-center gap-2
+                flex items-center gap-1 sm:gap-2
               `}
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className={isCompact ? 'hidden' : ''}>分析中</span>
+                  <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                  <span className={isCompact ? 'hidden' : 'hidden sm:inline'}>分析中</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
-                  <span className={isCompact ? 'hidden sm:inline' : ''}>AI 分析</span>
+                  <Sparkles className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className={isCompact ? 'hidden sm:inline' : 'whitespace-nowrap'}>AI 分析</span>
                 </>
               )}
             </motion.button>
