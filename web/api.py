@@ -400,10 +400,33 @@ async def run_full_analysis(task_id: str, ticker: str):
         task["progress"] = 90
         await asyncio.sleep(0.2)
         
+        regime_cn = regime_map.get(market_regime, "待判定")
+        vol_cn = vol_map.get(volatility_state, "波动适中")
+        reco_cn = reco_map.get(quant_reco, "观望")
+        bullish_signals = trend_analysis.get("bullish_signals", 0) if isinstance(trend_analysis, dict) else 0
+        bearish_signals = trend_analysis.get("bearish_signals", 0) if isinstance(trend_analysis, dict) else 0
+        
         ai_summary = (
-            f"量化评分 {score_text} 分，当前处于{regime_map.get(market_regime, '待判定')}，"
-            f"{vol_map.get(volatility_state, '波动适中')}，综合建议：{reco_map.get(quant_reco, '观望')}。"
+            f"量化评分 {score_text} 分，当前处于{regime_cn}，{vol_cn}环境。"
+            f"多头信号 {bullish_signals} 个、空头信号 {bearish_signals} 个，综合建议：{reco_cn}。"
         )
+        
+        short_term_view = ""
+        mid_term_view = ""
+        long_term_view = ""
+        if isinstance(trend_analysis, dict):
+            short_term_view = trend_analysis.get("short_term_view", "") or ""
+            mid_term_view = trend_analysis.get("mid_term_view", "") or ""
+            long_term_view = trend_analysis.get("long_term_view", "") or ""
+        
+        if not short_term_view:
+            short_term_view = "短线关注近支撑位与阻力位附近的价格反应，严格设置止损。"
+        if not mid_term_view:
+            mid_term_view = "中线可结合趋势强度选择顺势持有或区间交易，避免在剧烈波动时重仓追涨杀跌。"
+        if not long_term_view:
+            long_term_view = "长期则根据指数和基本面判断整体配置价值，分批建仓或减仓，控制好最大回撤。"
+        
+        ai_summary += f"短线：{short_term_view} 中线：{mid_term_view} 长线：{long_term_view}"
 
         task["progress"] = 100
         task["current_step"] = "分析完成"
@@ -691,7 +714,7 @@ async def generate_ai_report_with_predictions(
         try:
             # Agent 1 调用
             pred_response = client.chat.completions.create(
-                model="deepseek-ai/DeepSeek-V3",
+                model="deepseek-ai/DeepSeek-V3.2",
                 messages=[
                     {"role": "system", "content": "你是量化分析师，只输出JSON格式的预测数据，不要输出其他内容。"},
                     {"role": "user", "content": prediction_prompt}
@@ -764,6 +787,33 @@ async def generate_ai_report(
     info = stock_info.get("basic_info", {})
     price_info = stock_info.get("price_info", {})
     valuation = stock_info.get("valuation", {})
+
+    symbol = (
+        info.get("symbol")
+        or info.get("code")
+        or ticker.replace(".SH", "").replace(".SZ", "").replace(".sh", "").replace(".sz", "")
+    )
+    display_name = info.get("name", ticker)
+    current_price = price_info.get("current_price") or summary.get("latest_price", "N/A")
+    day_change_pct = price_info.get("change_pct")
+    if isinstance(day_change_pct, (int, float)):
+        day_change_str = f"{day_change_pct:+.2f}"
+    else:
+        day_change_str = str(summary.get("period_change_pct", "N/A"))
+    market_cap_display = valuation.get("market_cap_str")
+    if not market_cap_display:
+        market_cap_value = valuation.get("market_cap")
+        if isinstance(market_cap_value, (int, float)) and market_cap_value > 0:
+            if market_cap_value >= 1e12:
+                market_cap_display = f"¥{market_cap_value/1e12:.2f}万亿"
+            elif market_cap_value >= 1e8:
+                market_cap_display = f"¥{market_cap_value/1e8:.2f}亿"
+            elif market_cap_value >= 1e4:
+                market_cap_display = f"¥{market_cap_value/1e4:.2f}万"
+            else:
+                market_cap_display = f"¥{market_cap_value:.0f}"
+        else:
+            market_cap_display = "未披露"
     
     # 兼容基金和股票两种数据结构
     ind = indicators.get("indicators", indicators)
@@ -823,17 +873,17 @@ async def generate_ai_report(
 请根据以下数据生成专业详细的证券/基金分析报告：
 
 ## 标的信息
-- 代码: {ticker}
-- 名称: {info.get('name', ticker)}
-- 当前价格/净值: {summary.get('latest_price', 'N/A')}
-- 涨跌幅: {summary.get('period_change_pct', 'N/A')}%
+- 代码: {symbol}
+- 名称: {display_name}
+- 当前价格/净值: {current_price}
+- 日涨跌幅: {day_change_str}%
 - 52周最高: {price_info.get('52_week_high', 'N/A')}
 - 52周最低: {price_info.get('52_week_low', 'N/A')}
 
 ## 估值/规模指标
 - 市盈率 (P/E): {valuation.get('pe_ratio', 'N/A')}
 - 市净率 (P/B): {valuation.get('price_to_book', 'N/A')}
-- 市值/规模: {valuation.get('market_cap', 'N/A')}
+- 市值/规模: {market_cap_display}
 
 ## 技术指标数据
 - MACD: {ind.get('macd', {})}
@@ -962,7 +1012,7 @@ async def generate_ai_report(
         import re
 
         response = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-R1",
+            model="deepseek-ai/DeepSeek-V3.2",
             messages=[
                 {"role": "system", "content": "你是一位资深的证券分析师，擅长技术分析和基本面分析。请生成专业、客观的投资分析报告。"},
                 {"role": "user", "content": prompt}
@@ -980,13 +1030,13 @@ async def generate_ai_report(
         
         # 替换所有可能的旧日期
         report_text = re.sub(
-            r"报告生成时间[:：]\s*\d{4}年\d{1,2}月\d{1,2}日",
-            f"报告生成时间：{current_date_str}",
+            r"(报告生成时间[:：]\s*)[^\n]*",
+            rf"\1{current_date_str} {current_time_str}",
             report_text,
         )
         report_text = re.sub(
-            r"报告日期[:：]\s*\d{4}年\d{1,2}月\d{1,2}日",
-            f"报告日期：{current_date_str}",
+            r"(报告日期[:：]\s*)[^\n]*",
+            rf"\1{current_date_str} {current_time_str}",
             report_text,
         )
         report_text = re.sub(
@@ -995,6 +1045,47 @@ async def generate_ai_report(
             report_text,
             count=5  # 最多替换前5个旧日期
         )
+
+        try:
+            if symbol:
+                report_text = re.sub(
+                    r"\|\s*代码\s*\|[^\n]*\n",
+                    f"| 代码 | {symbol} |\n",
+                    report_text,
+                )
+            if display_name:
+                report_text = re.sub(
+                    r"\|\s*名称\s*\|[^\n]*\n",
+                    f"| 名称 | {display_name} |\n",
+                    report_text,
+                )
+            if isinstance(current_price, (int, float)) and current_price > 0:
+                price_str = f"{current_price:.4f}".rstrip("0").rstrip(".")
+                report_text = re.sub(
+                    r"\|\s*当前价格[^|]*\|[^\n]*\n",
+                    f"| 当前价格 | {price_str} |\n",
+                    report_text,
+                )
+                report_text = re.sub(
+                    r"\|\s*当前价格/净值[^|]*\|[^\n]*\n",
+                    f"| 当前价格/净值 | {price_str} |\n",
+                    report_text,
+                )
+            if day_change_str not in ("N/A", "", None):
+                change_value = day_change_str
+                report_text = re.sub(
+                    r"\|\s*日?涨跌幅\s*\|[^\n]*\n",
+                    f"| 日涨跌幅 | {change_value}% |\n",
+                    report_text,
+                )
+            if market_cap_display:
+                report_text = re.sub(
+                    r"\|\s*市值规模\s*\|[^\n]*\n",
+                    f"| 市值规模 | {market_cap_display} |\n",
+                    report_text,
+                )
+        except Exception:
+            pass
         
         # 在报告末尾添加明确的元数据
         footer = f"""
