@@ -1,0 +1,37 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="50%" stop-color="#7c3aed" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer rounded square -->
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)" />
+
+  <!-- Inner glass card -->
+  <rect x="11" y="11" width="42" height="42" rx="14" fill="#020617" opacity="0.9" />
+
+  <!-- Robot head -->
+  <rect x="20" y="20" width="24" height="20" rx="8" fill="#020617" stroke="#6366f1" stroke-width="1.5" />
+
+  <!-- Eyes -->
+  <circle cx="26" cy="27" r="3" fill="#22d3ee" />
+  <circle cx="38" cy="27" r="3" fill="#22d3ee" />
+
+  <!-- Eye shine -->
+  <circle cx="25.4" cy="26.4" r="1.1" fill="#e5f3ff" />
+  <circle cx="37.4" cy="26.4" r="1.1" fill="#e5f3ff" />
+
+  <!-- Mouth / status bar -->
+  <rect x="24" y="32" width="16" height="3" rx="1.5" fill="#1e293b" />
+  <rect x="24" y="32" width="9" height="3" rx="1.5" fill="#22c55e" />
+
+  <!-- Antenna -->
+  <rect x="30.5" y="15" width="3" height="6" rx="1.5" fill="#6366f1" />
+  <circle cx="32" cy="14" r="2.2" fill="#22d3ee" stroke="#e5e7eb" stroke-width="0.8" />
+
+  <!-- Bottom highlight -->
+  <ellipse cx="32" cy="48" rx="14" ry="3.5" fill="#0b1120" opacity="0.7" />
+</svg>
