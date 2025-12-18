@@ -1139,6 +1139,9 @@ async def generate_ai_report(
         except Exception:
             pass
         
+        # 根据多周期收益率数据，强制规范“多周期表现/区间涨跌”小节为标准表格
+        report_text = normalize_multi_period_section(report_text, period_returns)
+
         # 在报告末尾添加明确的元数据
         footer = f"""
 
@@ -1180,12 +1183,25 @@ def normalize_report_timestamp(report_text: str, completed_at: datetime) -> str:
         report_text = re.sub(r"(报告生成时间[:：]\s*)[^\n]*", _replace_line, report_text)
         report_text = re.sub(r"(报告日期[:：]\s*)[^\n]*", _replace_line, report_text)
 
-        # 替换孤立日期（最多前 5 个）
+        # 替换孤立日期（最多前 5 个），包括可能缺少世纪或带前缀的格式
         report_text = re.sub(
             r"\d{4}年\d{1,2}月\d{1,2}日",
             date_str,
             report_text,
             count=5,
+        )
+        # 处理类似 "25年12月18日" 或 "P25年12月18日" 这种不规范年份
+        report_text = re.sub(
+            r"P?\d{1,2}年\d{1,2}月\d{1,2}日",
+            date_str,
+            report_text,
+        )
+
+        # 处理形如 "**P25年12月18日 02:40:45" 的整行时间，统一替换为当前任务完成时间
+        report_text = re.sub(
+            r"\*\*P?\d{1,4}年\d{1,2}月\d{1,2}日\s+\d{2}:\d{2}:\d{2}",
+            f"**{date_str} {time_str}",
+            report_text,
         )
 
         # 规范脚注形式的“报告生成时间”
@@ -1211,6 +1227,57 @@ def normalize_report_timestamp(report_text: str, completed_at: datetime) -> str:
         return report_text
     except Exception:
         # 任何异常都不影响主流程，直接返回原始报告
+        return report_text
+
+
+def normalize_multi_period_section(report_text: str, period_returns: dict) -> str:
+    """根据 period_returns 重写报告中的“多周期表现/区间涨跌”小节。
+
+    - 避免 LLM 生成一整行 "| 周期 | 日涨跌幅 ..." 的异常表格
+    - 使用后端的真实收益率数据构建标准 Markdown 表格
+    """
+    try:
+        import re
+
+        if not period_returns:
+            return report_text
+
+        def _fmt(key: str) -> str:
+            v = period_returns.get(key)
+            if isinstance(v, (int, float)):
+                return f"{v:+.2f}%"
+            if isinstance(v, str) and v.strip():
+                # 如果已经带 % 就直接用
+                return v
+            return "N/A"
+
+        table_lines = [
+            "### 多周期表现",
+            "",
+            "12. **区间涨跌**:",
+            "",
+            "| 周期 | 涨跌幅 |",
+            "|------|--------|",
+            f"| 5日 | {_fmt('5日')} |",
+            f"| 10日 | {_fmt('10日')} |",
+            f"| 20日 | {_fmt('20日')} |",
+            f"| 60日 | {_fmt('60日')} |",
+            f"| 120日 | {_fmt('120日')} |",
+            f"| 250日 | {_fmt('250日')} |",
+            "",
+        ]
+        new_block = "\n".join(table_lines)
+
+        # 用正则找到原有 “### 多周期表现” 小节并整体替换
+        pattern = r"### 多周期表现[\s\S]*?(?=\n## |\Z)"
+        if re.search(pattern, report_text):
+            report_text = re.sub(pattern, new_block, report_text)
+        else:
+            # 如果原文没有该小节，则在报告后面追加
+            report_text = report_text.rstrip() + "\n\n" + new_block
+
+        return report_text
+    except Exception:
         return report_text
 
 
