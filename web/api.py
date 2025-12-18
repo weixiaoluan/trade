@@ -62,6 +62,16 @@ class TaskStatus(BaseModel):
 # 存储分析任务状态
 analysis_tasks: Dict[str, Dict[str, Any]] = {}
 
+# 分析统计（用于热门标的）
+ANALYSIS_STATS_PATH = Path(__file__).parent / "analysis_stats.json"
+analysis_stats: Dict[str, Dict[str, Any]] = {}
+
+if ANALYSIS_STATS_PATH.exists():
+    try:
+        analysis_stats = json.loads(ANALYSIS_STATS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        analysis_stats = {}
+
 
 # ============================================
 # FastAPI 应用
@@ -125,6 +135,26 @@ async def search_stock(query: str):
     try:
         result = search_ticker(query)
         return json.loads(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/popular_tickers")
+async def get_popular_tickers(limit: int = 5):
+    """获取最常分析的标的列表"""
+    try:
+        items = [
+            {
+                "symbol": symbol,
+                "count": int(data.get("count", 0)),
+                "last_time": data.get("last_time"),
+            }
+            for symbol, data in analysis_stats.items()
+        ]
+        # 按分析次数倒序，其次按最后时间倒序
+        items.sort(key=lambda x: (-x["count"], x["last_time"] or ""), reverse=False)
+        max_limit = max(1, min(limit, 20))
+        return {"status": "success", "items": items[:max_limit]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -441,10 +471,28 @@ async def run_full_analysis(task_id: str, ticker: str):
             "indicator_overview": indicator_overview,
             "signal_details": signal_details,
         }, ensure_ascii=False)
+
+        # 记录成功分析次数，用于热门标的统计
+        try:
+            stat = analysis_stats.get(ticker, {}) or {}
+            count = int(stat.get("count", 0)) + 1
+            analysis_stats[ticker] = {
+                "count": count,
+                "last_time": datetime.now().isoformat(),
+            }
+            ANALYSIS_STATS_PATH.write_text(
+                json.dumps(analysis_stats, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception:
+            # 统计失败不影响主流程
+            pass
         
     except Exception as e:
+        msg = str(e)
+        if "timed out" in msg.lower():
+            msg = "LLM 请求超时（SiliconFlow DeepSeek 接口在 120 秒内未响应），请稍后重试。"
         task["status"] = "failed"
-        task["error"] = str(e)
+        task["error"] = msg
         task["current_step"] = "失败"
 
 

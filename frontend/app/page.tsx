@@ -259,7 +259,7 @@ export default function Home() {
           setViewState('dashboard');
         } else if (status.status === 'failed') {
           const errorMsg = status.error || '未知错误';
-          alert(`❌ 分析失败\n\n${errorMsg}\n\n请检查：\n1. 股票代码是否正确\n2. A股请使用完整代码（如：600519.SS 或 000001.SZ）\n3. ETF/基金代码是否有效`);
+          alert(`❌ 分析失败\n\n${errorMsg}\n\n请检查：\n1. 证券代码是否正确\n2. 中国A股 / ETF / 基金可直接输入6位数字代码（如：600519、159941、000001），系统会自动识别市场\n3. 若多次出现超时，请稍后重试或更换网络环境`);
           setViewState('hero');
         } else {
           setTimeout(pollStatus, 1000);
@@ -326,7 +326,7 @@ export default function Home() {
                 className="text-3xl md:text-5xl font-bold text-center mb-3 tracking-tight"
               >
                 <span className="bg-gradient-to-r from-slate-100 via-indigo-200 to-slate-100 bg-clip-text text-transparent">
-                  证券智能分析引擎
+                  证券AI智能分析引擎
                 </span>
               </motion.h1>
 

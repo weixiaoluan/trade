@@ -10,8 +10,11 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'AI Securities Analyzer | 全能证券分析引擎',
-  description: '基于 AutoGen + DeepSeek-R1 的多智能体证券分析系统',
+  title: '证券AI智能分析引擎',
+  description: '基于 Multi-Agent AI 的量化分析系统，覆盖全球股票、ETF、基金',
+  icons: {
+    icon: '/favicon.svg',
+  },
   formatDetection: {
     telephone: false,
   },

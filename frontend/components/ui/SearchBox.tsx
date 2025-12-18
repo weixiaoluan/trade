@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Sparkles, ArrowRight, Loader2, BarChart3 } from 'lucide-react';
 
@@ -10,21 +10,22 @@ interface SearchBoxProps {
   isCompact?: boolean;
 }
 
-// Quick access tickers
-const quickTickers = [
-  { symbol: 'AAPL', name: 'Apple' },
-  { symbol: 'NVDA', name: 'Nvidia' },
-  { symbol: '600519.SS', name: '茅台' },
-  { symbol: '513180', name: '恒生科技' },
-  { symbol: '020398', name: '诺安创新' },
+// 默认快速访问标的（在没有统计数据时使用）
+const DEFAULT_QUICK_TICKERS = [
+  { symbol: '159941', name: '纳指100ETF' },
+  { symbol: '159915', name: '创业板ETF' },
+  { symbol: '510300', name: '沪深300ETF' },
+  { symbol: '513180', name: '恒生科技ETF' },
+  { symbol: '600519', name: '贵州茅台' },
 ];
 
 const suggestions = [
-  { symbol: 'AAPL', name: 'Apple Inc.', type: 'US Stock' },
-  { symbol: 'TSLA', name: 'Tesla Inc.', type: 'US Stock' },
-  { symbol: 'NVDA', name: 'NVIDIA Corp', type: 'US Stock' },
-  { symbol: '600519.SS', name: '贵州茅台', type: 'A股' },
+  { symbol: 'AAPL', name: 'Apple Inc.', type: 'US' },
+  { symbol: 'TSLA', name: 'Tesla Inc.', type: 'US' },
+  { symbol: 'NVDA', name: 'NVIDIA Corp', type: 'US' },
+  { symbol: '600519', name: '贵州茅台', type: 'A股' },
   { symbol: '513180', name: '恒生科技ETF', type: 'ETF' },
+  { symbol: '159941', name: '纳指100ETF', type: 'ETF' },
   { symbol: '020398', name: '诺安创新驱动混合A', type: '基金' },
 ];
 
@@ -32,6 +33,7 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [quickTickers, setQuickTickers] = useState(DEFAULT_QUICK_TICKERS);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const filteredSuggestions = suggestions.filter(
@@ -53,6 +55,26 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
     onSearch(symbol);
     setShowSuggestions(false);
   };
+
+  useEffect(() => {
+    const fetchPopularTickers = async () => {
+      try {
+        const res = await fetch('/api/popular_tickers');
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = (data?.items || []) as { symbol: string; count?: number }[];
+        if (items.length > 0) {
+          setQuickTickers(
+            items.slice(0, 5).map((item) => ({ symbol: item.symbol, name: item.symbol }))
+          );
+        }
+      } catch {
+        // 忽略错误，保持默认快速访问列表
+      }
+    };
+
+    fetchPopularTickers();
+  }, []);
 
   return (
     <div className={`relative w-full ${isCompact ? 'max-w-md' : 'max-w-2xl'} mx-auto`}>
@@ -93,7 +115,7 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
                 setIsFocused(false);
                 setTimeout(() => setShowSuggestions(false), 200);
               }}
-              placeholder="输入代码 (如: AAPL、600519)"
+              placeholder="输入代码（推荐直接输入6位数字，如: 600519、159941；美股可输入 AAPL）"
               className={`
                 flex-1 bg-transparent border-none outline-none 
                 text-slate-100 placeholder-slate-500 font-medium
