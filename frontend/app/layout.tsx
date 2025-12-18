@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   title: '证券AI智能分析引擎',
   description: '基于 Multi-Agent AI 的量化分析系统，覆盖全球股票、ETF、基金',
   icons: {
-    icon: '/favicon.svg',
+    icon: '/favicon.svg?v=2',
   },
   formatDetection: {
     telephone: false,
