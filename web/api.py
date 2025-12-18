@@ -458,6 +458,10 @@ async def run_full_analysis(task_id: str, ticker: str):
         
         ai_summary += f"短线：{short_term_view} 中线：{mid_term_view} 长线：{long_term_view}"
 
+        # 使用任务真正完成的时间统一规范报告中的“报告生成时间”字段
+        completed_at = datetime.now()
+        report = normalize_report_timestamp(report, completed_at)
+
         task["progress"] = 100
         task["current_step"] = "分析完成"
         task["status"] = "completed"
@@ -1153,6 +1157,61 @@ async def generate_ai_report(
         # LLM 连接失败时仅记录错误并向上抛出，让上层标记任务失败
         print(f"LLM API Error: {e}")
         raise
+
+
+def normalize_report_timestamp(report_text: str, completed_at: datetime) -> str:
+    """统一规范报告中的报告生成时间，使其与任务真正完成时间保持一致。
+
+    - 将所有出现的“报告生成时间:”或“报告日期:”行替换为 completed_at
+    - 尝试替换前几处孤立日期字符串为 completed_at 的日期
+    - 若已存在脚注形式的“报告生成时间”则更新为 completed_at
+    """
+    try:
+        import re
+
+        date_str = completed_at.strftime("%Y年%m月%d日")
+        time_str = completed_at.strftime("%H:%M:%S")
+
+        # 替换“报告生成时间:”或“报告日期:”行
+        def _replace_line(match: "re.Match[str]") -> str:
+            prefix = match.group(1)
+            return f"{prefix}{date_str} {time_str}"
+
+        report_text = re.sub(r"(报告生成时间[:：]\s*)[^\n]*", _replace_line, report_text)
+        report_text = re.sub(r"(报告日期[:：]\s*)[^\n]*", _replace_line, report_text)
+
+        # 替换孤立日期（最多前 5 个）
+        report_text = re.sub(
+            r"\d{4}年\d{1,2}月\d{1,2}日",
+            date_str,
+            report_text,
+            count=5,
+        )
+
+        # 规范脚注形式的“报告生成时间”
+        def _replace_footer(match: "re.Match[str]") -> str:
+            prefix = match.group(1)
+            return f"{prefix}{date_str} {time_str}"
+
+        report_text = re.sub(
+            r"(\*\*报告生成时间\*\*[:：]?\s*)[^\n]*",
+            _replace_footer,
+            report_text,
+        )
+
+        # 如果完全没有“报告生成时间”相关字段，则追加标准脚注
+        if "报告生成时间" not in report_text and "报告日期" not in report_text:
+            footer = (
+                f"\n\n---\n\n"
+                f"**报告生成时间**: {date_str} {time_str} | **数据来源**: 量化系统 + AI多智能体分析\n\n"
+                f"*本报告由量化引擎(基于vnpy架构)与AI Agent深度联动生成，整合了硬数据分析与软判断评估。*"
+            )
+            report_text += footer
+
+        return report_text
+    except Exception:
+        # 任何异常都不影响主流程，直接返回原始报告
+        return report_text
 
 
 # ============================================
