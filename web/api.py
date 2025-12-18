@@ -8,8 +8,7 @@ FastAPI 后端 API 服务
 import asyncio
 import json
 import uuid
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
@@ -59,6 +58,11 @@ class TaskStatus(BaseModel):
 # ============================================
 # 全局状态管理
 # ============================================
+
+def get_beijing_now() -> datetime:
+    """获取当前北京时间 (UTC+8)，不依赖系统时区配置。"""
+    return datetime.utcnow() + timedelta(hours=8)
+
 
 # 存储分析任务状态
 analysis_tasks: Dict[str, Dict[str, Any]] = {}
@@ -124,7 +128,7 @@ async def health_check():
         return {
             "status": "healthy",
             "llm_provider": APIConfig.DEFAULT_LLM_PROVIDER,
-            "timestamp": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat()
+            "timestamp": get_beijing_now().isoformat()
         }
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
@@ -212,7 +216,7 @@ async def start_analysis(request: AnalysisRequest):
         "ticker": request.ticker,
         "result": None,
         "error": None,
-        "created_at": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat()
+        "created_at": get_beijing_now().isoformat()
     }
     
     # 使用线程启动后台任务，完全脱离当前请求
@@ -460,7 +464,7 @@ async def run_full_analysis(task_id: str, ticker: str):
         ai_summary += f"短线：{short_term_view} 中线：{mid_term_view} 长线：{long_term_view}"
 
         # 使用任务真正完成的北京时间统一规范报告中的“报告生成时间”字段
-        completed_at = datetime.now(ZoneInfo("Asia/Shanghai"))
+        completed_at = get_beijing_now()
         report = normalize_report_timestamp(report, completed_at)
 
         task["progress"] = 100
@@ -483,7 +487,7 @@ async def run_full_analysis(task_id: str, ticker: str):
             count = int(stat.get("count", 0)) + 1
             analysis_stats[ticker] = {
                 "count": count,
-                "last_time": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
+                "last_time": get_beijing_now().isoformat(),
             }
             ANALYSIS_STATS_PATH.write_text(
                 json.dumps(analysis_stats, ensure_ascii=False), encoding="utf-8"
@@ -916,7 +920,7 @@ async def generate_ai_report(
         }
     
     # 获取当前北京时间
-    current_datetime = datetime.now(ZoneInfo("Asia/Shanghai"))
+    current_datetime = get_beijing_now()
     report_date = current_datetime.strftime("%Y年%m月%d日")
     report_time = current_datetime.strftime("%H:%M:%S")
     
@@ -1077,7 +1081,7 @@ async def generate_ai_report(
         report_text = response.choices[0].message.content
 
         # 规范化报告日期和时间为当前北京时间
-        current_datetime = datetime.now(ZoneInfo("Asia/Shanghai"))
+        current_datetime = get_beijing_now()
         current_date_str = current_datetime.strftime("%Y年%m月%d日")
         current_time_str = current_datetime.strftime("%H:%M:%S")
         
