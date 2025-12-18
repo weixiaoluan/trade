@@ -125,7 +125,7 @@ def get_siliconflow_config() -> dict:
             }
         ],
         "temperature": 0.3,  # 金融分析需要较低的创造性
-        "timeout": 180,  # DeepSeek-R1 推理较慢，增加超时时间
+        "timeout": 180,  # DeepSeek-V3.2 推理相对较慢，设置 180 秒超时
         "cache_seed": None,  # 禁用缓存以获取最新数据
     }
 

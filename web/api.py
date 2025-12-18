@@ -490,7 +490,7 @@ async def run_full_analysis(task_id: str, ticker: str):
     except Exception as e:
         msg = str(e)
         if "timed out" in msg.lower():
-            msg = "LLM 请求超时（SiliconFlow DeepSeek 接口在 120 秒内未响应），请稍后重试。"
+            msg = "LLM 请求超时（SiliconFlow DeepSeek 接口在 180 秒内未响应），请稍后重试。"
         task["status"] = "failed"
         task["error"] = msg
         task["current_step"] = "失败"
@@ -762,14 +762,14 @@ async def generate_ai_report_with_predictions(
         try:
             # Agent 1 调用
             pred_response = client.chat.completions.create(
-                model="deepseek-ai/DeepSeek-V3.2",
+                model=APIConfig.SILICONFLOW_MODEL,
                 messages=[
                     {"role": "system", "content": "你是量化分析师，只输出JSON格式的预测数据，不要输出其他内容。"},
                     {"role": "user", "content": prediction_prompt}
                 ],
                 max_tokens=1000,
                 temperature=0.2,
-                timeout=120
+                timeout=180
             )
             
             pred_text = pred_response.choices[0].message.content
@@ -1060,14 +1060,14 @@ async def generate_ai_report(
         import re
 
         response = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-V3.2",
+            model=APIConfig.SILICONFLOW_MODEL,
             messages=[
                 {"role": "system", "content": "你是一位资深的证券分析师，擅长技术分析和基本面分析。请生成专业、客观的投资分析报告。"},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=8000,
             temperature=0.3,
-            timeout=120
+            timeout=180
         )
         report_text = response.choices[0].message.content
 

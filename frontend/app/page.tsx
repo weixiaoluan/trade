@@ -65,6 +65,16 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'overview' | 'technical' | 'fundamental' | 'report'>('overview');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message?: string;
+  }>({ open: false });
+
+  const showErrorDialog = (title: string, message: string) => {
+    setErrorDialog({ open: true, title, message });
+  };
+
   const handleSearch = async (query: string) => {
     setTicker(query);
     setViewState('loading');
@@ -88,7 +98,7 @@ export default function Home() {
         // 处理 404 或其他错误状态
         if (!statusRes.ok) {
           console.error('Task fetch failed:', statusRes.status);
-          alert('任务状态获取失败，请刷新页面重试');
+          showErrorDialog('任务状态获取失败', '任务状态获取失败，请刷新页面重试');
           setViewState('hero');
           return;
         }
@@ -98,7 +108,7 @@ export default function Home() {
         // 确保返回的状态对象有效
         if (!status || !status.status) {
           console.error('Invalid status response:', status);
-          alert('服务响应异常，请刷新页面重试');
+          showErrorDialog('服务响应异常', '服务响应异常，请刷新页面重试');
           setViewState('hero');
           return;
         }
@@ -259,7 +269,10 @@ export default function Home() {
           setViewState('dashboard');
         } else if (status.status === 'failed') {
           const errorMsg = status.error || '未知错误';
-          alert(`❌ 分析失败\n\n${errorMsg}\n\n请检查：\n1. 证券代码是否正确\n2. 中国A股 / ETF / 基金可直接输入6位数字代码（如：600519、159941、000001），系统会自动识别市场\n3. 若多次出现超时，请稍后重试或更换网络环境`);
+          showErrorDialog(
+            '分析失败',
+            `LLM 请求超时或服务异常。\n\n${errorMsg}\n\n请检查：\n1. 证券代码是否正确\n2. 中国A股 / ETF / 基金可直接输入6位数字代码（如：600519、159941、000001），系统会自动识别市场\n3. 若多次出现超时，请稍后重试或更换网络环境`
+          );
           setViewState('hero');
         } else {
           setTimeout(pollStatus, 1000);
@@ -269,7 +282,7 @@ export default function Home() {
       pollStatus();
     } catch (error) {
       console.error('Analysis error:', error);
-      alert('分析出错，请重试');
+      showErrorDialog('分析出错', '分析过程中出现异常，请稍后重试');
       setViewState('hero');
     }
   };
@@ -673,6 +686,35 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Error Dialog */}
+      {errorDialog.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="glass-card w-full max-w-sm mx-4 rounded-2xl border border-white/[0.15] bg-[#020617]/95 shadow-xl shadow-black/40">
+            <div className="flex items-start gap-3 px-4 pt-4">
+              <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/40 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-rose-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-white truncate">
+                  {errorDialog.title || '分析失败'}
+                </h3>
+                <p className="mt-2 text-xs text-slate-400 whitespace-pre-line">
+                  {errorDialog.message}
+                </p>
+              </div>
+            </div>
+            <div className="px-4 pb-4 pt-3 flex justify-end">
+              <button
+                onClick={() => setErrorDialog({ open: false })}
+                className="px-4 py-1.5 rounded-lg bg-indigo-500 text-xs font-medium text-white hover:bg-indigo-400 transition-colors"
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
