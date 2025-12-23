@@ -5,23 +5,23 @@ User Authentication Module
 ============================================
 """
 
-import json
 import hashlib
 import secrets
 import re
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, validator
 
-# 数据存储路径
-DATA_DIR = Path(__file__).parent / "data"
-USERS_FILE = DATA_DIR / "users.json"
-WATCHLIST_FILE = DATA_DIR / "watchlist.json"
-SESSIONS_FILE = DATA_DIR / "sessions.json"
-
-# 确保数据目录存在
-DATA_DIR.mkdir(exist_ok=True)
+# 导入数据库模块
+from web.database import (
+    db_get_user_by_username, db_get_user_by_phone, db_create_user,
+    db_create_session, db_get_session, db_delete_session,
+    db_get_user_watchlist, db_add_to_watchlist, db_remove_from_watchlist, db_update_watchlist_item,
+    db_save_report, db_get_user_reports, db_get_user_report, db_delete_report,
+    db_create_task, db_update_task, db_get_user_tasks,
+    db_get_user_reminders, db_add_reminder, db_update_reminder, db_delete_reminder, 
+    db_get_symbol_reminders, db_get_all_reminders
+)
 
 
 # ============================================
@@ -74,6 +74,25 @@ class WatchlistItem(BaseModel):
     name: Optional[str] = None
     type: Optional[str] = None  # stock, etf, fund
     added_at: Optional[str] = None
+    position: Optional[float] = None  # 持仓数量
+    cost_price: Optional[float] = None  # 持仓成本价
+
+
+class ReminderItem(BaseModel):
+    """价格触发提醒项"""
+    id: Optional[str] = None
+    symbol: str
+    name: Optional[str] = None
+    reminder_type: str  # buy, sell, both
+    frequency: str = "trading_day"  # trading_day, weekly, monthly
+    analysis_time: str = "09:30"  # AI分析时间 HH:MM
+    buy_price: Optional[float] = None  # AI分析的买入价
+    sell_price: Optional[float] = None  # AI分析的卖出价
+    enabled: bool = True
+    created_at: Optional[str] = None
+    last_notified_type: Optional[str] = None  # 最后触发类型
+    last_notified_at: Optional[str] = None  # 最后触发时间
+    last_analysis_at: Optional[str] = None  # 最后分析时间
 
 
 # ============================================
@@ -99,123 +118,53 @@ def generate_token() -> str:
     return secrets.token_hex(32)
 
 
-def load_json_file(file_path: Path) -> Dict:
-    """加载 JSON 文件"""
-    if file_path.exists():
-        try:
-            return json.loads(file_path.read_text(encoding='utf-8'))
-        except:
-            return {}
-    return {}
-
-
-def save_json_file(file_path: Path, data: Dict):
-    """保存 JSON 文件"""
-    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-
-
 # ============================================
-# 用户管理
+# 用户管理 (使用数据库)
 # ============================================
-
-def get_users() -> Dict:
-    """获取所有用户"""
-    return load_json_file(USERS_FILE)
-
-
-def save_users(users: Dict):
-    """保存用户数据"""
-    save_json_file(USERS_FILE, users)
-
 
 def get_user_by_username(username: str) -> Optional[Dict]:
     """根据用户名获取用户"""
-    users = get_users()
-    return users.get(username)
+    return db_get_user_by_username(username)
 
 
 def get_user_by_phone(phone: str) -> Optional[Dict]:
     """根据手机号获取用户"""
-    users = get_users()
-    for user in users.values():
-        if user.get('phone') == phone:
-            return user
-    return None
+    return db_get_user_by_phone(phone)
 
 
 def create_user(username: str, password: str, phone: str) -> Dict:
     """创建用户"""
-    users = get_users()
-    
     hashed_password, salt = hash_password(password)
-    
-    user = {
-        'username': username,
-        'password': hashed_password,
-        'salt': salt,
-        'phone': phone,
-        'created_at': datetime.now().isoformat(),
-        'watchlist': []
-    }
-    
-    users[username] = user
-    save_users(users)
-    
-    return {'username': username, 'phone': phone}
+    return db_create_user(username, hashed_password, salt, phone)
 
 
 # ============================================
-# 会话管理
+# 会话管理 (使用数据库)
 # ============================================
-
-def get_sessions() -> Dict:
-    """获取所有会话"""
-    return load_json_file(SESSIONS_FILE)
-
-
-def save_sessions(sessions: Dict):
-    """保存会话数据"""
-    save_json_file(SESSIONS_FILE, sessions)
-
 
 def create_session(username: str) -> str:
     """创建会话"""
-    sessions = get_sessions()
     token = generate_token()
-    
-    sessions[token] = {
-        'username': username,
-        'created_at': datetime.now().isoformat(),
-        'expires_at': (datetime.now() + timedelta(days=7)).isoformat()
-    }
-    
-    save_sessions(sessions)
+    expires_at = (datetime.now() + timedelta(days=7)).isoformat()
+    db_create_session(token, username, expires_at)
     return token
 
 
 def get_session(token: str) -> Optional[Dict]:
     """获取会话"""
-    sessions = get_sessions()
-    session = sessions.get(token)
-    
+    session = db_get_session(token)
     if session:
         expires_at = datetime.fromisoformat(session['expires_at'])
         if datetime.now() < expires_at:
             return session
         else:
-            # 会话过期，删除
-            del sessions[token]
-            save_sessions(sessions)
-    
+            db_delete_session(token)
     return None
 
 
 def delete_session(token: str):
     """删除会话"""
-    sessions = get_sessions()
-    if token in sessions:
-        del sessions[token]
-        save_sessions(sessions)
+    db_delete_session(token)
 
 
 def get_current_user(token: str) -> Optional[Dict]:
@@ -233,58 +182,29 @@ def get_current_user(token: str) -> Optional[Dict]:
 
 
 # ============================================
-# 自选列表管理
+# 自选列表管理 (使用数据库)
 # ============================================
 
 def get_user_watchlist(username: str) -> list:
     """获取用户自选列表"""
-    users = get_users()
-    user = users.get(username)
-    if user:
-        return user.get('watchlist', [])
-    return []
+    return db_get_user_watchlist(username)
 
 
 def add_to_watchlist(username: str, item: Dict) -> bool:
     """添加到自选列表"""
-    users = get_users()
-    user = users.get(username)
-    
-    if not user:
-        return False
-    
-    watchlist = user.get('watchlist', [])
-    
-    # 检查是否已存在
-    for existing in watchlist:
-        if existing.get('symbol') == item.get('symbol'):
-            return False  # 已存在
-    
-    item['added_at'] = datetime.now().isoformat()
-    watchlist.append(item)
-    user['watchlist'] = watchlist
-    
-    save_users(users)
-    return True
+    return db_add_to_watchlist(
+        username, 
+        item.get('symbol'),
+        item.get('name'),
+        item.get('type'),
+        item.get('position'),
+        item.get('cost_price')
+    )
 
 
 def remove_from_watchlist(username: str, symbol: str) -> bool:
     """从自选列表移除"""
-    users = get_users()
-    user = users.get(username)
-    
-    if not user:
-        return False
-    
-    watchlist = user.get('watchlist', [])
-    new_watchlist = [item for item in watchlist if item.get('symbol') != symbol]
-    
-    if len(new_watchlist) == len(watchlist):
-        return False  # 未找到
-    
-    user['watchlist'] = new_watchlist
-    save_users(users)
-    return True
+    return db_remove_from_watchlist(username, symbol)
 
 
 def batch_add_to_watchlist(username: str, items: list) -> Dict:
@@ -316,136 +236,126 @@ def batch_remove_from_watchlist(username: str, symbols: list) -> Dict:
 
 
 # ============================================
-# 分析报告管理
+# 分析报告管理 (使用数据库)
 # ============================================
-
-REPORTS_FILE = DATA_DIR / "reports.json"
-
-
-def get_reports() -> Dict:
-    """获取所有报告"""
-    return load_json_file(REPORTS_FILE)
-
-
-def save_reports(reports: Dict):
-    """保存报告数据"""
-    save_json_file(REPORTS_FILE, reports)
-
 
 def save_user_report(username: str, symbol: str, report_data: Dict) -> str:
     """保存用户的分析报告"""
-    reports = get_reports()
-    
-    if username not in reports:
-        reports[username] = {}
-    
-    report_id = f"{symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
-    report = {
-        'id': report_id,
-        'symbol': symbol,
-        'created_at': datetime.now().isoformat(),
-        'status': report_data.get('status', 'completed'),
-        'data': report_data
-    }
-    
-    # 按 symbol 存储，只保留最新的报告
-    reports[username][symbol] = report
-    
-    save_reports(reports)
-    return report_id
+    name = report_data.get('name', symbol)
+    report_id = db_save_report(username, symbol, name, report_data)
+    return f"{symbol}_{report_id}"
 
 
 def get_user_reports(username: str) -> list:
     """获取用户的所有报告"""
-    reports = get_reports()
-    user_reports = reports.get(username, {})
-    
-    # 转换为列表并按时间排序
-    report_list = list(user_reports.values())
-    report_list.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-    
-    return report_list
+    reports = db_get_user_reports(username)
+    # 转换为旧格式以兼容
+    result = []
+    for r in reports:
+        result.append({
+            'id': r['id'],
+            'symbol': r['symbol'],
+            'name': r.get('name', r['symbol']),
+            'created_at': r['created_at'],
+            'status': 'completed',
+            'data': r['report_data']
+        })
+    return result
 
 
 def get_user_report(username: str, symbol: str) -> Optional[Dict]:
     """获取用户某个标的的报告"""
-    reports = get_reports()
-    user_reports = reports.get(username, {})
-    return user_reports.get(symbol)
+    report = db_get_user_report(username, symbol)
+    if report:
+        return {
+            'id': report['id'],
+            'symbol': report['symbol'],
+            'name': report.get('name', report['symbol']),
+            'created_at': report['created_at'],
+            'status': 'completed',
+            'data': report['report_data']
+        }
+    return None
 
 
 def delete_user_report(username: str, symbol: str) -> bool:
     """删除用户的报告"""
-    reports = get_reports()
-    
-    if username not in reports:
-        return False
-    
-    if symbol not in reports[username]:
-        return False
-    
-    del reports[username][symbol]
-    save_reports(reports)
-    return True
+    return db_delete_report(username, symbol)
 
 
 # ============================================
-# 分析任务管理
+# 分析任务管理 (使用数据库)
 # ============================================
-
-TASKS_FILE = DATA_DIR / "analysis_tasks.json"
-
-
-def get_analysis_tasks() -> Dict:
-    """获取所有分析任务"""
-    return load_json_file(TASKS_FILE)
-
-
-def save_analysis_tasks(tasks: Dict):
-    """保存分析任务"""
-    save_json_file(TASKS_FILE, tasks)
-
 
 def create_analysis_task(username: str, symbol: str, task_id: str) -> Dict:
     """创建分析任务"""
-    tasks = get_analysis_tasks()
-    
-    if username not in tasks:
-        tasks[username] = {}
-    
-    task = {
-        'task_id': task_id,
-        'symbol': symbol,
-        'status': 'pending',  # pending, running, completed, failed
-        'progress': 0,
-        'current_step': '等待开始',
-        'created_at': datetime.now().isoformat(),
-        'updated_at': datetime.now().isoformat(),
-        'result': None,
-        'error': None
-    }
-    
-    tasks[username][symbol] = task
-    save_analysis_tasks(tasks)
-    return task
+    return db_create_task(username, symbol, task_id)
 
 
 def update_analysis_task(username: str, symbol: str, updates: Dict):
     """更新分析任务状态"""
-    tasks = get_analysis_tasks()
-    
-    if username not in tasks or symbol not in tasks[username]:
-        return
-    
-    task = tasks[username][symbol]
-    task.update(updates)
-    task['updated_at'] = datetime.now().isoformat()
-    
-    save_analysis_tasks(tasks)
+    db_update_task(username, symbol, **updates)
 
 
 def get_user_analysis_tasks(username: str) -> Dict:
     """获取用户的所有分析任务"""
-    tasks = get_analysis_tasks()
-    return tasks.get(username, {})
+    return db_get_user_tasks(username)
+
+
+# ============================================
+# 定时提醒相关函数 (使用数据库)
+# ============================================
+
+def get_reminders() -> Dict:
+    """获取所有提醒"""
+    return db_get_all_reminders()
+
+
+def get_user_reminders(username: str) -> list:
+    """获取用户的所有提醒"""
+    reminders = db_get_user_reminders(username)
+    # 转换 reminder_id 为 id 以兼容前端
+    return [{'id': r.get('reminder_id', r.get('id')), **{k: v for k, v in r.items() if k != 'reminder_id'}} for r in reminders]
+
+
+def add_reminder(username: str, reminder: Dict) -> Dict:
+    """添加价格触发提醒"""
+    reminder_id = secrets.token_hex(8)
+    return db_add_reminder(
+        username,
+        reminder_id,
+        reminder['symbol'],
+        reminder.get('name'),
+        reminder['reminder_type'],
+        reminder.get('frequency', 'trading_day'),
+        reminder.get('analysis_time', '09:30'),
+        reminder.get('buy_price'),
+        reminder.get('sell_price')
+    )
+
+
+def update_reminder(username: str, reminder_id: str, updates: Dict) -> bool:
+    """更新提醒"""
+    return db_update_reminder(username, reminder_id, **updates)
+
+
+def delete_reminder(username: str, reminder_id: str) -> bool:
+    """删除提醒"""
+    return db_delete_reminder(username, reminder_id)
+
+
+def get_symbol_reminders(username: str, symbol: str) -> list:
+    """获取某个证券的所有提醒"""
+    reminders = db_get_symbol_reminders(username, symbol)
+    return [{'id': r.get('reminder_id', r.get('id')), **{k: v for k, v in r.items() if k != 'reminder_id'}} for r in reminders]
+
+
+def batch_add_reminders(username: str, symbols: list, reminder_config: Dict) -> Dict:
+    """批量添加提醒"""
+    added = []
+    for symbol in symbols:
+        reminder = reminder_config.copy()
+        reminder['symbol'] = symbol
+        result = add_reminder(username, reminder)
+        added.append(result)
+    return {'added': added, 'count': len(added)}

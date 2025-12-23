@@ -30,6 +30,8 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      console.log("登录请求:", API_BASE, formData.username);
+      
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: {
@@ -38,7 +40,9 @@ export default function LoginPage() {
         body: JSON.stringify(formData),
       });
 
+      console.log("响应状态:", response.status);
       const data = await response.json();
+      console.log("响应数据:", data);
 
       if (!response.ok) {
         throw new Error(data.detail || "登录失败");
@@ -47,10 +51,12 @@ export default function LoginPage() {
       // 保存 token 和用户信息到 localStorage
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
+      console.log("Token 已保存，准备跳转...");
 
       // 跳转到 Dashboard
       router.push("/dashboard");
     } catch (err: any) {
+      console.error("登录错误:", err);
       setError(err.message || "登录失败，请重试");
     } finally {
       setLoading(false);
@@ -95,14 +101,14 @@ export default function LoginPage() {
             {/* Username */}
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">
-                用户名
+                用户名 / 手机号
               </label>
               <input
                 type="text"
                 name="username"
                 value={formData.username}
                 onChange={handleChange}
-                placeholder="请输入用户名"
+                placeholder="请输入用户名或手机号"
                 className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
                 required
               />

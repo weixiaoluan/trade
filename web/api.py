@@ -29,13 +29,15 @@ from config import get_llm_config, APIConfig, SystemConfig
 from tools.data_fetcher import get_stock_data, get_stock_info, get_financial_data, search_ticker
 from tools.technical_analysis import calculate_all_indicators, analyze_trend, get_support_resistance_levels
 from web.auth import (
-    RegisterRequest, LoginRequest, WatchlistItem,
+    RegisterRequest, LoginRequest, WatchlistItem, ReminderItem,
     get_user_by_username, get_user_by_phone, create_user, verify_password,
     create_session, get_current_user, delete_session,
     get_user_watchlist, add_to_watchlist, remove_from_watchlist, batch_add_to_watchlist,
     batch_remove_from_watchlist,
     save_user_report, get_user_reports, get_user_report, delete_user_report,
-    create_analysis_task, update_analysis_task, get_user_analysis_tasks
+    create_analysis_task, update_analysis_task, get_user_analysis_tasks,
+    get_user_reminders, add_reminder, update_reminder, delete_reminder,
+    get_symbol_reminders, batch_add_reminders
 )
 
 
@@ -78,6 +80,13 @@ def get_beijing_now() -> datetime:
 # 存储分析任务状态
 analysis_tasks: Dict[str, Dict[str, Any]] = {}
 
+# 启动定时任务调度器
+try:
+    from web.scheduler import start_scheduler
+    start_scheduler()
+except Exception as e:
+    print(f"启动调度器失败: {e}")
+
 # 分析统计（用于热门标的）
 ANALYSIS_STATS_PATH = Path(__file__).parent / "analysis_stats.json"
 analysis_stats: Dict[str, Dict[str, Any]] = {}
@@ -96,8 +105,16 @@ if ANALYSIS_STATS_PATH.exists():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    import asyncio
     print("[START] Securities Analysis API starting...")
+    
+    # 启动价格触发检查后台任务
+    task = asyncio.create_task(check_price_triggers())
+    
     yield
+    
+    # 取消后台任务
+    task.cancel()
     print("[STOP] Securities Analysis API shutting down...")
 
 
@@ -179,9 +196,14 @@ async def register(request: RegisterRequest):
 
 @app.post("/api/auth/login")
 async def login(request: LoginRequest):
-    """用户登录"""
+    """用户登录 - 支持用户名或手机号登录"""
     try:
+        # 先尝试用户名查找
         user = get_user_by_username(request.username)
+        
+        # 如果用户名找不到，尝试用手机号查找
+        if not user:
+            user = get_user_by_phone(request.username)
         
         if not user:
             raise HTTPException(status_code=401, detail="用户名或密码错误")
@@ -190,7 +212,7 @@ async def login(request: LoginRequest):
             raise HTTPException(status_code=401, detail="用户名或密码错误")
         
         # 创建会话
-        token = create_session(request.username)
+        token = create_session(user['username'])
         
         return {
             "status": "success",
@@ -2128,6 +2150,458 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
         return report_text
     except Exception:
         return report_text
+
+
+# ============================================
+# 定时提醒 API
+# ============================================
+
+@app.get("/api/reminders")
+async def get_reminders_list(authorization: str = Header(None)):
+    """获取用户的所有定时提醒"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    reminders = get_user_reminders(user['username'])
+    return {"status": "success", "reminders": reminders}
+
+
+@app.get("/api/reminders/{symbol}")
+async def get_symbol_reminders_list(symbol: str, authorization: str = Header(None)):
+    """获取某个证券的定时提醒"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    reminders = get_symbol_reminders(user['username'], symbol)
+    return {"status": "success", "reminders": reminders}
+
+
+@app.post("/api/reminders")
+async def create_reminder(
+    reminder: ReminderItem,
+    authorization: str = Header(None)
+):
+    """创建价格触发提醒"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    # 检查是否有对应的AI报告，从报告中获取买入卖出价
+    report = get_user_report(user['username'], reminder.symbol)
+    has_report = report is not None
+    
+    buy_price = reminder.buy_price
+    sell_price = reminder.sell_price
+    
+    # 如果没有指定价格，尝试从报告中获取
+    if report and report.get('data') and (buy_price is None or sell_price is None):
+        report_data = report['data']
+        if isinstance(report_data, dict):
+            if buy_price is None and 'buy_price' in report_data:
+                buy_price = report_data.get('buy_price')
+            if sell_price is None and 'sell_price' in report_data:
+                sell_price = report_data.get('sell_price')
+            if 'recommendation' in report_data:
+                rec = report_data['recommendation']
+                if isinstance(rec, dict):
+                    buy_price = buy_price or rec.get('buy_price')
+                    sell_price = sell_price or rec.get('sell_price')
+    
+    reminder_dict = reminder.dict()
+    reminder_dict['buy_price'] = buy_price
+    reminder_dict['sell_price'] = sell_price
+    
+    result = add_reminder(user['username'], reminder_dict)
+    
+    return {
+        "status": "success",
+        "reminder": result,
+        "has_report": has_report,
+        "message": "提醒创建成功" if has_report else "提醒创建成功，但该证券尚无AI分析报告，无法获取买卖价格"
+    }
+
+
+@app.post("/api/reminders/batch")
+async def batch_create_reminders(
+    symbols: List[str],
+    reminder_type: str,
+    frequency: str = "trading_day",
+    analysis_time: str = "09:30",
+    authorization: str = Header(None)
+):
+    """批量创建价格触发提醒"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    # 为每个标的获取AI分析报告中的买入卖出价
+    results = []
+    symbols_without_report = []
+    
+    for symbol in symbols:
+        report = get_user_report(user['username'], symbol)
+        if report and report.get('data'):
+            report_data = report['data']
+            # 从报告中提取买入卖出价
+            buy_price = None
+            sell_price = None
+            
+            if isinstance(report_data, dict):
+                # 尝试从不同位置获取价格
+                if 'buy_price' in report_data:
+                    buy_price = report_data.get('buy_price')
+                if 'sell_price' in report_data:
+                    sell_price = report_data.get('sell_price')
+                # 也可能在 recommendation 中
+                if 'recommendation' in report_data:
+                    rec = report_data['recommendation']
+                    if isinstance(rec, dict):
+                        buy_price = buy_price or rec.get('buy_price')
+                        sell_price = sell_price or rec.get('sell_price')
+            
+            reminder_config = {
+                'symbol': symbol,
+                'name': report.get('name', symbol),
+                'reminder_type': reminder_type,
+                'frequency': frequency,
+                'analysis_time': analysis_time,
+                'buy_price': buy_price,
+                'sell_price': sell_price
+            }
+            result = add_reminder(user['username'], reminder_config)
+            results.append(result)
+        else:
+            symbols_without_report.append(symbol)
+    
+    return {
+        "status": "success",
+        "result": {'added': results, 'count': len(results)},
+        "symbols_without_report": symbols_without_report
+    }
+
+
+@app.put("/api/reminders/{reminder_id}")
+async def update_reminder_item(
+    reminder_id: str,
+    updates: dict,
+    authorization: str = Header(None)
+):
+    """更新定时提醒"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    success = update_reminder(user['username'], reminder_id, updates)
+    
+    if success:
+        return {"status": "success", "message": "更新成功"}
+    else:
+        raise HTTPException(status_code=404, detail="未找到该提醒")
+
+
+@app.delete("/api/reminders/{reminder_id}")
+async def delete_reminder_item(
+    reminder_id: str,
+    authorization: str = Header(None)
+):
+    """删除定时提醒"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    success = delete_reminder(user['username'], reminder_id)
+    
+    if success:
+        return {"status": "success", "message": "删除成功"}
+    else:
+        raise HTTPException(status_code=404, detail="未找到该提醒")
+
+
+# ============================================
+# 实时行情 API
+# ============================================
+
+@app.get("/api/quotes")
+async def get_quotes(symbols: str, authorization: str = Header(None)):
+    """获取实时行情数据
+    symbols: 逗号分隔的标的代码列表
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    
+    # 获取实时行情数据
+    quotes = {}
+    for symbol in symbol_list:
+        try:
+            quote = get_realtime_quote(symbol)
+            if quote:
+                quotes[symbol] = quote
+        except Exception as e:
+            print(f"获取 {symbol} 行情失败: {e}")
+    
+    return {"status": "success", "quotes": quotes}
+
+
+def get_realtime_quote(symbol: str) -> dict:
+    """获取单个标的的实时行情
+    使用 akshare 或其他数据源获取
+    """
+    try:
+        import akshare as ak
+        
+        # 根据代码格式判断类型
+        if symbol.startswith("sz") or symbol.startswith("sh"):
+            # A股
+            code = symbol[2:]
+            df = ak.stock_zh_a_spot_em()
+            row = df[df['代码'] == code]
+            if not row.empty:
+                return {
+                    'symbol': symbol,
+                    'current_price': float(row.iloc[0]['最新价']),
+                    'change_percent': float(row.iloc[0]['涨跌幅'])
+                }
+        elif symbol.isdigit() and len(symbol) == 6:
+            # 纯数字代码
+            df = ak.stock_zh_a_spot_em()
+            row = df[df['代码'] == symbol]
+            if not row.empty:
+                return {
+                    'symbol': symbol,
+                    'current_price': float(row.iloc[0]['最新价']),
+                    'change_percent': float(row.iloc[0]['涨跌幅'])
+                }
+        
+        # ETF
+        if symbol.startswith("1") or symbol.startswith("5"):
+            df = ak.fund_etf_spot_em()
+            row = df[df['代码'] == symbol]
+            if not row.empty:
+                return {
+                    'symbol': symbol,
+                    'current_price': float(row.iloc[0]['最新价']),
+                    'change_percent': float(row.iloc[0]['涨跌幅'])
+                }
+        
+    except Exception as e:
+        print(f"获取行情出错: {e}")
+    
+    return None
+
+
+# ============================================
+# 后台任务：自动AI分析 + 价格触发检查
+# ============================================
+
+def is_trading_day() -> bool:
+    """检查今天是否是交易日（简单判断：周一到周五）"""
+    return datetime.now().weekday() < 5
+
+
+def should_analyze_today(frequency: str, last_analysis_at: str) -> bool:
+    """根据频率判断今天是否需要分析"""
+    now = datetime.now()
+    
+    if last_analysis_at:
+        try:
+            last_time = datetime.fromisoformat(last_analysis_at)
+            # 今天已经分析过了
+            if last_time.date() == now.date():
+                return False
+        except:
+            pass
+    
+    if frequency == 'trading_day':
+        return is_trading_day()
+    elif frequency == 'weekly':
+        # 每周一
+        return now.weekday() == 0
+    elif frequency == 'monthly':
+        # 每月1号
+        return now.day == 1
+    
+    return False
+
+
+async def check_price_triggers():
+    """后台任务：检查AI分析时间 + 价格触发提醒"""
+    from web.database import db_get_all_reminders, db_update_reminder
+    import asyncio
+    
+    while True:
+        try:
+            now = datetime.now()
+            current_time = now.strftime("%H:%M")
+            
+            all_reminders = db_get_all_reminders()
+            
+            for username, user_reminders in all_reminders.items():
+                user = get_user_by_username(username)
+                if not user:
+                    continue
+                
+                phone = user.get('phone')
+                
+                for reminder in user_reminders:
+                    if not reminder.get('enabled'):
+                        continue
+                    
+                    symbol = reminder['symbol']
+                    reminder_id = reminder.get('reminder_id', reminder.get('id'))
+                    reminder_type = reminder['reminder_type']
+                    frequency = reminder.get('frequency', 'trading_day')
+                    analysis_time = reminder.get('analysis_time', '09:30')
+                    last_analysis_at = reminder.get('last_analysis_at')
+                    
+                    # 检查是否到了AI分析时间
+                    if current_time == analysis_time and should_analyze_today(frequency, last_analysis_at):
+                        print(f"[AI分析] 开始分析 {symbol} for {username}")
+                        try:
+                            # 触发AI分析
+                            await trigger_ai_analysis(username, symbol)
+                            
+                            # 更新最后分析时间
+                            db_update_reminder(username, reminder_id, 
+                                             last_analysis_at=now.isoformat())
+                            
+                            # 获取最新报告中的买卖价格
+                            report = get_user_report(username, symbol)
+                            if report and report.get('data'):
+                                report_data = report['data']
+                                buy_price = None
+                                sell_price = None
+                                
+                                if isinstance(report_data, dict):
+                                    buy_price = report_data.get('buy_price')
+                                    sell_price = report_data.get('sell_price')
+                                    if 'recommendation' in report_data:
+                                        rec = report_data['recommendation']
+                                        if isinstance(rec, dict):
+                                            buy_price = buy_price or rec.get('buy_price')
+                                            sell_price = sell_price or rec.get('sell_price')
+                                
+                                # 更新提醒中的买卖价格
+                                if buy_price or sell_price:
+                                    db_update_reminder(username, reminder_id,
+                                                     buy_price=buy_price,
+                                                     sell_price=sell_price,
+                                                     last_notified_type=None)  # 重置通知状态
+                        except Exception as e:
+                            print(f"[AI分析] {symbol} 分析失败: {e}")
+                    
+                    # 检查价格触发（只在交易时间内检查）
+                    if is_trading_day() and "09:30" <= current_time <= "15:00" and phone:
+                        buy_price = reminder.get('buy_price')
+                        sell_price = reminder.get('sell_price')
+                        last_notified_type = reminder.get('last_notified_type')
+                        
+                        if not buy_price and not sell_price:
+                            continue
+                        
+                        quote = get_realtime_quote(symbol)
+                        if not quote:
+                            continue
+                        
+                        current_price = quote['current_price']
+                        
+                        # 检查买入触发
+                        if buy_price and (reminder_type in ['buy', 'both']):
+                            if current_price <= buy_price and last_notified_type != 'buy':
+                                msg = f"【买入提醒】{reminder.get('name', symbol)} 当前价 {current_price}，已触发买入价 {buy_price}"
+                                send_sms_notification(phone, msg)
+                                db_update_reminder(username, reminder_id,
+                                                 last_notified_type='buy',
+                                                 last_notified_at=now.isoformat())
+                        
+                        # 检查卖出触发
+                        if sell_price and (reminder_type in ['sell', 'both']):
+                            if current_price >= sell_price and last_notified_type != 'sell':
+                                msg = f"【卖出提醒】{reminder.get('name', symbol)} 当前价 {current_price}，已触发卖出价 {sell_price}"
+                                send_sms_notification(phone, msg)
+                                db_update_reminder(username, reminder_id,
+                                                 last_notified_type='sell',
+                                                 last_notified_at=now.isoformat())
+        
+        except Exception as e:
+            print(f"[后台任务] 出错: {e}")
+        
+        # 每60秒检查一次
+        await asyncio.sleep(60)
+
+
+async def trigger_ai_analysis(username: str, symbol: str):
+    """触发AI分析任务"""
+    # 创建分析任务
+    task_id = str(uuid.uuid4())
+    create_analysis_task(username, task_id, symbol)
+    
+    # 这里调用实际的分析逻辑
+    # 简化版：直接调用分析函数
+    try:
+        from core.analysis_engine import run_analysis
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, run_analysis, symbol
+        )
+        if result:
+            save_user_report(username, symbol, result.get('name', symbol), result)
+            update_analysis_task(username, task_id, status='completed', progress=100)
+    except Exception as e:
+        print(f"AI分析执行失败: {e}")
+        update_analysis_task(username, task_id, status='failed', error=str(e))
+
+
+def send_sms_notification(phone: str, message: str):
+    """发送短信通知
+    这里需要接入实际的短信服务商 API
+    """
+    # TODO: 接入实际短信服务
+    print(f"[SMS] 发送到 {phone}: {message}")
+    
+    # 示例：阿里云短信
+    # from alibabacloud_dysmsapi20170525 import Client, models
+    # client = Client(...)
+    # request = models.SendSmsRequest(phone_numbers=phone, sign_name="...", template_code="...", template_param=json.dumps({"message": message}))
+    # client.send_sms(request)
 
 
 # ============================================

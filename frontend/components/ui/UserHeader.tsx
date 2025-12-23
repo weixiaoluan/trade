@@ -57,11 +57,11 @@ export function UserHeader({ user, onLogout }: UserHeaderProps) {
       {showDropdown && (
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-20"
             onClick={() => setShowDropdown(false)}
           />
-          <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-700">
+          <div className="absolute right-0 top-full mt-2 w-48 bg-[#0f172a] border border-white/[0.08] rounded-xl shadow-2xl z-30 overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02]">
               <p className="text-sm font-medium text-white truncate">
                 {user.username}
               </p>
@@ -71,7 +71,7 @@ export function UserHeader({ user, onLogout }: UserHeaderProps) {
             </div>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-slate-700/50 transition-all"
+              className="w-full flex items-center gap-2 px-4 py-3 text-sm text-rose-400 hover:bg-white/[0.05] transition-all"
             >
               <LogOut className="w-4 h-4" />
               退出登录
