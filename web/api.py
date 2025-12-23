@@ -13,12 +13,14 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 import uvicorn
+import re
+import base64
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,6 +28,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import get_llm_config, APIConfig, SystemConfig
 from tools.data_fetcher import get_stock_data, get_stock_info, get_financial_data, search_ticker
 from tools.technical_analysis import calculate_all_indicators, analyze_trend, get_support_resistance_levels
+from web.auth import (
+    RegisterRequest, LoginRequest, WatchlistItem,
+    get_user_by_username, get_user_by_phone, create_user, verify_password,
+    create_session, get_current_user, delete_session,
+    get_user_watchlist, add_to_watchlist, remove_from_watchlist, batch_add_to_watchlist,
+    batch_remove_from_watchlist,
+    save_user_report, get_user_reports, get_user_report, delete_user_report,
+    create_analysis_task, update_analysis_task, get_user_analysis_tasks
+)
 
 
 # ============================================
@@ -132,6 +143,839 @@ async def health_check():
         }
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
+
+
+# ============================================
+# 用户认证 API
+# ============================================
+
+@app.post("/api/auth/register")
+async def register(request: RegisterRequest):
+    """用户注册"""
+    try:
+        # 检查用户名是否已存在
+        if get_user_by_username(request.username):
+            raise HTTPException(status_code=400, detail="用户名已被注册")
+        
+        # 检查手机号是否已存在
+        if get_user_by_phone(request.phone):
+            raise HTTPException(status_code=400, detail="手机号已被注册")
+        
+        # 创建用户
+        user = create_user(request.username, request.password, request.phone)
+        
+        return {
+            "status": "success",
+            "message": "注册成功",
+            "user": user
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auth/login")
+async def login(request: LoginRequest):
+    """用户登录"""
+    try:
+        user = get_user_by_username(request.username)
+        
+        if not user:
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+        
+        if not verify_password(request.password, user['password'], user['salt']):
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+        
+        # 创建会话
+        token = create_session(request.username)
+        
+        return {
+            "status": "success",
+            "message": "登录成功",
+            "token": token,
+            "user": {
+                "username": user['username'],
+                "phone": user['phone']
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/auth/me")
+async def get_me(authorization: str = Header(None)):
+    """获取当前用户信息"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    return {
+        "status": "success",
+        "user": user
+    }
+
+
+@app.post("/api/auth/logout")
+async def logout(authorization: str = Header(None)):
+    """退出登录"""
+    if authorization:
+        token = authorization.replace("Bearer ", "")
+        delete_session(token)
+    
+    return {"status": "success", "message": "已退出登录"}
+
+
+# ============================================
+# 自选列表 API
+# ============================================
+
+@app.get("/api/watchlist")
+async def get_watchlist(authorization: str = Header(None)):
+    """获取自选列表"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    watchlist = get_user_watchlist(user['username'])
+    
+    return {
+        "status": "success",
+        "watchlist": watchlist
+    }
+
+
+@app.post("/api/watchlist")
+async def add_watchlist_item(
+    item: WatchlistItem,
+    authorization: str = Header(None)
+):
+    """添加自选"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    success = add_to_watchlist(user['username'], item.dict())
+    
+    if success:
+        return {"status": "success", "message": "添加成功"}
+    else:
+        return {"status": "error", "message": "该标的已在自选列表中"}
+
+
+@app.delete("/api/watchlist/{symbol}")
+async def delete_watchlist_item(
+    symbol: str,
+    authorization: str = Header(None)
+):
+    """删除自选"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    success = remove_from_watchlist(user['username'], symbol)
+    
+    if success:
+        return {"status": "success", "message": "删除成功"}
+    else:
+        raise HTTPException(status_code=404, detail="未找到该标的")
+
+
+@app.post("/api/watchlist/batch")
+async def batch_add_watchlist_items(
+    items: List[WatchlistItem],
+    authorization: str = Header(None)
+):
+    """批量添加自选"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    result = batch_add_to_watchlist(user['username'], [item.dict() for item in items])
+    
+    return {
+        "status": "success",
+        "added": result['added'],
+        "skipped": result['skipped'],
+        "message": f"成功添加 {len(result['added'])} 个，跳过 {len(result['skipped'])} 个已存在的标的"
+    }
+
+
+# ============================================
+# OCR 图片识别 API
+# ============================================
+
+@app.post("/api/ocr/recognize")
+async def recognize_stocks_from_images(
+    files: List[UploadFile] = File(...),
+    authorization: str = Header(None)
+):
+    """从多张图片识别股票代码（最多10张）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    # 限制最多10张图片
+    if len(files) > 10:
+        raise HTTPException(status_code=400, detail="最多只能上传10张图片")
+    
+    try:
+        all_recognized = []
+        
+        # 并行处理所有图片
+        async def process_image(file: UploadFile):
+            content = await file.read()
+            base64_image = base64.b64encode(content).decode('utf-8')
+            return await recognize_stocks_with_ai(base64_image, file.content_type or "image/jpeg")
+        
+        # 并行执行所有图片识别
+        tasks = [process_image(f) for f in files]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 合并结果，去重
+        seen_symbols = set()
+        for result in results:
+            if isinstance(result, list):
+                for item in result:
+                    symbol = item.get('symbol', '')
+                    if symbol and symbol not in seen_symbols:
+                        seen_symbols.add(symbol)
+                        all_recognized.append(item)
+        
+        print(f"OCR 识别完成，共识别到 {len(all_recognized)} 个标的")
+        
+        return {
+            "status": "success",
+            "recognized": all_recognized,
+            "image_count": len(files)
+        }
+    except Exception as e:
+        print(f"OCR 识别失败: {e}")
+        raise HTTPException(status_code=500, detail=f"图片识别失败: {str(e)}")
+
+
+async def recognize_stocks_with_ai(base64_image: str, content_type: str) -> List[Dict]:
+    """使用 AI 识别图片中的股票代码"""
+    from openai import OpenAI
+    import httpx
+    import os
+    
+    # 强制禁用系统代理
+    os.environ['NO_PROXY'] = '*'
+    os.environ['no_proxy'] = '*'
+    
+    api_key = APIConfig.SILICONFLOW_API_KEY
+    
+    # 创建强制直连的 HTTP 客户端
+    transport = httpx.HTTPTransport(proxy=None)
+    http_client = httpx.Client(
+        transport=transport,
+        timeout=httpx.Timeout(120.0, connect=30.0)
+    )
+    
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.siliconflow.cn/v1",
+        http_client=http_client
+    )
+    
+    prompt = """请仔细分析这张图片，识别出其中所有的股票、ETF、基金代码和名称。
+
+请按以下JSON格式返回识别结果（只返回JSON，不要其他内容）：
+```json
+[
+  {"symbol": "600519", "name": "贵州茅台", "type": "stock"},
+  {"symbol": "159915", "name": "创业板ETF", "type": "etf"},
+  {"symbol": "AAPL", "name": "苹果", "type": "stock"}
+]
+```
+
+识别规则：
+1. A股代码为6位数字（如600519、000001）
+2. ETF代码为6位数字（如510300、159915）
+3. 美股代码为英文字母（如AAPL、TSLA）
+4. 基金代码为6位数字（如000001基金）
+5. 如果无法确定名称，name可以为空字符串
+6. type可以是：stock（股票）、etf、fund（基金）
+
+如果图片中没有股票代码，返回空数组：[]"""
+
+    try:
+        # 尝试使用支持视觉的模型
+        response = client.chat.completions.create(
+            model="Qwen/Qwen2-VL-72B-Instruct",  # 使用支持视觉的模型
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{content_type};base64,{base64_image}"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            max_tokens=1000,
+            temperature=0.1,
+            timeout=120
+        )
+        
+        result_text = response.choices[0].message.content
+        
+        # 提取 JSON
+        json_match = re.search(r'\[[\s\S]*?\]', result_text)
+        if json_match:
+            recognized = json.loads(json_match.group())
+            return recognized
+        
+        return []
+        
+    except Exception as e:
+        print(f"AI 图片识别错误: {e}")
+        # 如果视觉模型失败，返回空结果
+        return []
+
+
+# ============================================
+# 自选批量删除 API
+# ============================================
+
+@app.post("/api/watchlist/batch-delete")
+async def batch_delete_watchlist_items(
+    symbols: List[str],
+    authorization: str = Header(None)
+):
+    """批量删除自选"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    result = batch_remove_from_watchlist(user['username'], symbols)
+    
+    return {
+        "status": "success",
+        "removed": result['removed'],
+        "not_found": result['not_found'],
+        "message": f"成功删除 {len(result['removed'])} 个标的"
+    }
+
+
+# ============================================
+# 分析报告 API
+# ============================================
+
+@app.get("/api/reports")
+async def get_reports_list(authorization: str = Header(None)):
+    """获取用户的分析报告列表"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    reports = get_user_reports(user['username'])
+    
+    # 简化报告数据，只返回摘要信息
+    summary_reports = []
+    for report in reports:
+        data = report.get('data', {})
+        summary_reports.append({
+            'id': report.get('id'),
+            'symbol': report.get('symbol'),
+            'created_at': report.get('created_at'),
+            'status': report.get('status'),
+            'name': data.get('name', ''),
+            'recommendation': data.get('recommendation', ''),
+            'quant_score': data.get('quant_score'),
+            'price': data.get('price'),
+            'change_percent': data.get('change_percent')
+        })
+    
+    return {
+        "status": "success",
+        "reports": summary_reports
+    }
+
+
+@app.get("/api/reports/{symbol}")
+async def get_report_detail(symbol: str, authorization: str = Header(None)):
+    """获取某个标的的详细报告"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    report = get_user_report(user['username'], symbol)
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="未找到该标的的报告")
+    
+    return {
+        "status": "success",
+        "report": report
+    }
+
+
+@app.delete("/api/reports/{symbol}")
+async def delete_report(symbol: str, authorization: str = Header(None)):
+    """删除某个标的的报告"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    success = delete_user_report(user['username'], symbol)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="未找到该标的的报告")
+    
+    return {"status": "success", "message": "报告已删除"}
+
+
+# ============================================
+# 后台分析任务 API
+# ============================================
+
+@app.post("/api/analyze/background")
+async def start_background_analysis(
+    request: AnalysisRequest,
+    authorization: str = Header(None)
+):
+    """启动后台分析任务（用户可关闭页面）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    task_id = str(uuid.uuid4())
+    username = user['username']
+    symbol = request.ticker.upper()
+    
+    # 创建任务记录
+    create_analysis_task(username, symbol, task_id)
+    
+    # 使用线程启动后台任务，完全脱离当前请求
+    import threading
+    def run_in_thread():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(run_background_analysis_full(username, symbol, task_id))
+        loop.close()
+    
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    
+    return {
+        "status": "success",
+        "task_id": task_id,
+        "symbol": symbol,
+        "message": "分析任务已启动，您可以关闭页面，稍后查看报告"
+    }
+
+
+@app.post("/api/analyze/batch")
+async def start_batch_analysis(
+    symbols: List[str],
+    authorization: str = Header(None)
+):
+    """批量启动后台分析任务（真正并行执行）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    tasks = []
+    
+    for symbol in symbols:
+        symbol = symbol.upper()
+        task_id = str(uuid.uuid4())
+        
+        # 创建任务记录
+        create_analysis_task(username, symbol, task_id)
+        
+        tasks.append({
+            "task_id": task_id,
+            "symbol": symbol
+        })
+    
+    # 使用独立线程并行启动所有分析任务
+    import threading
+    
+    def create_analysis_runner(uname: str, sym: str, tid: str):
+        """创建分析任务运行器"""
+        def run():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(run_background_analysis_full(uname, sym, tid))
+            except Exception as e:
+                print(f"分析任务异常 [{sym}]: {e}")
+            finally:
+                loop.close()
+        return run
+    
+    # 先创建所有线程
+    threads = []
+    for task_info in tasks:
+        runner = create_analysis_runner(username, task_info["symbol"], task_info["task_id"])
+        t = threading.Thread(target=runner, daemon=True)
+        threads.append(t)
+    
+    # 同时启动所有线程
+    for t in threads:
+        t.start()
+    
+    print(f"已并行启动 {len(threads)} 个分析任务")
+    
+    return {
+        "status": "success",
+        "tasks": tasks,
+        "message": f"已启动 {len(tasks)} 个分析任务并行执行，您可以关闭页面，稍后查看报告"
+    }
+
+
+@app.get("/api/analyze/tasks")
+async def get_analysis_tasks_status(authorization: str = Header(None)):
+    """获取用户的分析任务状态"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    tasks = get_user_analysis_tasks(user['username'])
+    
+    return {
+        "status": "success",
+        "tasks": tasks
+    }
+
+
+async def run_background_analysis_full(username: str, ticker: str, task_id: str):
+    """
+    后台执行完整的多 Agent 分析（复用原有分析逻辑）
+    """
+    try:
+        # === 第一阶段：数据获取 ===
+        update_analysis_task(username, ticker, {
+            'status': 'running',
+            'progress': 5,
+            'current_step': 'AI Agents正在集结'
+        })
+        await asyncio.sleep(0.2)
+        
+        # 自动识别并标准化 ticker
+        update_analysis_task(username, ticker, {
+            'progress': 10,
+            'current_step': '正在获取实时行情数据'
+        })
+        
+        search_result = await asyncio.to_thread(search_ticker, ticker)
+        search_dict = json.loads(search_result)
+        
+        if search_dict.get("status") == "success":
+            ticker = search_dict.get("ticker", ticker)
+        
+        stock_data = await asyncio.to_thread(get_stock_data, ticker, "2y", "1d")
+        stock_data_dict = json.loads(stock_data)
+        
+        if stock_data_dict.get("status") != "success":
+            raise Exception(f"无法获取 {ticker} 的行情数据")
+        
+        # 基本面分析
+        update_analysis_task(username, ticker, {
+            'progress': 25,
+            'current_step': '基本面分析师正在评估价值'
+        })
+        
+        stock_info = await asyncio.to_thread(get_stock_info, ticker)
+        stock_info_dict = json.loads(stock_info)
+        
+        # === 第二阶段：量化分析 ===
+        update_analysis_task(username, ticker, {
+            'progress': 35,
+            'current_step': '技术面分析师正在计算指标'
+        })
+        
+        indicators = await asyncio.to_thread(calculate_all_indicators, stock_data)
+        indicators_dict = json.loads(indicators)
+        
+        if indicators_dict.get("status") == "error" or not indicators_dict.get("indicators"):
+            raise Exception(f"无法计算 {ticker} 的技术指标")
+        
+        update_analysis_task(username, ticker, {
+            'progress': 45,
+            'current_step': '量化引擎正在生成信号'
+        })
+        
+        trend = await asyncio.to_thread(analyze_trend, indicators)
+        trend_dict = json.loads(trend)
+        
+        if trend_dict.get("status") == "error":
+            raise Exception(f"无法分析 {ticker} 的趋势")
+        
+        update_analysis_task(username, ticker, {
+            'progress': 55,
+            'current_step': '数据审计员正在验证来源'
+        })
+        
+        levels = await asyncio.to_thread(get_support_resistance_levels, stock_data)
+        levels_dict = json.loads(levels)
+        
+        # === 第三阶段：AI分析 ===
+        update_analysis_task(username, ticker, {
+            'progress': 65,
+            'current_step': '风险管理专家正在评估风险'
+        })
+        await asyncio.sleep(0.3)
+        
+        update_analysis_task(username, ticker, {
+            'progress': 75,
+            'current_step': '首席投资官正在生成报告'
+        })
+        
+        # 调用 AI 生成报告和预测（与原分析相同）
+        report, predictions = await generate_ai_report_with_predictions(
+            ticker, 
+            stock_data_dict, 
+            stock_info_dict, 
+            indicators_dict, 
+            trend_dict, 
+            levels_dict
+        )
+        
+        # 提取量化分析数据
+        quant_analysis = trend_dict.get("quant_analysis", {})
+        trend_analysis = trend_dict.get("trend_analysis", trend_dict)
+        signal_details = trend_dict.get("signal_details", [])
+        
+        quant_score = quant_analysis.get("score")
+        market_regime = quant_analysis.get("market_regime", "unknown")
+        volatility_state = quant_analysis.get("volatility_state", "medium")
+        quant_reco = quant_analysis.get("recommendation", "hold")
+        
+        # 技术指标摘要
+        ind_root = indicators_dict.get("indicators", indicators_dict or {})
+        if isinstance(ind_root, dict):
+            adx_data = ind_root.get("adx", {}) or {}
+            atr_data = ind_root.get("atr", {}) or {}
+        else:
+            adx_data = {}
+            atr_data = {}
+        
+        indicator_overview = {
+            "adx_value": adx_data.get("adx"),
+            "adx_trend_strength": adx_data.get("trend_strength"),
+            "atr_value": atr_data.get("value"),
+            "atr_pct": atr_data.get("percentage"),
+        }
+        
+        # 映射表
+        reco_map = {"strong_buy": "强力买入", "buy": "建议买入", "hold": "持有观望", "sell": "建议减持", "strong_sell": "强力卖出"}
+        regime_map = {"trending": "趋势市", "ranging": "震荡市", "squeeze": "窄幅整理", "unknown": "待判定"}
+        vol_map = {"high": "高波动", "medium": "中等波动", "low": "低波动"}
+        
+        score_text = f"{quant_score:.1f}" if isinstance(quant_score, (int, float)) else "N/A"
+        regime_cn = regime_map.get(market_regime, "待判定")
+        vol_cn = vol_map.get(volatility_state, "波动适中")
+        reco_cn = reco_map.get(quant_reco, "观望")
+        
+        bullish_signals = trend_analysis.get("bullish_signals", 0) if isinstance(trend_analysis, dict) else 0
+        bearish_signals = trend_analysis.get("bearish_signals", 0) if isinstance(trend_analysis, dict) else 0
+        
+        ai_summary = f"量化评分 {score_text} 分，当前处于{regime_cn}，{vol_cn}环境。多头信号 {bullish_signals} 个、空头信号 {bearish_signals} 个，综合建议：{reco_cn}。"
+        
+        update_analysis_task(username, ticker, {
+            'progress': 90,
+            'current_step': '质量控制专员正在审核'
+        })
+        
+        # 规范化报告时间戳
+        completed_at = get_beijing_now()
+        report = normalize_report_timestamp(report, completed_at)
+        
+        # 构建完整报告数据（与原分析格式一致）
+        report_data = {
+            'status': 'completed',
+            'ticker': ticker,
+            'report': report,
+            'predictions': predictions,
+            'quant_analysis': quant_analysis,
+            'trend_analysis': trend_analysis,
+            'ai_summary': ai_summary,
+            'indicator_overview': indicator_overview,
+            'signal_details': signal_details,
+            'stock_info': stock_info_dict,
+            'indicators': indicators_dict,
+            'levels': levels_dict
+        }
+        
+        # 保存报告到数据库
+        save_user_report(username, ticker, report_data)
+        
+        # 更新任务状态为完成
+        update_analysis_task(username, ticker, {
+            'status': 'completed',
+            'progress': 100,
+            'current_step': '分析完成',
+            'result': json.dumps(report_data, ensure_ascii=False)
+        })
+        
+    except Exception as e:
+        print(f"后台分析失败 [{ticker}]: {e}")
+        update_analysis_task(username, ticker, {
+            'status': 'failed',
+            'current_step': '分析失败',
+            'error': str(e)
+        })
+
+
+async def generate_ai_report_for_background(symbol: str, info: Dict, indicators: Dict, trend: Dict) -> Dict:
+    """为后台任务生成AI报告"""
+    from openai import OpenAI
+    import httpx
+    import os
+    
+    os.environ['NO_PROXY'] = '*'
+    os.environ['no_proxy'] = '*'
+    
+    api_key = APIConfig.SILICONFLOW_API_KEY
+    
+    transport = httpx.HTTPTransport(proxy=None)
+    http_client = httpx.Client(
+        transport=transport,
+        timeout=httpx.Timeout(180.0, connect=30.0)
+    )
+    
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.siliconflow.cn/v1",
+        http_client=http_client
+    )
+    
+    # 构建分析提示词
+    basic_info = info.get('basic_info', {})
+    price_info = info.get('price_info', {})
+    
+    prompt = f"""请对以下证券进行专业分析：
+
+## 基本信息
+- 代码: {symbol}
+- 名称: {basic_info.get('name', 'N/A')}
+- 当前价格: {price_info.get('current_price', 'N/A')}
+- 涨跌幅: {price_info.get('change_pct', 0):.2f}%
+
+## 技术指标
+{json.dumps(indicators, ensure_ascii=False, indent=2)}
+
+## 趋势分析
+{json.dumps(trend, ensure_ascii=False, indent=2)}
+
+请提供：
+1. 市场概况分析（100字以内）
+2. 技术面分析（200字以内）
+3. 操作建议
+4. 风险提示
+
+请用专业但易懂的语言输出分析报告。"""
+
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-ai/DeepSeek-V3",
+            messages=[
+                {"role": "system", "content": "你是一位专业的证券分析师，擅长技术分析和基本面分析。"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=2000,
+            temperature=0.7
+        )
+        
+        report_text = response.choices[0].message.content
+        
+        # 生成简要摘要
+        summary = report_text[:200] + "..." if len(report_text) > 200 else report_text
+        
+        return {
+            'report': report_text,
+            'summary': summary,
+            'predictions': []
+        }
+        
+    except Exception as e:
+        print(f"AI 报告生成错误: {e}")
+        return {
+            'report': f'AI 报告生成失败: {str(e)}',
+            'summary': '报告生成失败',
+            'predictions': []
+        }
 
 
 @app.get("/api/search/{query}")

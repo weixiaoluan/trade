@@ -78,7 +78,11 @@ export function AIRecommendationCard({
   confidence = 75,
   riskLevel = 'medium',
 }: AIRecommendationCardProps) {
-  const config = recommendationConfig[recommendation];
+  // 确保 recommendation 有效，默认为 hold
+  const safeRecommendation = (recommendation && recommendationConfig[recommendation]) 
+    ? recommendation 
+    : 'hold';
+  const config = recommendationConfig[safeRecommendation];
   const Icon = config.icon;
   const [copied, setCopied] = useState(false);
 
