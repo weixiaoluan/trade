@@ -11,7 +11,7 @@ import { QuantDashboardCard } from "@/components/ui/QuantDashboardCard";
 import { AIRecommendationCard } from "@/components/ui/AIRecommendationCard";
 import { PredictionTimeline } from "@/components/ui/PredictionTimeline";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+import { API_BASE } from "@/lib/config";
 
 export default function ReportPage() {
   const router = useRouter();

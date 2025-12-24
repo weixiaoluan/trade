@@ -32,7 +32,7 @@ import {
 import { UserHeader } from "@/components/ui/UserHeader";
 import { AlertModal } from "@/components/ui/AlertModal";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+import { API_BASE } from "@/lib/config";
 
 interface UserInfo {
   username: string;
