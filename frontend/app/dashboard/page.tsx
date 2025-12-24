@@ -277,11 +277,11 @@ export default function DashboardPage() {
       fetchReports();
       fetchReminders();
 
-      // 定时刷新任务状态（降低频率以提升性能）
+      // 定时刷新任务状态
       const interval = setInterval(() => {
         fetchTasks();
         fetchReports();
-      }, 10000);
+      }, 5000);
 
       return () => clearInterval(interval);
     }
@@ -307,7 +307,7 @@ export default function DashboardPage() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setUser(null);
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   // 切换选择
@@ -716,6 +716,7 @@ export default function DashboardPage() {
       });
       if (response.ok) {
         const data = await response.json();
+        console.log("获取到的提醒数据:", data.reminders);
         setReminders(data.reminders || []);
       }
     } catch (error) {
@@ -786,14 +787,24 @@ export default function DashboardPage() {
 
   // 删除提醒
   const handleDeleteReminder = async (reminderId: string) => {
+    console.log("删除提醒 ID:", reminderId);
+    if (!reminderId) {
+      console.error("提醒 ID 为空");
+      return;
+    }
     try {
       const response = await fetch(`${API_BASE}/api/reminders/${reminderId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${getToken()}` },
       });
 
+      const data = await response.json();
+      console.log("删除响应:", data);
+      
       if (response.ok) {
         fetchReminders();
+      } else {
+        console.error("删除失败:", data);
       }
     } catch (error) {
       console.error("删除提醒失败:", error);
@@ -881,8 +892,7 @@ export default function DashboardPage() {
     return (
       <main className="min-h-screen bg-[#020617] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-24 w-24 border-b-4 border-indigo-500 mx-auto mb-4"></div>
-          <p className="text-slate-400 text-lg">加载中...</p>
+          <div className="animate-spin rounded-full h-48 w-48 border-b-4 border-indigo-500 mx-auto"></div>
         </div>
       </main>
     );
@@ -1006,8 +1016,9 @@ export default function DashboardPage() {
 
         {/* Watchlist Table */}
         <div className="glass-card rounded-2xl border border-white/[0.06] overflow-hidden">
-          {/* Table Header */}
-          <div className="flex items-center gap-4 px-6 py-4 border-b border-white/[0.06] bg-white/[0.02]">
+          {/* Table Header - 支持横向滚动 */}
+          <div className="overflow-x-auto">
+          <div className="flex items-center gap-4 px-6 py-4 border-b border-white/[0.06] bg-white/[0.02] min-w-[900px]">
             <div className="w-8 flex-shrink-0">
               <button
                 onClick={toggleSelectAll}
@@ -1026,11 +1037,11 @@ export default function DashboardPage() {
             <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400">
               类型
             </div>
-            <div className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right">
+            <div className="w-24 flex-shrink-0 text-sm font-medium text-slate-400 text-right">
               当前价
             </div>
             <div 
-              className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-300"
+              className="w-24 flex-shrink-0 text-sm font-medium text-slate-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-300"
               onClick={() => handleSort("change_percent")}
             >
               涨跌幅
@@ -1062,8 +1073,10 @@ export default function DashboardPage() {
               操作
             </div>
           </div>
+          </div>
 
           {/* Table Body */}
+          <div className="overflow-x-auto">
           {watchlist.length === 0 ? (
             <div className="py-16 text-center">
               <Bot className="w-16 h-16 text-slate-700 mx-auto mb-4" />
@@ -1076,7 +1089,7 @@ export default function DashboardPage() {
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-white/[0.04]">
+            <div className="divide-y divide-white/[0.04] min-w-[900px]">
               {sortedWatchlist
                 .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                 .map((item) => {
@@ -1136,10 +1149,10 @@ export default function DashboardPage() {
                     </div>
 
                     {/* 当前价 */}
-                    <div className="w-20 flex-shrink-0 flex items-center justify-end">
+                    <div className="w-24 flex-shrink-0 flex items-center justify-end">
                       {quotes[item.symbol]?.current_price ? (
                         <span 
-                          className="font-mono text-sm font-medium"
+                          className="font-mono text-base font-semibold"
                           style={{
                             color: (quotes[item.symbol]?.change_percent || 0) > 0 
                               ? "#f87171" 
@@ -1156,10 +1169,10 @@ export default function DashboardPage() {
                     </div>
 
                     {/* 涨跌幅 */}
-                    <div className="w-20 flex-shrink-0 flex items-center justify-end">
+                    <div className="w-24 flex-shrink-0 flex items-center justify-end">
                       {quotes[item.symbol]?.change_percent !== undefined ? (
                         <span 
-                          className="font-mono text-sm font-medium"
+                          className="font-mono text-base font-semibold"
                           style={{
                             color: quotes[item.symbol].change_percent > 0 
                               ? "#f87171" 
@@ -1316,6 +1329,7 @@ export default function DashboardPage() {
               })}
             </div>
           )}
+          </div>
 
           {/* 分页控件 */}
           {watchlist.length > 0 && (
@@ -1697,7 +1711,11 @@ export default function DashboardPage() {
                           </span>
                         </div>
                         <button
-                          onClick={() => handleDeleteReminder(r.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteReminder(r.id);
+                          }}
                           className="p-1 hover:bg-rose-600/20 text-slate-500 hover:text-rose-400 rounded transition-all"
                         >
                           <X className="w-4 h-4" />

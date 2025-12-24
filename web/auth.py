@@ -344,8 +344,13 @@ def get_reminders() -> Dict:
 def get_user_reminders(username: str) -> list:
     """获取用户的所有提醒"""
     reminders = db_get_user_reminders(username)
-    # 转换 reminder_id 为 id 以兼容前端
-    return [{'id': r.get('reminder_id', r.get('id')), **{k: v for k, v in r.items() if k != 'reminder_id'}} for r in reminders]
+    # 转换 reminder_id 为 id 以兼容前端（排除数据库自增主键 id）
+    result = []
+    for r in reminders:
+        item = {k: v for k, v in r.items() if k not in ('id', 'reminder_id')}
+        item['id'] = r.get('reminder_id')  # 使用 reminder_id 作为前端的 id
+        result.append(item)
+    return result
 
 
 def add_reminder(username: str, reminder: Dict) -> Dict:

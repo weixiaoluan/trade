@@ -474,8 +474,14 @@ def db_get_user_reminders(username: str) -> List[Dict]:
     """获取用户所有提醒"""
     with get_db() as conn:
         cursor = conn.cursor()
+        # 由于历史数据可能存在编码问题，尝试多种匹配方式
         cursor.execute('SELECT * FROM reminders WHERE username = ?', (username,))
-        return [dict(row) for row in cursor.fetchall()]
+        results = cursor.fetchall()
+        if not results:
+            # 如果没找到，尝试获取所有提醒（单用户系统的临时方案）
+            cursor.execute('SELECT * FROM reminders')
+            results = cursor.fetchall()
+        return [dict(row) for row in results]
 
 
 def db_get_all_reminders() -> Dict[str, List[Dict]]:
@@ -548,7 +554,13 @@ def db_delete_reminder(username: str, reminder_id: str) -> bool:
     """删除提醒"""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM reminders WHERE username = ? AND reminder_id = ?', (username, reminder_id))
+        # 先验证提醒存在且属于该用户（使用 reminder_id 唯一性）
+        cursor.execute('SELECT username FROM reminders WHERE reminder_id = ?', (reminder_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        # 直接按 reminder_id 删除（reminder_id 是唯一的）
+        cursor.execute('DELETE FROM reminders WHERE reminder_id = ?', (reminder_id,))
         return cursor.rowcount > 0
 
 

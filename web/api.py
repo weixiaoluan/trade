@@ -2286,10 +2286,14 @@ async def get_reminders_list(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     reminders = get_user_reminders(user['username'])
+    # 转换 reminder_id 为 id 以匹配前端接口
+    for r in reminders:
+        if 'reminder_id' in r:
+            r['id'] = r['reminder_id']
     return {"status": "success", "reminders": reminders}
 
 
-@app.get("/api/reminders/{symbol}")
+@app.get("/api/reminders/symbol/{symbol}")
 async def get_symbol_reminders_list(symbol: str, authorization: str = Header(None)):
     """获取某个证券的定时提醒"""
     if not authorization:
@@ -2302,6 +2306,10 @@ async def get_symbol_reminders_list(symbol: str, authorization: str = Header(Non
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     reminders = get_symbol_reminders(user['username'], symbol)
+    # 转换 reminder_id 为 id 以匹配前端接口
+    for r in reminders:
+        if 'reminder_id' in r:
+            r['id'] = r['reminder_id']
     return {"status": "success", "reminders": reminders}
 
 
