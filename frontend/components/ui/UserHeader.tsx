@@ -19,7 +19,37 @@ interface UserHeaderProps {
 export function UserHeader({ user, onLogout }: UserHeaderProps) {
   const router = useRouter();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const isAdmin = user.role === "admin";
+
+  // 获取待审核用户数量（仅管理员）
+  useEffect(() => {
+    if (!isAdmin) return;
+    
+    const fetchPendingCount = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        
+        const response = await fetch(`${API_BASE}/api/admin/pending-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setPendingCount(data.count || 0);
+        }
+      } catch (error) {
+        console.error("获取待审核数量失败:", error);
+      }
+    };
+    
+    fetchPendingCount();
+    // 每30秒刷新一次
+    const interval = setInterval(fetchPendingCount, 30000);
+    return () => clearInterval(interval);
+  }, [isAdmin]);
 
   // 点击外部关闭下拉菜单
   useEffect(() => {
@@ -52,7 +82,6 @@ export function UserHeader({ user, onLogout }: UserHeaderProps) {
     router.push("/admin");
   };
 
-  const isAdmin = user.role === "admin";
   const isSVIP = user.status === "approved" && user.role !== "admin";
   const isPending = user.status === "pending";
 
@@ -61,8 +90,14 @@ export function UserHeader({ user, onLogout }: UserHeaderProps) {
       {/* 头像按钮 */}
       <button
         onClick={() => setShowDropdown(!showDropdown)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:bg-slate-700/50 transition-all"
+        className="relative flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:bg-slate-700/50 transition-all"
       >
+        {/* 管理员待审核徽章 - 微信风格 */}
+        {isAdmin && pendingCount > 0 && (
+          <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1.5 bg-[#FA5151] text-white text-[12px] font-bold rounded-full flex items-center justify-center z-10 shadow-lg shadow-red-500/30 border-2 border-[#020617]">
+            {pendingCount > 99 ? "99+" : pendingCount}
+          </span>
+        )}
         <div
           className={`w-8 h-8 rounded-full flex items-center justify-center ${
             isAdmin
@@ -123,10 +158,17 @@ export function UserHeader({ user, onLogout }: UserHeaderProps) {
           {isAdmin && (
             <button
               onClick={handleAdminClick}
-              className="w-full flex items-center gap-2 px-4 py-3 text-sm text-amber-400 hover:bg-white/[0.05] transition-all border-b border-white/[0.06]"
+              className="w-full flex items-center justify-between px-4 py-3 text-sm text-amber-400 hover:bg-white/[0.05] transition-all border-b border-white/[0.06]"
             >
-              <Shield className="w-4 h-4" />
-              用户管理
+              <span className="flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                用户管理
+              </span>
+              {pendingCount > 0 && (
+                <span className="min-w-[22px] h-[22px] px-1.5 bg-[#FA5151] text-white text-[12px] font-bold rounded-full flex items-center justify-center shadow-md shadow-red-500/20">
+                  {pendingCount > 99 ? "99+" : pendingCount}
+                </span>
+              )}
             </button>
           )}
 

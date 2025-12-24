@@ -288,6 +288,26 @@ async def admin_get_users(authorization: str = Header(None)):
     return {"status": "success", "users": users}
 
 
+@app.get("/api/admin/pending-count")
+async def admin_get_pending_count(authorization: str = Header(None)):
+    """获取待审核用户数量（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        return {"status": "success", "count": 0}
+    
+    users = get_all_users()
+    pending_count = len([u for u in users if u.get('status') == 'pending'])
+    return {"status": "success", "count": pending_count}
+
+
 @app.post("/api/admin/users/{username}/approve")
 async def admin_approve_user(username: str, authorization: str = Header(None)):
     """审核通过用户（仅管理员）"""
