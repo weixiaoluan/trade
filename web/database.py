@@ -120,6 +120,8 @@ def init_database():
                 reminder_type TEXT NOT NULL,
                 frequency TEXT NOT NULL DEFAULT 'trading_day',
                 analysis_time TEXT DEFAULT '09:30',
+                weekday INTEGER,
+                day_of_month INTEGER,
                 buy_price REAL,
                 sell_price REAL,
                 enabled INTEGER DEFAULT 1,
@@ -430,16 +432,17 @@ def db_get_all_reminders() -> Dict[str, List[Dict]]:
 
 def db_add_reminder(username: str, reminder_id: str, symbol: str, name: str,
                     reminder_type: str, frequency: str = 'trading_day',
-                    analysis_time: str = '09:30',
+                    analysis_time: str = '09:30', weekday: int = None,
+                    day_of_month: int = None,
                     buy_price: float = None, sell_price: float = None) -> Dict:
     """添加价格触发提醒"""
     with get_db() as conn:
         cursor = conn.cursor()
         created_at = datetime.now().isoformat()
         cursor.execute('''
-            INSERT INTO reminders (reminder_id, username, symbol, name, reminder_type, frequency, analysis_time, buy_price, sell_price, enabled, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-        ''', (reminder_id, username, symbol, name, reminder_type, frequency, analysis_time, buy_price, sell_price, created_at))
+            INSERT INTO reminders (reminder_id, username, symbol, name, reminder_type, frequency, analysis_time, weekday, day_of_month, buy_price, sell_price, enabled, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        ''', (reminder_id, username, symbol, name, reminder_type, frequency, analysis_time, weekday, day_of_month, buy_price, sell_price, created_at))
         
         return {
             'id': reminder_id,
@@ -448,6 +451,8 @@ def db_add_reminder(username: str, reminder_id: str, symbol: str, name: str,
             'reminder_type': reminder_type,
             'frequency': frequency,
             'analysis_time': analysis_time,
+            'weekday': weekday,
+            'day_of_month': day_of_month,
             'buy_price': buy_price,
             'sell_price': sell_price,
             'enabled': True,

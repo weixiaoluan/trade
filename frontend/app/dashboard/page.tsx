@@ -72,6 +72,8 @@ interface ReminderItem {
   reminder_type: string;  // buy, sell, both
   frequency: string;  // trading_day, weekly, monthly
   analysis_time: string;  // HH:MM
+  weekday?: number;  // 1-7 (周一-周日)
+  day_of_month?: number;  // 1-31
   buy_price?: number;
   sell_price?: number;
   enabled: boolean;
@@ -121,6 +123,8 @@ export default function DashboardPage() {
   const [reminderType, setReminderType] = useState<string>("both");
   const [reminderFrequency, setReminderFrequency] = useState<string>("trading_day");
   const [analysisTime, setAnalysisTime] = useState<string>("09:30");
+  const [analysisWeekday, setAnalysisWeekday] = useState<number>(1); // 1=周一
+  const [analysisDayOfMonth, setAnalysisDayOfMonth] = useState<number>(1); // 1-31
   const [showBatchReminderModal, setShowBatchReminderModal] = useState(false);
 
   // 分页相关状态
@@ -261,18 +265,20 @@ export default function DashboardPage() {
     }
   }, [authChecked, fetchWatchlist, fetchTasks, fetchReports]);
 
-  // 获取实时行情（独立刷新，每30秒一次）
+  // 获取实时行情（独立刷新，每10秒一次）
   useEffect(() => {
     if (authChecked && watchlist.length > 0) {
+      // 立即获取一次
       fetchQuotes();
       
+      // 每10秒刷新一次
       const quoteInterval = setInterval(() => {
         fetchQuotes();
-      }, 30000);
+      }, 10000);
 
       return () => clearInterval(quoteInterval);
     }
-  }, [authChecked, watchlist.length, fetchQuotes]);
+  }, [authChecked, watchlist, fetchQuotes]);
 
   // 退出登录
   const handleLogout = () => {
@@ -323,15 +329,19 @@ export default function DashboardPage() {
         body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
+      const data = await response.json();
+      if (response.ok && data.status === "success") {
         setAddSymbol("");
         setAddPosition("");
         setAddCostPrice("");
         setShowAddModal(false);
         fetchWatchlist();
+      } else {
+        alert(data.message || "添加失败");
       }
     } catch (error) {
       console.error("添加失败:", error);
+      alert("添加失败，请检查网络连接");
     } finally {
       setLoading(false);
     }
@@ -571,6 +581,8 @@ export default function DashboardPage() {
     setReminderType("both");
     setReminderFrequency("trading_day");
     setAnalysisTime("09:30");
+    setAnalysisWeekday(1);
+    setAnalysisDayOfMonth(1);
     setShowReminderModal(true);
   };
 
@@ -586,6 +598,8 @@ export default function DashboardPage() {
         reminder_type: reminderType,
         frequency: reminderFrequency,
         analysis_time: analysisTime,
+        weekday: reminderFrequency === "weekly" ? analysisWeekday : undefined,
+        day_of_month: reminderFrequency === "monthly" ? analysisDayOfMonth : undefined,
       };
 
       const response = await fetch(`${API_BASE}/api/reminders`, {
@@ -643,6 +657,12 @@ export default function DashboardPage() {
         frequency: reminderFrequency,
         analysis_time: analysisTime,
       });
+      if (reminderFrequency === "weekly") {
+        params.set("weekday", analysisWeekday.toString());
+      }
+      if (reminderFrequency === "monthly") {
+        params.set("day_of_month", analysisDayOfMonth.toString());
+      }
 
       const response = await fetch(`${API_BASE}/api/reminders/batch?${params}`, {
         method: "POST",
@@ -908,8 +928,14 @@ export default function DashboardPage() {
                     {/* 当前价 */}
                     <div className="w-20 flex-shrink-0 flex items-center justify-end">
                       {quotes[item.symbol]?.current_price ? (
-                        <span className="font-mono text-sm text-slate-200">
-                          {quotes[item.symbol].current_price.toFixed(2)}
+                        <span className={`font-mono text-sm font-medium ${
+                          (quotes[item.symbol]?.change_percent || 0) > 0 
+                            ? "text-rose-400" 
+                            : (quotes[item.symbol]?.change_percent || 0) < 0 
+                              ? "text-emerald-400" 
+                              : "text-slate-200"
+                        }`}>
+                          {quotes[item.symbol].current_price.toFixed(3)}
                         </span>
                       ) : (
                         <span className="text-slate-600 text-sm">-</span>
@@ -919,7 +945,7 @@ export default function DashboardPage() {
                     {/* 涨跌幅 */}
                     <div className="w-20 flex-shrink-0 flex items-center justify-end">
                       {quotes[item.symbol]?.change_percent !== undefined ? (
-                        <span className={`font-mono text-sm ${
+                        <span className={`font-mono text-sm font-medium ${
                           quotes[item.symbol].change_percent > 0 
                             ? "text-rose-400" 
                             : quotes[item.symbol].change_percent < 0 
@@ -1447,7 +1473,9 @@ export default function DashboardPage() {
                             {r.reminder_type === "buy" ? "买入提醒" : r.reminder_type === "sell" ? "卖出提醒" : "买卖提醒"}
                           </span>
                           <span className="text-slate-500 ml-2">
-                            {r.frequency === "trading_day" ? "交易日" : r.frequency === "weekly" ? "每周" : "每月"} {r.analysis_time}
+                            {r.frequency === "trading_day" ? "交易日" : 
+                             r.frequency === "weekly" ? `每周${["一","二","三","四","五","六","日"][((r.weekday || 1) - 1)]}` : 
+                             `每月${r.day_of_month || 1}号`} {r.analysis_time}
                             {r.buy_price && ` | 买:${r.buy_price}`}
                             {r.sell_price && ` | 卖:${r.sell_price}`}
                           </span>
@@ -1519,15 +1547,76 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* 每周选择周几 */}
+              {reminderFrequency === "weekly" && (
+                <div className="mb-4">
+                  <label className="text-sm text-slate-400 mb-2 block">选择周几</label>
+                  <div className="grid grid-cols-7 gap-1">
+                    {[
+                      { value: 1, label: "一" },
+                      { value: 2, label: "二" },
+                      { value: 3, label: "三" },
+                      { value: 4, label: "四" },
+                      { value: 5, label: "五" },
+                      { value: 6, label: "六" },
+                      { value: 7, label: "日" },
+                    ].map((day) => (
+                      <button
+                        key={day.value}
+                        onClick={() => setAnalysisWeekday(day.value)}
+                        className={`py-2 rounded-lg text-sm transition-all ${
+                          analysisWeekday === day.value
+                            ? "bg-indigo-600/30 border border-indigo-500/50 text-indigo-300"
+                            : "bg-white/[0.02] border border-white/[0.06] text-slate-400 hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        {day.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 每月选择几号 */}
+              {reminderFrequency === "monthly" && (
+                <div className="mb-4">
+                  <label className="text-sm text-slate-400 mb-2 block">选择几号</label>
+                  <select
+                    value={analysisDayOfMonth}
+                    onChange={(e) => setAnalysisDayOfMonth(Number(e.target.value))}
+                    className="w-full px-4 py-2.5 bg-[#0a0f1a] border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                      <option key={day} value={day}>{day}号</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* 分析时间 */}
               <div className="mb-6">
                 <label className="text-sm text-slate-400 mb-2 block">分析时间</label>
-                <input
-                  type="time"
-                  value={analysisTime}
-                  onChange={(e) => setAnalysisTime(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white/[0.02] border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50"
-                />
+                <div className="flex gap-2">
+                  <select
+                    value={analysisTime.split(":")[0]}
+                    onChange={(e) => setAnalysisTime(`${e.target.value}:${analysisTime.split(":")[1]}`)}
+                    className="flex-1 px-4 py-2.5 bg-[#0a0f1a] border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0")).map((hour) => (
+                      <option key={hour} value={hour}>{hour}时</option>
+                    ))}
+                  </select>
+                  <span className="flex items-center text-slate-400">:</span>
+                  <select
+                    value={analysisTime.split(":")[1]}
+                    onChange={(e) => setAnalysisTime(`${analysisTime.split(":")[0]}:${e.target.value}`)}
+                    className="flex-1 px-4 py-2.5 bg-[#0a0f1a] border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  >
+                    {Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, "0")).map((min) => (
+                      <option key={min} value={min}>{min}分</option>
+                    ))}
+                  </select>
+                </div>
                 <p className="text-xs text-slate-500 mt-1">AI将在此时间自动分析并更新买卖价格</p>
               </div>
 
@@ -1644,15 +1733,76 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* 每周选择周几 */}
+              {reminderFrequency === "weekly" && (
+                <div className="mb-4">
+                  <label className="text-sm text-slate-400 mb-2 block">选择周几</label>
+                  <div className="grid grid-cols-7 gap-1">
+                    {[
+                      { value: 1, label: "一" },
+                      { value: 2, label: "二" },
+                      { value: 3, label: "三" },
+                      { value: 4, label: "四" },
+                      { value: 5, label: "五" },
+                      { value: 6, label: "六" },
+                      { value: 7, label: "日" },
+                    ].map((day) => (
+                      <button
+                        key={day.value}
+                        onClick={() => setAnalysisWeekday(day.value)}
+                        className={`py-2 rounded-lg text-sm transition-all ${
+                          analysisWeekday === day.value
+                            ? "bg-indigo-600/30 border border-indigo-500/50 text-indigo-300"
+                            : "bg-white/[0.02] border border-white/[0.06] text-slate-400 hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        {day.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 每月选择几号 */}
+              {reminderFrequency === "monthly" && (
+                <div className="mb-4">
+                  <label className="text-sm text-slate-400 mb-2 block">选择几号</label>
+                  <select
+                    value={analysisDayOfMonth}
+                    onChange={(e) => setAnalysisDayOfMonth(Number(e.target.value))}
+                    className="w-full px-4 py-2.5 bg-[#0a0f1a] border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                      <option key={day} value={day}>{day}号</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* 分析时间 */}
               <div className="mb-6">
                 <label className="text-sm text-slate-400 mb-2 block">分析时间</label>
-                <input
-                  type="time"
-                  value={analysisTime}
-                  onChange={(e) => setAnalysisTime(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white/[0.02] border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50"
-                />
+                <div className="flex gap-2">
+                  <select
+                    value={analysisTime.split(":")[0]}
+                    onChange={(e) => setAnalysisTime(`${e.target.value}:${analysisTime.split(":")[1]}`)}
+                    className="flex-1 px-4 py-2.5 bg-[#0a0f1a] border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0")).map((hour) => (
+                      <option key={hour} value={hour}>{hour}时</option>
+                    ))}
+                  </select>
+                  <span className="flex items-center text-slate-400">:</span>
+                  <select
+                    value={analysisTime.split(":")[1]}
+                    onChange={(e) => setAnalysisTime(`${analysisTime.split(":")[0]}:${e.target.value}`)}
+                    className="flex-1 px-4 py-2.5 bg-[#0a0f1a] border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  >
+                    {Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, "0")).map((min) => (
+                      <option key={min} value={min}>{min}分</option>
+                    ))}
+                  </select>
+                </div>
                 <p className="text-xs text-slate-500 mt-1">AI将在此时间自动分析并更新买卖价格</p>
               </div>
 

@@ -86,6 +86,8 @@ class ReminderItem(BaseModel):
     reminder_type: str  # buy, sell, both
     frequency: str = "trading_day"  # trading_day, weekly, monthly
     analysis_time: str = "09:30"  # AI分析时间 HH:MM
+    weekday: Optional[int] = None  # 1-7 (周一-周日)，仅 weekly 时使用
+    day_of_month: Optional[int] = None  # 1-31，仅 monthly 时使用
     buy_price: Optional[float] = None  # AI分析的买入价
     sell_price: Optional[float] = None  # AI分析的卖出价
     enabled: bool = True
@@ -329,6 +331,8 @@ def add_reminder(username: str, reminder: Dict) -> Dict:
         reminder['reminder_type'],
         reminder.get('frequency', 'trading_day'),
         reminder.get('analysis_time', '09:30'),
+        reminder.get('weekday'),
+        reminder.get('day_of_month'),
         reminder.get('buy_price'),
         reminder.get('sell_price')
     )

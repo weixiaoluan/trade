@@ -2244,6 +2244,8 @@ async def batch_create_reminders(
     reminder_type: str,
     frequency: str = "trading_day",
     analysis_time: str = "09:30",
+    weekday: Optional[int] = None,
+    day_of_month: Optional[int] = None,
     authorization: str = Header(None)
 ):
     """批量创建价格触发提醒"""
@@ -2287,6 +2289,8 @@ async def batch_create_reminders(
                 'reminder_type': reminder_type,
                 'frequency': frequency,
                 'analysis_time': analysis_time,
+                'weekday': weekday,
+                'day_of_month': day_of_month,
                 'buy_price': buy_price,
                 'sell_price': sell_price
             }
@@ -2369,17 +2373,102 @@ async def get_quotes(symbols: str, authorization: str = Header(None)):
     
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
     
-    # 获取实时行情数据
-    quotes = {}
-    for symbol in symbol_list:
-        try:
-            quote = get_realtime_quote(symbol)
-            if quote:
-                quotes[symbol] = quote
-        except Exception as e:
-            print(f"获取 {symbol} 行情失败: {e}")
+    # 批量获取实时行情数据
+    quotes = get_batch_quotes(symbol_list)
     
     return {"status": "success", "quotes": quotes}
+
+
+# 缓存行情数据，避免频繁请求
+_quote_cache = {
+    'etf': {'data': None, 'time': None},
+    'lof': {'data': None, 'time': None},
+    'stock': {'data': None, 'time': None}
+}
+_cache_ttl = 10  # 缓存10秒
+
+
+def get_batch_quotes(symbols: list) -> dict:
+    """批量获取行情数据，使用缓存优化"""
+    import akshare as ak
+    from datetime import datetime, timedelta
+    
+    now = datetime.now()
+    quotes = {}
+    
+    # 提取纯数字代码
+    code_map = {}
+    for symbol in symbols:
+        code = symbol[2:] if symbol.startswith(("sz", "sh")) else symbol
+        code_map[code] = symbol
+    
+    codes = set(code_map.keys())
+    
+    # 获取 ETF 数据（使用缓存）
+    try:
+        if _quote_cache['etf']['data'] is None or \
+           _quote_cache['etf']['time'] is None or \
+           (now - _quote_cache['etf']['time']).seconds > _cache_ttl:
+            _quote_cache['etf']['data'] = ak.fund_etf_spot_em()
+            _quote_cache['etf']['time'] = now
+        
+        df_etf = _quote_cache['etf']['data']
+        for _, row in df_etf[df_etf['代码'].isin(codes)].iterrows():
+            code = row['代码']
+            symbol = code_map.get(code, code)
+            quotes[symbol] = {
+                'symbol': symbol,
+                'current_price': float(row['最新价']) if row['最新价'] else 0,
+                'change_percent': float(row['涨跌幅']) if row['涨跌幅'] else 0
+            }
+            codes.discard(code)
+    except Exception as e:
+        print(f"ETF批量行情获取失败: {e}")
+    
+    # 获取 LOF 数据
+    if codes:
+        try:
+            if _quote_cache['lof']['data'] is None or \
+               _quote_cache['lof']['time'] is None or \
+               (now - _quote_cache['lof']['time']).seconds > _cache_ttl:
+                _quote_cache['lof']['data'] = ak.fund_lof_spot_em()
+                _quote_cache['lof']['time'] = now
+            
+            df_lof = _quote_cache['lof']['data']
+            for _, row in df_lof[df_lof['代码'].isin(codes)].iterrows():
+                code = row['代码']
+                symbol = code_map.get(code, code)
+                quotes[symbol] = {
+                    'symbol': symbol,
+                    'current_price': float(row['最新价']) if row['最新价'] else 0,
+                    'change_percent': float(row['涨跌幅']) if row['涨跌幅'] else 0
+                }
+                codes.discard(code)
+        except Exception as e:
+            print(f"LOF批量行情获取失败: {e}")
+    
+    # 获取 A股 数据
+    if codes:
+        try:
+            if _quote_cache['stock']['data'] is None or \
+               _quote_cache['stock']['time'] is None or \
+               (now - _quote_cache['stock']['time']).seconds > _cache_ttl:
+                _quote_cache['stock']['data'] = ak.stock_zh_a_spot_em()
+                _quote_cache['stock']['time'] = now
+            
+            df_stock = _quote_cache['stock']['data']
+            for _, row in df_stock[df_stock['代码'].isin(codes)].iterrows():
+                code = row['代码']
+                symbol = code_map.get(code, code)
+                quotes[symbol] = {
+                    'symbol': symbol,
+                    'current_price': float(row['最新价']) if row['最新价'] else 0,
+                    'change_percent': float(row['涨跌幅']) if row['涨跌幅'] else 0
+                }
+        except Exception as e:
+            print(f"A股批量行情获取失败: {e}")
+    
+    return quotes
 
 
 def get_realtime_quote(symbol: str) -> dict:
@@ -2389,39 +2478,49 @@ def get_realtime_quote(symbol: str) -> dict:
     try:
         import akshare as ak
         
-        # 根据代码格式判断类型
+        # 提取纯数字代码
+        code = symbol
         if symbol.startswith("sz") or symbol.startswith("sh"):
-            # A股
             code = symbol[2:]
-            df = ak.stock_zh_a_spot_em()
-            row = df[df['代码'] == code]
-            if not row.empty:
-                return {
-                    'symbol': symbol,
-                    'current_price': float(row.iloc[0]['最新价']),
-                    'change_percent': float(row.iloc[0]['涨跌幅'])
-                }
-        elif symbol.isdigit() and len(symbol) == 6:
-            # 纯数字代码
-            df = ak.stock_zh_a_spot_em()
-            row = df[df['代码'] == symbol]
-            if not row.empty:
-                return {
-                    'symbol': symbol,
-                    'current_price': float(row.iloc[0]['最新价']),
-                    'change_percent': float(row.iloc[0]['涨跌幅'])
-                }
         
-        # ETF
-        if symbol.startswith("1") or symbol.startswith("5"):
-            df = ak.fund_etf_spot_em()
-            row = df[df['代码'] == symbol]
+        # 先尝试从 ETF 获取
+        try:
+            df_etf = ak.fund_etf_spot_em()
+            row = df_etf[df_etf['代码'] == code]
             if not row.empty:
                 return {
                     'symbol': symbol,
                     'current_price': float(row.iloc[0]['最新价']),
                     'change_percent': float(row.iloc[0]['涨跌幅'])
                 }
+        except Exception as e:
+            print(f"ETF行情获取失败: {e}")
+        
+        # 尝试从 LOF 基金获取
+        try:
+            df_lof = ak.fund_lof_spot_em()
+            row = df_lof[df_lof['代码'] == code]
+            if not row.empty:
+                return {
+                    'symbol': symbol,
+                    'current_price': float(row.iloc[0]['最新价']),
+                    'change_percent': float(row.iloc[0]['涨跌幅'])
+                }
+        except Exception as e:
+            print(f"LOF行情获取失败: {e}")
+        
+        # 尝试从 A股 获取
+        try:
+            df_stock = ak.stock_zh_a_spot_em()
+            row = df_stock[df_stock['代码'] == code]
+            if not row.empty:
+                return {
+                    'symbol': symbol,
+                    'current_price': float(row.iloc[0]['最新价']),
+                    'change_percent': float(row.iloc[0]['涨跌幅'])
+                }
+        except Exception as e:
+            print(f"A股行情获取失败: {e}")
         
     except Exception as e:
         print(f"获取行情出错: {e}")
@@ -2438,7 +2537,7 @@ def is_trading_day() -> bool:
     return datetime.now().weekday() < 5
 
 
-def should_analyze_today(frequency: str, last_analysis_at: str) -> bool:
+def should_analyze_today(frequency: str, last_analysis_at: str, weekday: int = None, day_of_month: int = None) -> bool:
     """根据频率判断今天是否需要分析"""
     now = datetime.now()
     
@@ -2454,11 +2553,13 @@ def should_analyze_today(frequency: str, last_analysis_at: str) -> bool:
     if frequency == 'trading_day':
         return is_trading_day()
     elif frequency == 'weekly':
-        # 每周一
-        return now.weekday() == 0
+        # weekday: 1=周一, 7=周日 -> Python: 0=周一, 6=周日
+        target_weekday = (weekday - 1) if weekday else 0
+        return now.weekday() == target_weekday
     elif frequency == 'monthly':
-        # 每月1号
-        return now.day == 1
+        # 每月指定日期
+        target_day = day_of_month if day_of_month else 1
+        return now.day == target_day
     
     return False
 
@@ -2491,10 +2592,12 @@ async def check_price_triggers():
                     reminder_type = reminder['reminder_type']
                     frequency = reminder.get('frequency', 'trading_day')
                     analysis_time = reminder.get('analysis_time', '09:30')
+                    weekday = reminder.get('weekday')
+                    day_of_month = reminder.get('day_of_month')
                     last_analysis_at = reminder.get('last_analysis_at')
                     
                     # 检查是否到了AI分析时间
-                    if current_time == analysis_time and should_analyze_today(frequency, last_analysis_at):
+                    if current_time == analysis_time and should_analyze_today(frequency, last_analysis_at, weekday, day_of_month):
                         print(f"[AI分析] 开始分析 {symbol} for {username}")
                         try:
                             # 触发AI分析
