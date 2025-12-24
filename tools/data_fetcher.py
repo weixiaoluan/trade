@@ -592,6 +592,11 @@ def search_ticker(query: str) -> str:
             ticker = query
             asset_type = "ETF"
             market = "SZ"
+        # LOF基金（深交所场内交易基金，以16开头）
+        elif query.startswith("16"):
+            ticker = query
+            asset_type = "LOF"
+            market = "SZ"
         # 场外基金
         else:
             ticker = query

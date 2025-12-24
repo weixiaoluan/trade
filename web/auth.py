@@ -204,6 +204,8 @@ def get_current_user(token: str) -> Optional[Dict]:
             return {
                 'username': user['username'],
                 'phone': user['phone'],
+                'role': user.get('role', 'user'),
+                'status': user.get('status', 'pending'),
                 'created_at': user['created_at']
             }
     return None

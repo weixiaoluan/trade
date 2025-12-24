@@ -24,8 +24,13 @@ import {
   Loader2,
   Bell,
   BellRing,
+  Star,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { UserHeader } from "@/components/ui/UserHeader";
+import { AlertModal } from "@/components/ui/AlertModal";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
@@ -43,6 +48,7 @@ interface WatchlistItem {
   added_at?: string;
   position?: number;  // 持仓数量
   cost_price?: number;  // 持仓成本价
+  starred?: number;  // 特别关注 0/1
 }
 
 interface TaskStatus {
@@ -136,6 +142,18 @@ export default function DashboardPage() {
   // 实时行情数据
   const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
 
+  // 自定义弹窗状态
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    title: "",
+    message: "",
+    type: "warning" as "warning" | "info" | "success" | "error",
+  });
+
+  // 排序状态
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
   const getToken = () => localStorage.getItem("token");
 
   // 检查登录状态
@@ -162,6 +180,8 @@ export default function DashboardPage() {
         }
 
         const data = await response.json();
+        // 更新 localStorage 中的用户信息（包含最新的 role 和 status）
+        localStorage.setItem("user", JSON.stringify(data.user));
         setUser(data.user);
         setAuthChecked(true);
       } catch (error) {
@@ -284,6 +304,8 @@ export default function DashboardPage() {
 
   // 退出登录
   const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setUser(null);
     router.push("/login");
   };
@@ -313,12 +335,97 @@ export default function DashboardPage() {
     return user && (user.status === 'approved' || user.role === 'admin');
   };
 
+  // 显示待审核提示
+  const showPendingAlert = () => {
+    setAlertConfig({
+      title: "账户待审核",
+      message: "您的账户正在等待管理员审核，审核通过后即可使用所有功能。",
+      type: "warning",
+    });
+    setShowAlert(true);
+  };
+
+  // 检查权限并执行操作
+  const checkPermissionAndRun = (callback: () => void) => {
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      return;
+    }
+    callback();
+  };
+
+  // 切换排序
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      // 切换排序顺序
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("desc");
+    }
+  };
+
+  // 获取排序后的列表
+  const getSortedWatchlist = () => {
+    let sorted = [...watchlist];
+    
+    // 先按特别关注排序（starred 的在前面）
+    sorted.sort((a, b) => (b.starred || 0) - (a.starred || 0));
+    
+    // 如果有指定排序字段，再按该字段排序
+    if (sortField && quotes) {
+      sorted.sort((a, b) => {
+        // 保持 starred 优先
+        if ((a.starred || 0) !== (b.starred || 0)) {
+          return (b.starred || 0) - (a.starred || 0);
+        }
+        
+        let aVal = 0, bVal = 0;
+        const aQuote = quotes[a.symbol];
+        const bQuote = quotes[b.symbol];
+        
+        if (sortField === "change_percent") {
+          aVal = aQuote?.change_percent || 0;
+          bVal = bQuote?.change_percent || 0;
+        } else if (sortField === "position") {
+          aVal = a.position || 0;
+          bVal = b.position || 0;
+        }
+        
+        return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+      });
+    }
+    
+    return sorted;
+  };
+
+  // 切换特别关注
+  const handleToggleStar = async (symbol: string) => {
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE}/api/watchlist/${encodeURIComponent(symbol)}/star`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      
+      if (response.ok) {
+        fetchWatchlist();
+      }
+    } catch (error) {
+      console.error("切换关注失败:", error);
+    }
+  };
+
   // 添加自选
   const handleAddSymbol = async () => {
     if (!addSymbol.trim()) return;
     
     if (!canUseFeatures()) {
-      alert("您的账户待审核，暂时无法使用此功能");
+      showPendingAlert();
       return;
     }
 
@@ -363,6 +470,12 @@ export default function DashboardPage() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      e.target.value = "";
+      return;
+    }
 
     // 限制最多10张
     if (files.length > 10) {
@@ -472,6 +585,11 @@ export default function DashboardPage() {
 
   // 删除单个自选
   const handleDeleteSingle = async (symbol: string) => {
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      return;
+    }
+    
     try {
       const response = await fetch(
         `${API_BASE}/api/watchlist/${encodeURIComponent(symbol)}`,
@@ -494,6 +612,11 @@ export default function DashboardPage() {
   // 批量删除
   const handleBatchDelete = async () => {
     if (selectedItems.size === 0) return;
+    
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      return;
+    }
 
     setLoading(true);
     try {
@@ -520,7 +643,7 @@ export default function DashboardPage() {
   // 单个分析
   const handleAnalyzeSingle = async (symbol: string) => {
     if (!canUseFeatures()) {
-      alert("您的账户待审核，暂时无法使用此功能");
+      showPendingAlert();
       return;
     }
     
@@ -547,7 +670,7 @@ export default function DashboardPage() {
     if (selectedItems.size === 0) return;
     
     if (!canUseFeatures()) {
-      alert("您的账户待审核，暂时无法使用此功能");
+      showPendingAlert();
       return;
     }
 
@@ -574,6 +697,10 @@ export default function DashboardPage() {
 
   // 查看报告 - 跳转到独立的报告页面
   const handleViewReport = (symbol: string) => {
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      return;
+    }
     router.push(`/report/${encodeURIComponent(symbol)}`);
   };
 
@@ -598,6 +725,11 @@ export default function DashboardPage() {
 
   // 打开单个提醒设置
   const openReminderModal = (symbol: string, name?: string) => {
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      return;
+    }
+    
     setReminderSymbol(symbol);
     setReminderName(name || symbol);
     setReminderType("both");
@@ -757,7 +889,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#020617] relative overflow-hidden">
+    <main className="min-h-screen bg-[#020617] relative">
       {/* Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 -left-1/4 w-[800px] h-[800px] bg-indigo-500/5 rounded-full blur-[150px]" />
@@ -765,7 +897,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 border-b border-white/[0.06] bg-[#020617]/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#020617]/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 p-[1px]">
@@ -831,7 +963,13 @@ export default function DashboardPage() {
                   批量删除
                 </button>
                 <button
-                  onClick={() => setShowBatchReminderModal(true)}
+                  onClick={() => {
+                    if (!canUseFeatures()) {
+                      showPendingAlert();
+                      return;
+                    }
+                    setShowBatchReminderModal(true);
+                  }}
                   disabled={loading}
                   className="flex items-center gap-2 px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded-lg transition-all disabled:opacity-50"
                 >
@@ -841,7 +979,13 @@ export default function DashboardPage() {
               </>
             )}
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+                if (!canUseFeatures()) {
+                  showPendingAlert();
+                  return;
+                }
+                setShowAddModal(true);
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] text-slate-300 rounded-lg transition-all"
             >
               <Plus className="w-4 h-4" />
@@ -885,11 +1029,27 @@ export default function DashboardPage() {
             <div className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right">
               当前价
             </div>
-            <div className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right">
+            <div 
+              className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-300"
+              onClick={() => handleSort("change_percent")}
+            >
               涨跌幅
+              {sortField === "change_percent" ? (
+                sortOrder === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+              ) : (
+                <ArrowUpDown className="w-3 h-3 opacity-50" />
+              )}
             </div>
-            <div className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right">
+            <div 
+              className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-300"
+              onClick={() => handleSort("position")}
+            >
               持仓
+              {sortField === "position" ? (
+                sortOrder === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+              ) : (
+                <ArrowUpDown className="w-3 h-3 opacity-50" />
+              )}
             </div>
             <div className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right">
               成本价
@@ -917,7 +1077,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-white/[0.04]">
-              {watchlist
+              {getSortedWatchlist()
                 .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                 .map((item) => {
                 const task = getTaskStatus(item.symbol);
@@ -947,8 +1107,19 @@ export default function DashboardPage() {
 
                     {/* Symbol / Name */}
                     <div className="w-32 flex-shrink-0">
-                      <div className="font-mono font-semibold text-slate-100 truncate">
-                        {item.symbol}
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono font-semibold text-slate-100 truncate">
+                          {item.symbol}
+                        </span>
+                        <button
+                          onClick={() => handleToggleStar(item.symbol)}
+                          className={`p-0.5 transition-all ${
+                            item.starred ? "text-amber-400" : "text-slate-600 hover:text-amber-400"
+                          }`}
+                          title={item.starred ? "取消关注" : "特别关注"}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${item.starred ? "fill-current" : ""}`} />
+                        </button>
                       </div>
                       {item.name && (
                         <div className="text-sm text-slate-500 truncate">{item.name}</div>
@@ -1864,6 +2035,15 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 自定义弹窗 */}
+      <AlertModal
+        isOpen={showAlert}
+        onClose={() => setShowAlert(false)}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+      />
     </main>
   );
 }

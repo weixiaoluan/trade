@@ -427,6 +427,48 @@ async def batch_add_watchlist_items(
     }
 
 
+@app.put("/api/watchlist/{symbol}/star")
+async def toggle_watchlist_star(
+    symbol: str,
+    authorization: str = Header(None)
+):
+    """切换自选的特别关注状态"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import get_db
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # 获取当前状态
+        cursor.execute(
+            "SELECT starred FROM watchlist WHERE username = ? AND symbol = ?",
+            (user['username'], symbol.upper())
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="未找到该标的")
+        
+        # 切换状态
+        new_starred = 0 if row['starred'] else 1
+        cursor.execute(
+            "UPDATE watchlist SET starred = ? WHERE username = ? AND symbol = ?",
+            (new_starred, user['username'], symbol.upper())
+        )
+        conn.commit()
+    
+    return {
+        "status": "success",
+        "symbol": symbol.upper(),
+        "starred": bool(new_starred)
+    }
+
+
 # ============================================
 # OCR 图片识别 API
 # ============================================

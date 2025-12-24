@@ -168,8 +168,16 @@ def migrate_database():
             WHERE phone = '19919930729'
         """)
         
+        # 检查 watchlist 表是否有 starred 字段
+        cursor.execute("PRAGMA table_info(watchlist)")
+        watchlist_columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'starred' not in watchlist_columns:
+            print("迁移: 添加 starred 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN starred INTEGER DEFAULT 0")
+        
         conn.commit()
-        print("用户迁移完成")
+        print("数据库迁移完成")
 
 
 # ============================================
@@ -281,12 +289,14 @@ def db_cleanup_expired_sessions() -> None:
 # ============================================
 
 def db_get_user_watchlist(username: str) -> List[Dict]:
-    """获取用户自选列表"""
+    """获取用户自选列表（特别关注的排在前面）"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT symbol, name, type, position, cost_price, added_at 
-            FROM watchlist WHERE username = ? ORDER BY added_at DESC
+            SELECT symbol, name, type, position, cost_price, added_at, 
+                   COALESCE(starred, 0) as starred
+            FROM watchlist WHERE username = ? 
+            ORDER BY starred DESC, added_at DESC
         ''', (username,))
         return [dict(row) for row in cursor.fetchall()]
 
