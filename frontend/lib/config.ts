@@ -12,16 +12,18 @@ function getApiBase(): string {
     return 'http://backend:8000';
   }
   
-  // 客户端：使用当前访问的域名/IP + 后端端口
+  // 客户端：根据访问地址决定 API 地址
   const hostname = window.location.hostname;
+  const protocol = window.location.protocol;
   
   // 本地开发环境
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'http://localhost:8000';
   }
   
-  // 生产环境：使用相同的域名/IP，端口8000
-  return `http://${hostname}:8000`;
+  // 生产环境：使用 Nginx 反向代理，API 路径为 /api
+  // 不暴露内部端口，所有请求通过同一域名
+  return `${protocol}//${hostname}`;
 }
 
 export const API_BASE = getApiBase();
