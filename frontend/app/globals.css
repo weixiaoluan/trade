@@ -141,3 +141,45 @@ html, body {
 .markdown-content blockquote {
   @apply border-l-2 border-indigo-500 pl-4 py-1 my-6 bg-indigo-500/5 italic text-slate-400 rounded-r;
 }
+
+/* 性能优化 */
+@layer utilities {
+  /* 减少动画提高性能 */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  
+  /* GPU 加速 */
+  .gpu-accelerate {
+    transform: translateZ(0);
+    will-change: transform;
+  }
+  
+  /* 平滑滚动 */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* 触摸优化 */
+  .touch-action-pan {
+    touch-action: pan-x pan-y;
+  }
+}
+
+/* 移动端触摸反馈优化 */
+@media (hover: none) {
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* 表格滚动优化 */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}

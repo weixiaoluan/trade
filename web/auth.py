@@ -173,7 +173,7 @@ def is_approved(user: Dict) -> bool:
 def create_session(username: str) -> str:
     """创建会话"""
     token = generate_token()
-    expires_at = (datetime.now() + timedelta(days=7)).isoformat()
+    expires_at = (datetime.now() + timedelta(days=30)).isoformat()
     db_create_session(token, username, expires_at)
     return token
 

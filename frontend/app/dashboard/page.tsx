@@ -1016,68 +1016,67 @@ export default function DashboardPage() {
 
         {/* Watchlist Table */}
         <div className="glass-card rounded-2xl border border-white/[0.06] overflow-hidden">
-          {/* Table Header - 支持横向滚动 */}
-          <div className="overflow-x-auto">
-          <div className="flex items-center gap-4 px-6 py-4 border-b border-white/[0.06] bg-white/[0.02] min-w-[900px]">
-            <div className="w-8 flex-shrink-0">
-              <button
-                onClick={toggleSelectAll}
-                className="text-slate-400 hover:text-slate-200"
+          {/* 统一滚动容器 - 表头和内容一起滚动 */}
+          <div className="overflow-x-auto smooth-scroll touch-action-pan">
+            {/* Table Header */}
+            <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-3 sm:py-4 border-b border-white/[0.06] bg-white/[0.02] min-w-[720px]">
+              <div className="w-6 sm:w-8 flex-shrink-0">
+                <button
+                  onClick={toggleSelectAll}
+                  className="text-slate-400 hover:text-slate-200"
+                >
+                  {selectedItems.size === watchlist.length && watchlist.length > 0 ? (
+                    <CheckSquare className="w-4 sm:w-5 h-4 sm:h-5" />
+                  ) : (
+                    <Square className="w-4 sm:w-5 h-4 sm:h-5" />
+                  )}
+                </button>
+              </div>
+              <div className="w-24 sm:w-32 flex-shrink-0 text-xs sm:text-sm font-medium text-slate-400">
+                代码 / 名称
+              </div>
+              <div className="w-12 sm:w-16 flex-shrink-0 text-xs sm:text-sm font-medium text-slate-400">
+                类型
+              </div>
+              <div className="w-16 sm:w-20 flex-shrink-0 text-xs sm:text-sm font-medium text-slate-400 text-right">
+                当前价
+              </div>
+              <div 
+                className="w-16 sm:w-20 flex-shrink-0 text-xs sm:text-sm font-medium text-slate-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-300"
+                onClick={() => handleSort("change_percent")}
               >
-                {selectedItems.size === watchlist.length && watchlist.length > 0 ? (
-                  <CheckSquare className="w-5 h-5" />
+                涨跌幅
+                {sortField === "change_percent" ? (
+                  sortOrder === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
                 ) : (
-                  <Square className="w-5 h-5" />
+                  <ArrowUpDown className="w-3 h-3 opacity-50" />
                 )}
-              </button>
+              </div>
+              <div 
+                className="w-14 sm:w-16 flex-shrink-0 text-xs sm:text-sm font-medium text-slate-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-300"
+                onClick={() => handleSort("position")}
+              >
+                持仓
+                {sortField === "position" ? (
+                  sortOrder === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                ) : (
+                  <ArrowUpDown className="w-3 h-3 opacity-50" />
+                )}
+              </div>
+              <div className="w-14 sm:w-16 flex-shrink-0 text-xs sm:text-sm font-medium text-slate-400 text-right">
+                成本价
+              </div>
+              <div className="w-6 sm:w-8 flex-shrink-0"></div>
+              <div className="w-16 sm:w-20 flex-shrink-0 text-xs sm:text-sm font-medium text-slate-400">
+                状态
+              </div>
+              <div className="w-[140px] sm:w-[180px] flex-shrink-0 text-xs sm:text-sm font-medium text-slate-400 text-right">
+                操作
+              </div>
             </div>
-            <div className="w-32 flex-shrink-0 text-sm font-medium text-slate-400">
-              代码 / 名称
-            </div>
-            <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400">
-              类型
-            </div>
-            <div className="w-24 flex-shrink-0 text-sm font-medium text-slate-400 text-right">
-              当前价
-            </div>
-            <div 
-              className="w-24 flex-shrink-0 text-sm font-medium text-slate-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-300"
-              onClick={() => handleSort("change_percent")}
-            >
-              涨跌幅
-              {sortField === "change_percent" ? (
-                sortOrder === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-              ) : (
-                <ArrowUpDown className="w-3 h-3 opacity-50" />
-              )}
-            </div>
-            <div 
-              className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-300"
-              onClick={() => handleSort("position")}
-            >
-              持仓
-              {sortField === "position" ? (
-                sortOrder === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-              ) : (
-                <ArrowUpDown className="w-3 h-3 opacity-50" />
-              )}
-            </div>
-            <div className="w-20 flex-shrink-0 text-sm font-medium text-slate-400 text-right">
-              成本价
-            </div>
-            <div className="w-8 flex-shrink-0"></div>
-            <div className="w-24 flex-shrink-0 text-sm font-medium text-slate-400">
-              分析状态
-            </div>
-            <div className="flex-1 text-sm font-medium text-slate-400 text-right">
-              操作
-            </div>
-          </div>
-          </div>
 
-          {/* Table Body */}
-          <div className="overflow-x-auto">
-          {watchlist.length === 0 ? (
+            {/* Table Body */}
+            {watchlist.length === 0 ? (
             <div className="py-16 text-center">
               <Bot className="w-16 h-16 text-slate-700 mx-auto mb-4" />
               <p className="text-slate-500 mb-2">暂无自选标的</p>
@@ -1089,7 +1088,7 @@ export default function DashboardPage() {
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-white/[0.04] min-w-[900px]">
+            <div className="divide-y divide-white/[0.04] min-w-[720px]">
               {sortedWatchlist
                 .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                 .map((item) => {
@@ -1100,28 +1099,28 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={item.symbol}
-                    className={`flex items-center gap-4 px-6 py-4 hover:bg-white/[0.02] transition-all ${
+                    className={`flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-3 sm:py-4 hover:bg-white/[0.02] transition-all ${
                       isSelected ? "bg-indigo-500/5" : ""
                     }`}
                   >
                     {/* Checkbox */}
-                    <div className="w-8 flex-shrink-0 flex items-center">
+                    <div className="w-6 sm:w-8 flex-shrink-0 flex items-center">
                       <button
                         onClick={() => toggleSelect(item.symbol)}
                         className="text-slate-400 hover:text-slate-200"
                       >
                         {isSelected ? (
-                          <CheckSquare className="w-5 h-5 text-indigo-400" />
+                          <CheckSquare className="w-4 sm:w-5 h-4 sm:h-5 text-indigo-400" />
                         ) : (
-                          <Square className="w-5 h-5" />
+                          <Square className="w-4 sm:w-5 h-4 sm:h-5" />
                         )}
                       </button>
                     </div>
 
                     {/* Symbol / Name */}
-                    <div className="w-32 flex-shrink-0">
+                    <div className="w-24 sm:w-32 flex-shrink-0">
                       <div className="flex items-center gap-1">
-                        <span className="font-mono font-semibold text-slate-100 truncate">
+                        <span className="font-mono text-xs sm:text-sm font-semibold text-slate-100 truncate">
                           {item.symbol}
                         </span>
                         <button
@@ -1131,28 +1130,28 @@ export default function DashboardPage() {
                           }`}
                           title={item.starred ? "取消关注" : "特别关注"}
                         >
-                          <Star className={`w-3.5 h-3.5 ${item.starred ? "fill-current" : ""}`} />
+                          <Star className={`w-3 sm:w-3.5 h-3 sm:h-3.5 ${item.starred ? "fill-current" : ""}`} />
                         </button>
                       </div>
                       {item.name && (
-                        <div className="text-sm text-slate-500 truncate">{item.name}</div>
+                        <div className="text-xs text-slate-500 truncate">{item.name}</div>
                       )}
                     </div>
 
                     {/* Type */}
-                    <div className="w-16 flex-shrink-0 flex items-center">
+                    <div className="w-12 sm:w-16 flex-shrink-0 flex items-center">
                       {item.type && (
-                        <span className="px-2 py-0.5 text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded">
+                        <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded">
                           {getTypeLabel(item.type)}
                         </span>
                       )}
                     </div>
 
                     {/* 当前价 */}
-                    <div className="w-24 flex-shrink-0 flex items-center justify-end">
+                    <div className="w-16 sm:w-20 flex-shrink-0 flex items-center justify-end">
                       {quotes[item.symbol]?.current_price ? (
                         <span 
-                          className="font-mono text-base font-semibold"
+                          className="font-mono text-xs sm:text-sm font-semibold"
                           style={{
                             color: (quotes[item.symbol]?.change_percent || 0) > 0 
                               ? "#f87171" 
@@ -1164,15 +1163,15 @@ export default function DashboardPage() {
                           {quotes[item.symbol].current_price.toFixed(3)}
                         </span>
                       ) : (
-                        <span className="text-slate-600 text-sm">-</span>
+                        <span className="text-slate-600 text-xs">-</span>
                       )}
                     </div>
 
                     {/* 涨跌幅 */}
-                    <div className="w-24 flex-shrink-0 flex items-center justify-end">
+                    <div className="w-16 sm:w-20 flex-shrink-0 flex items-center justify-end">
                       {quotes[item.symbol]?.change_percent !== undefined ? (
                         <span 
-                          className="font-mono text-base font-semibold"
+                          className="font-mono text-xs sm:text-sm font-semibold"
                           style={{
                             color: quotes[item.symbol].change_percent > 0 
                               ? "#f87171" 
@@ -1185,37 +1184,37 @@ export default function DashboardPage() {
                           {quotes[item.symbol].change_percent.toFixed(2)}%
                         </span>
                       ) : (
-                        <span className="text-slate-600 text-sm">-</span>
+                        <span className="text-slate-600 text-xs">-</span>
                       )}
                     </div>
 
                     {/* Position - 持仓 */}
-                    <div className="w-20 flex-shrink-0 flex items-center justify-end">
+                    <div className="w-14 sm:w-16 flex-shrink-0 flex items-center justify-end">
                       {item.position ? (
-                        <span className="font-mono text-sm text-slate-200">
+                        <span className="font-mono text-xs sm:text-sm text-slate-200">
                           {item.position.toLocaleString()}
                         </span>
                       ) : (
-                        <span className="text-slate-600 text-sm">-</span>
+                        <span className="text-slate-600 text-xs">-</span>
                       )}
                     </div>
 
                     {/* Cost Price - 成本价 */}
-                    <div className="w-20 flex-shrink-0 flex items-center justify-end">
+                    <div className="w-14 sm:w-16 flex-shrink-0 flex items-center justify-end">
                       {item.cost_price ? (
-                        <span className="font-mono text-sm text-slate-200">
+                        <span className="font-mono text-xs sm:text-sm text-slate-200">
                           ¥{item.cost_price.toFixed(2)}
                         </span>
                       ) : (
-                        <span className="text-slate-600 text-sm">-</span>
+                        <span className="text-slate-600 text-xs">-</span>
                       )}
                     </div>
 
                     {/* Spacer */}
-                    <div className="w-8 flex-shrink-0"></div>
+                    <div className="w-6 sm:w-8 flex-shrink-0"></div>
 
                     {/* Status */}
-                    <div className="w-24 flex-shrink-0 flex items-center">
+                    <div className="w-16 sm:w-20 flex-shrink-0 flex items-center">
                       {(() => {
                         // 检测任务是否超时（超过10分钟未完成视为失败）
                         const isTaskTimeout = task?.status === "running" && task?.updated_at && 
@@ -1223,40 +1222,40 @@ export default function DashboardPage() {
                         
                         if (task?.status === "failed" || isTaskTimeout) {
                           return (
-                            <div className="flex items-center gap-2 text-rose-400">
-                              <AlertCircle className="w-4 h-4" />
-                              <span className="text-sm">分析失败</span>
+                            <div className="flex items-center gap-1 text-rose-400">
+                              <AlertCircle className="w-3 sm:w-4 h-3 sm:h-4" />
+                              <span className="text-[10px] sm:text-xs">失败</span>
                             </div>
                           );
                         } else if (task?.status === "running") {
                           return (
-                            <div className="flex items-center gap-2 text-amber-400">
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span className="text-sm">{task.progress}%</span>
+                            <div className="flex items-center gap-1 text-amber-400">
+                              <Loader2 className="w-3 sm:w-4 h-3 sm:h-4 animate-spin" />
+                              <span className="text-[10px] sm:text-xs">{task.progress}%</span>
                             </div>
                           );
                         } else if (task?.status === "pending") {
                           return (
-                            <div className="flex items-center gap-2 text-slate-400">
-                              <Clock className="w-4 h-4" />
-                              <span className="text-sm">等待中</span>
+                            <div className="flex items-center gap-1 text-slate-400">
+                              <Clock className="w-3 sm:w-4 h-3 sm:h-4" />
+                              <span className="text-[10px] sm:text-xs">等待</span>
                             </div>
                           );
                         } else if (report) {
                           return (
-                            <div className="flex items-center gap-2 text-emerald-400">
-                              <Check className="w-4 h-4" />
-                              <span className="text-sm">已完成</span>
+                            <div className="flex items-center gap-1 text-emerald-400">
+                              <Check className="w-3 sm:w-4 h-3 sm:h-4" />
+                              <span className="text-[10px] sm:text-xs">完成</span>
                             </div>
                           );
                         } else {
-                          return <span className="text-sm text-slate-500">未分析</span>;
+                          return <span className="text-[10px] sm:text-xs text-slate-500">未分析</span>;
                         }
                       })()}
                     </div>
 
                     {/* Actions */}
-                    <div className="flex-1 flex items-center justify-end gap-2">
+                    <div className="w-[140px] sm:w-[180px] flex-shrink-0 flex items-center justify-end gap-1 sm:gap-2">
                       {(() => {
                         // 检测任务是否超时
                         const isTaskTimeout = task?.status === "running" && task?.updated_at && 
@@ -1269,36 +1268,33 @@ export default function DashboardPage() {
                           <button
                             onClick={() => handleAnalyzeSingle(item.symbol)}
                             disabled={isRunning || isPending}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 text-[10px] sm:text-xs rounded-md sm:rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                               isFailed 
                                 ? "bg-rose-600/20 hover:bg-rose-600/30 text-rose-400" 
                                 : "bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400"
                             }`}
                           >
-                            <Play className="w-3.5 h-3.5" />
-                            {isFailed ? "重新分析" : "AI分析"}
+                            <Play className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
+                            <span className="hidden sm:inline">{isFailed ? "重新分析" : "AI分析"}</span>
+                            <span className="sm:hidden">{isFailed ? "重试" : "分析"}</span>
                           </button>
                         );
                       })()}
 
                       {report && (
-                        <div className="flex flex-col items-end">
-                          <button
-                            onClick={() => handleViewReport(item.symbol)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-sm rounded-lg transition-all"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            查看报告
-                          </button>
-                          <span className="text-xs text-slate-500 mt-1">
-                            {new Date(report.created_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        </div>
+                        <button
+                          onClick={() => handleViewReport(item.symbol)}
+                          className="flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-[10px] sm:text-xs rounded-md sm:rounded-lg transition-all"
+                        >
+                          <FileText className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
+                          <span className="hidden sm:inline">查看报告</span>
+                          <span className="sm:hidden">报告</span>
+                        </button>
                       )}
 
                       <button
                         onClick={() => openReminderModal(item.symbol, item.name)}
-                        className={`relative p-1.5 rounded-lg transition-all ${
+                        className={`relative p-2 sm:p-2 rounded-lg transition-all ${
                           getReminderCount(item.symbol) > 0
                             ? "bg-amber-600/20 text-amber-400"
                             : "hover:bg-amber-600/20 text-slate-500 hover:text-amber-400"
@@ -1306,12 +1302,12 @@ export default function DashboardPage() {
                         title="设置提醒"
                       >
                         {getReminderCount(item.symbol) > 0 ? (
-                          <BellRing className="w-4 h-4" />
+                          <BellRing className="w-5 h-5 sm:w-4 sm:h-4" />
                         ) : (
-                          <Bell className="w-4 h-4" />
+                          <Bell className="w-5 h-5 sm:w-4 sm:h-4" />
                         )}
                         {getReminderCount(item.symbol) > 0 && (
-                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white text-xs rounded-full flex items-center justify-center">
+                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white text-[10px] rounded-full flex items-center justify-center">
                             {getReminderCount(item.symbol)}
                           </span>
                         )}
@@ -1319,9 +1315,9 @@ export default function DashboardPage() {
 
                       <button
                         onClick={() => handleDeleteSingle(item.symbol)}
-                        className="p-1.5 hover:bg-rose-600/20 text-slate-500 hover:text-rose-400 rounded-lg transition-all"
+                        className="p-2 sm:p-1.5 hover:bg-rose-600/20 text-slate-500 hover:text-rose-400 rounded-lg transition-all"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
                       </button>
                     </div>
                   </div>
