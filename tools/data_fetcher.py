@@ -640,12 +640,13 @@ def search_ticker(query: str) -> str:
 
 
 def is_cn_onexchange_etf(code: str) -> bool:
-    """判断是否为中国场内ETF代码"""
+    """判断是否为中国场内ETF/LOF代码"""
     if not code.isdigit() or len(code) != 6:
         return False
-    # 深交所场内ETF: 159xxx, 15xxxx
+    # 深交所场内ETF: 159xxx
+    # 深交所LOF基金: 16xxxx (如 161226 国投白银LOF, 164824 印度基金LOF)
     # 上交所场内ETF: 510xxx, 511xxx, 512xxx, 513xxx, 515xxx, 516xxx, 518xxx, 560xxx, 561xxx, 562xxx, 563xxx
-    etf_prefixes = ('159', '510', '511', '512', '513', '515', '516', '518', '560', '561', '562', '563', '588')
+    etf_prefixes = ('159', '16', '510', '511', '512', '513', '515', '516', '518', '560', '561', '562', '563', '588')
     return code.startswith(etf_prefixes)
 
 
@@ -667,8 +668,8 @@ def is_cn_offexchange_fund(code: str) -> bool:
 
 
 def get_cn_etf_suffix(code: str) -> str:
-    """获取中国场内ETF的交易所后缀"""
-    if code.startswith('159'):  # 深交所
+    """获取中国场内ETF/LOF的交易所后缀"""
+    if code.startswith('159') or code.startswith('16'):  # 深交所ETF和LOF
         return '.SZ'
     else:  # 上交所
         return '.SH'
@@ -1052,8 +1053,8 @@ def get_cn_etf_data(etf_code: str, period: str = "1y") -> str:
     }
     proxies = {"http": None, "https": None}
     
-    # 判断交易所: 159开头是深圳(0)，其他是上海(1)
-    if etf_code.startswith('159'):
+    # 判断交易所: 159和16开头是深圳(0)，其他是上海(1)
+    if etf_code.startswith('159') or etf_code.startswith('16'):
         market = "0"
         secid = f"0.{etf_code}"
     else:

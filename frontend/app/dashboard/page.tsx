@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -277,11 +277,11 @@ export default function DashboardPage() {
       fetchReports();
       fetchReminders();
 
-      // 定时刷新任务状态
+      // 定时刷新任务状态（降低频率以提升性能）
       const interval = setInterval(() => {
         fetchTasks();
         fetchReports();
-      }, 5000);
+      }, 10000);
 
       return () => clearInterval(interval);
     }
@@ -365,8 +365,8 @@ export default function DashboardPage() {
     }
   };
 
-  // 获取排序后的列表
-  const getSortedWatchlist = () => {
+  // 获取排序后的列表 (使用 useMemo 优化性能)
+  const sortedWatchlist = useMemo(() => {
     let sorted = [...watchlist];
     
     // 先按特别关注排序（starred 的在前面）
@@ -397,7 +397,7 @@ export default function DashboardPage() {
     }
     
     return sorted;
-  };
+  }, [watchlist, sortField, sortOrder, quotes]);
 
   // 切换特别关注
   const handleToggleStar = async (symbol: string) => {
@@ -1077,7 +1077,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-white/[0.04]">
-              {getSortedWatchlist()
+              {sortedWatchlist
                 .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                 .map((item) => {
                 const task = getTaskStatus(item.symbol);
@@ -1138,13 +1138,16 @@ export default function DashboardPage() {
                     {/* 当前价 */}
                     <div className="w-20 flex-shrink-0 flex items-center justify-end">
                       {quotes[item.symbol]?.current_price ? (
-                        <span className={`font-mono text-sm font-medium ${
-                          (quotes[item.symbol]?.change_percent || 0) > 0 
-                            ? "text-rose-400" 
-                            : (quotes[item.symbol]?.change_percent || 0) < 0 
-                              ? "text-emerald-400" 
-                              : "text-slate-200"
-                        }`}>
+                        <span 
+                          className="font-mono text-sm font-medium"
+                          style={{
+                            color: (quotes[item.symbol]?.change_percent || 0) > 0 
+                              ? "#f87171" 
+                              : (quotes[item.symbol]?.change_percent || 0) < 0 
+                                ? "#34d399" 
+                                : "#e2e8f0"
+                          }}
+                        >
                           {quotes[item.symbol].current_price.toFixed(3)}
                         </span>
                       ) : (
@@ -1155,13 +1158,16 @@ export default function DashboardPage() {
                     {/* 涨跌幅 */}
                     <div className="w-20 flex-shrink-0 flex items-center justify-end">
                       {quotes[item.symbol]?.change_percent !== undefined ? (
-                        <span className={`font-mono text-sm font-medium ${
-                          quotes[item.symbol].change_percent > 0 
-                            ? "text-rose-400" 
-                            : quotes[item.symbol].change_percent < 0 
-                              ? "text-emerald-400" 
-                              : "text-slate-400"
-                        }`}>
+                        <span 
+                          className="font-mono text-sm font-medium"
+                          style={{
+                            color: quotes[item.symbol].change_percent > 0 
+                              ? "#f87171" 
+                              : quotes[item.symbol].change_percent < 0 
+                                ? "#34d399" 
+                                : "#94a3b8"
+                          }}
+                        >
                           {quotes[item.symbol].change_percent > 0 ? "+" : ""}
                           {quotes[item.symbol].change_percent.toFixed(2)}%
                         </span>

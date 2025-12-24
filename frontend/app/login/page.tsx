@@ -53,8 +53,8 @@ export default function LoginPage() {
       localStorage.setItem("user", JSON.stringify(data.user));
       console.log("Token 已保存，准备跳转...");
 
-      // 跳转到 Dashboard
-      router.push("/dashboard");
+      // 跳转到 Dashboard - 使用 window.location 确保完整页面刷新
+      window.location.href = "/dashboard";
     } catch (err: any) {
       console.error("登录错误:", err);
       setError(err.message || "登录失败，请重试");
