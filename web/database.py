@@ -46,6 +46,8 @@ def init_database():
                 password TEXT NOT NULL,
                 salt TEXT NOT NULL,
                 phone TEXT UNIQUE NOT NULL,
+                role TEXT DEFAULT 'user',
+                status TEXT DEFAULT 'pending',
                 created_at TEXT NOT NULL
             )
         ''')
@@ -143,6 +145,33 @@ def init_database():
         print("数据库初始化完成")
 
 
+def migrate_database():
+    """数据库迁移 - 添加新字段"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # 检查 users 表是否有 role 字段
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'role' not in columns:
+            print("迁移: 添加 role 字段")
+            cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'")
+        
+        if 'status' not in columns:
+            print("迁移: 添加 status 字段")
+            cursor.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'pending'")
+        
+        # 将 19919930729 手机号的用户设置为超级管理员，状态为已审核
+        cursor.execute("""
+            UPDATE users SET role = 'admin', status = 'approved' 
+            WHERE phone = '19919930729'
+        """)
+        
+        conn.commit()
+        print("用户迁移完成")
+
+
 # ============================================
 # 用户管理
 # ============================================
@@ -175,11 +204,35 @@ def db_create_user(username: str, password: str, salt: str, phone: str) -> Dict:
         cursor = conn.cursor()
         created_at = datetime.now().isoformat()
         cursor.execute('''
-            INSERT INTO users (username, password, salt, phone, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users (username, password, salt, phone, role, status, created_at)
+            VALUES (?, ?, ?, ?, 'user', 'pending', ?)
         ''', (username, password, salt, phone, created_at))
         
-        return {'username': username, 'phone': phone}
+        return {'username': username, 'phone': phone, 'role': 'user', 'status': 'pending'}
+
+
+def db_get_all_users() -> List[Dict]:
+    """获取所有用户"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, username, phone, role, status, created_at FROM users ORDER BY created_at DESC')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_update_user_status(username: str, status: str) -> bool:
+    """更新用户状态"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET status = ? WHERE username = ?', (status, username))
+        return cursor.rowcount > 0
+
+
+def db_update_user_role(username: str, role: str) -> bool:
+    """更新用户角色"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET role = ? WHERE username = ?', (role, username))
+        return cursor.rowcount > 0
 
 
 # ============================================

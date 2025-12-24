@@ -32,6 +32,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 interface UserInfo {
   username: string;
   phone?: string;
+  role?: string;
+  status?: string;
 }
 
 interface WatchlistItem {
@@ -306,9 +308,19 @@ export default function DashboardPage() {
     }
   };
 
+  // 检查用户是否有权限
+  const canUseFeatures = () => {
+    return user && (user.status === 'approved' || user.role === 'admin');
+  };
+
   // 添加自选
   const handleAddSymbol = async () => {
     if (!addSymbol.trim()) return;
+    
+    if (!canUseFeatures()) {
+      alert("您的账户待审核，暂时无法使用此功能");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -507,6 +519,11 @@ export default function DashboardPage() {
 
   // 单个分析
   const handleAnalyzeSingle = async (symbol: string) => {
+    if (!canUseFeatures()) {
+      alert("您的账户待审核，暂时无法使用此功能");
+      return;
+    }
+    
     try {
       const response = await fetch(`${API_BASE}/api/analyze/background`, {
         method: "POST",
@@ -528,6 +545,11 @@ export default function DashboardPage() {
   // 批量分析
   const handleBatchAnalyze = async () => {
     if (selectedItems.size === 0) return;
+    
+    if (!canUseFeatures()) {
+      alert("您的账户待审核，暂时无法使用此功能");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -763,6 +785,23 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
+        {/* 未审核用户提示 */}
+        {user && user.status !== 'approved' && user.role !== 'admin' && (
+          <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <Bell className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-amber-400">账户待审核</h3>
+                <p className="text-xs text-amber-400/70 mt-0.5">
+                  您的账户正在等待管理员审核，审核通过后即可使用所有功能。
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">

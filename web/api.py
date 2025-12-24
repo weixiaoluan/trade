@@ -37,7 +37,8 @@ from web.auth import (
     save_user_report, get_user_reports, get_user_report, delete_user_report,
     create_analysis_task, update_analysis_task, get_user_analysis_tasks,
     get_user_reminders, add_reminder, update_reminder, delete_reminder,
-    get_symbol_reminders, batch_add_reminders
+    get_symbol_reminders, batch_add_reminders,
+    get_all_users, update_user_status, update_user_role, is_admin, is_approved
 )
 
 
@@ -106,7 +107,12 @@ if ANALYSIS_STATS_PATH.exists():
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     import asyncio
+    from web.database import migrate_database
+    
     print("[START] Securities Analysis API starting...")
+    
+    # 执行数据库迁移
+    migrate_database()
     
     # 启动价格触发检查后台任务
     task = asyncio.create_task(check_price_triggers())
@@ -220,7 +226,9 @@ async def login(request: LoginRequest):
             "token": token,
             "user": {
                 "username": user['username'],
-                "phone": user['phone']
+                "phone": user['phone'],
+                "role": user.get('role', 'user'),
+                "status": user.get('status', 'pending')
             }
         }
     except HTTPException:
@@ -255,6 +263,73 @@ async def logout(authorization: str = Header(None)):
         delete_session(token)
     
     return {"status": "success", "message": "已退出登录"}
+
+
+# ============================================
+# 管理员 API
+# ============================================
+
+@app.get("/api/admin/users")
+async def admin_get_users(authorization: str = Header(None)):
+    """获取所有用户（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限访问")
+    
+    users = get_all_users()
+    return {"status": "success", "users": users}
+
+
+@app.post("/api/admin/users/{username}/approve")
+async def admin_approve_user(username: str, authorization: str = Header(None)):
+    """审核通过用户（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限访问")
+    
+    success = update_user_status(username, 'approved')
+    if success:
+        return {"status": "success", "message": f"用户 {username} 已审核通过"}
+    else:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+
+@app.post("/api/admin/users/{username}/reject")
+async def admin_reject_user(username: str, authorization: str = Header(None)):
+    """拒绝用户（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限访问")
+    
+    success = update_user_status(username, 'rejected')
+    if success:
+        return {"status": "success", "message": f"用户 {username} 已拒绝"}
+    else:
+        raise HTTPException(status_code=404, detail="用户不存在")
 
 
 # ============================================

@@ -20,7 +20,8 @@ from web.database import (
     db_save_report, db_get_user_reports, db_get_user_report, db_delete_report,
     db_create_task, db_update_task, db_get_user_tasks,
     db_get_user_reminders, db_add_reminder, db_update_reminder, db_delete_reminder, 
-    db_get_symbol_reminders, db_get_all_reminders
+    db_get_symbol_reminders, db_get_all_reminders,
+    db_get_all_users, db_update_user_status, db_update_user_role
 )
 
 
@@ -138,6 +139,31 @@ def create_user(username: str, password: str, phone: str) -> Dict:
     """创建用户"""
     hashed_password, salt = hash_password(password)
     return db_create_user(username, hashed_password, salt, phone)
+
+
+def get_all_users() -> list:
+    """获取所有用户（管理员功能）"""
+    return db_get_all_users()
+
+
+def update_user_status(username: str, status: str) -> bool:
+    """更新用户状态"""
+    return db_update_user_status(username, status)
+
+
+def update_user_role(username: str, role: str) -> bool:
+    """更新用户角色"""
+    return db_update_user_role(username, role)
+
+
+def is_admin(user: Dict) -> bool:
+    """检查用户是否是管理员"""
+    return user.get('role') == 'admin'
+
+
+def is_approved(user: Dict) -> bool:
+    """检查用户是否已审核"""
+    return user.get('status') == 'approved'
 
 
 # ============================================
