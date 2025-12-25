@@ -176,6 +176,14 @@ def migrate_database():
             print("迁移: 添加 starred 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN starred INTEGER DEFAULT 0")
         
+        # 检查 users 表是否有 pushplus_token 字段
+        cursor.execute("PRAGMA table_info(users)")
+        user_columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'pushplus_token' not in user_columns:
+            print("迁移: 添加 pushplus_token 字段到 users 表")
+            cursor.execute("ALTER TABLE users ADD COLUMN pushplus_token TEXT")
+        
         # 检查 reminders 表是否有 AI 分析相关字段
         cursor.execute("PRAGMA table_info(reminders)")
         reminder_columns = [col[1] for col in cursor.fetchall()]

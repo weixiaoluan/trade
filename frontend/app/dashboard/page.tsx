@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -30,6 +30,10 @@ import {
   ArrowDown,
   Menu,
   MoreVertical,
+  Settings,
+  MessageSquare,
+  ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 import { UserHeader } from "@/components/ui/UserHeader";
 import { AlertModal } from "@/components/ui/AlertModal";
@@ -84,6 +88,11 @@ interface ReminderItem {
   analysis_time: string;
   weekday?: number;
   day_of_month?: number;
+  // AI 分析设置
+  ai_analysis_frequency?: string;
+  ai_analysis_time?: string;
+  ai_analysis_weekday?: number;
+  ai_analysis_day_of_month?: number;
   buy_price?: number;
   sell_price?: number;
   enabled: boolean;
@@ -127,7 +136,6 @@ export default function DashboardPage() {
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [reminderType, setReminderType] = useState<string>("both");
   const [reminderFrequency, setReminderFrequency] = useState<string>("trading_day");
-  const [analysisTime, setAnalysisTime] = useState<string>("09:30");
   const [analysisWeekday, setAnalysisWeekday] = useState<number>(1);
   const [analysisDayOfMonth, setAnalysisDayOfMonth] = useState<number>(1);
   const [showBatchReminderModal, setShowBatchReminderModal] = useState(false);
@@ -156,7 +164,51 @@ export default function DashboardPage() {
   // 移动端操作菜单
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
 
-  const getToken = () => localStorage.getItem("token");
+  // 用户设置相关
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [userSettings, setUserSettings] = useState<{
+    pushplus_token: string;
+    pushplus_configured: boolean;
+    pushplus_remaining: { remaining: number; total: number } | null;
+  } | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [pushplusToken, setPushplusToken] = useState("");
+  const [testPushLoading, setTestPushLoading] = useState(false);
+
+  const getToken = useCallback(() => localStorage.getItem("token"), []);
+
+  const tasksRef = useRef(tasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  const showAlertModal = useCallback(
+    (title: string, message: string, type: "warning" | "info" | "success" | "error" = "warning") => {
+      setAlertConfig({ title, message, type });
+      setShowAlert(true);
+    },
+    []
+  );
+
+  const getErrorMessageFromResponse = useCallback(async (response: Response) => {
+    try {
+      const data = await response.json();
+      return data?.detail || data?.message || JSON.stringify(data);
+    } catch {
+      return response.statusText || `HTTP ${response.status}`;
+    }
+  }, []);
+
+  const openNativeTimePicker = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
+    try {
+      const el = e.currentTarget as any;
+      if (typeof el?.showPicker === "function") {
+        el.showPicker();
+      }
+    } catch (err) {
+      // 忽略 showPicker 错误，让浏览器使用默认行为
+    }
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -208,7 +260,7 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("获取自选列表失败:", error);
     }
-  }, []);
+  }, [getToken]);
 
   const fetchTasks = useCallback(async () => {
     const token = getToken();
@@ -263,9 +315,9 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("获取实时行情失败:", error);
     }
-  }, [watchlist]);
+  }, [getToken, watchlist]);
 
-  const fetchReminders = async () => {
+  const fetchReminders = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE}/api/reminders`, {
         headers: { Authorization: `Bearer ${getToken()}` },
@@ -277,7 +329,73 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("获取提醒失败:", error);
     }
-  };
+  }, [getToken]);
+
+  // 获取用户设置
+  const fetchUserSettings = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/user/settings`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUserSettings(data.settings);
+        setPushplusToken(data.settings?.pushplus_token || "");
+      }
+    } catch (error) {
+      console.error("获取用户设置失败:", error);
+    }
+  }, [getToken]);
+
+  // 更新用户设置
+  const handleSaveSettings = useCallback(async () => {
+    setSettingsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/user/settings?pushplus_token=${encodeURIComponent(pushplusToken)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      
+      if (response.ok) {
+        showAlertModal("保存成功", "PushPlus Token 已保存", "success");
+        fetchUserSettings();
+      } else {
+        const data = await response.json();
+        showAlertModal("保存失败", data.detail || "请检查 Token 是否正确", "error");
+      }
+    } catch (error) {
+      showAlertModal("保存失败", "网络错误，请稍后重试", "error");
+    } finally {
+      setSettingsLoading(false);
+    }
+  }, [getToken, pushplusToken, showAlertModal, fetchUserSettings]);
+
+  // 测试推送
+  const handleTestPush = useCallback(async () => {
+    setTestPushLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/user/test-push`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      
+      const data = await response.json();
+      if (response.ok) {
+        showAlertModal("测试成功", "测试消息已发送，请查看微信", "success");
+        fetchUserSettings(); // 刷新剩余次数
+      } else {
+        showAlertModal("测试失败", data.detail || "推送失败，请检查配置", "error");
+      }
+    } catch (error) {
+      showAlertModal("测试失败", "网络错误，请稍后重试", "error");
+    } finally {
+      setTestPushLoading(false);
+    }
+  }, [getToken, showAlertModal, fetchUserSettings]);
+
+  const hasActiveTasks = useMemo(() => {
+    return Object.values(tasks).some((t) => t.status === "running" || t.status === "pending");
+  }, [tasks]);
 
   useEffect(() => {
     if (authChecked) {
@@ -285,15 +403,18 @@ export default function DashboardPage() {
       fetchTasks();
       fetchReports();
       fetchReminders();
+      fetchUserSettings();
 
+      const intervalMs = hasActiveTasks ? 2000 : 15000;
       const interval = setInterval(() => {
+        if (document.visibilityState !== "visible") return;
         fetchTasks();
         fetchReports();
-      }, 5000);
+      }, intervalMs);
 
       return () => clearInterval(interval);
     }
-  }, [authChecked, fetchWatchlist, fetchTasks, fetchReports]);
+  }, [authChecked, fetchWatchlist, fetchTasks, fetchReports, fetchReminders, fetchUserSettings, hasActiveTasks]);
 
   useEffect(() => {
     if (authChecked && watchlist.length > 0) {
@@ -307,43 +428,45 @@ export default function DashboardPage() {
     }
   }, [authChecked, watchlist, fetchQuotes]);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setUser(null);
     window.location.href = "/login";
-  };
+  }, []);
 
-  const toggleSelect = (symbol: string) => {
-    const newSelected = new Set(selectedItems);
-    if (newSelected.has(symbol)) {
-      newSelected.delete(symbol);
-    } else {
-      newSelected.add(symbol);
-    }
-    setSelectedItems(newSelected);
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedItems.size === watchlist.length) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(watchlist.map((item) => item.symbol)));
-    }
-  };
-
-  const canUseFeatures = () => {
-    return user && (user.status === 'approved' || user.role === 'admin');
-  };
-
-  const showPendingAlert = () => {
-    setAlertConfig({
-      title: "账户待审核",
-      message: "您的账户正在等待管理员审核，审核通过后即可使用所有功能。",
-      type: "warning",
+  const toggleSelect = useCallback((symbol: string) => {
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(symbol)) {
+        next.delete(symbol);
+      } else {
+        next.add(symbol);
+      }
+      return next;
     });
-    setShowAlert(true);
-  };
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedItems((prev) => {
+      if (prev.size === watchlist.length) {
+        return new Set();
+      }
+      return new Set(watchlist.map((item) => item.symbol));
+    });
+  }, [watchlist]);
+
+  const canUseFeatures = useCallback(() => {
+    return user && (user.status === "approved" || user.role === "admin");
+  }, [user]);
+
+  const showPendingAlert = useCallback(() => {
+    showAlertModal(
+      "账户待审核",
+      "您的账户正在等待管理员审核，审核通过后即可使用所有功能。",
+      "warning"
+    );
+  }, [showAlertModal]);
 
   const checkPermissionAndRun = (callback: () => void) => {
     if (!canUseFeatures()) {
@@ -353,14 +476,14 @@ export default function DashboardPage() {
     callback();
   };
 
-  const handleSort = (field: string) => {
+  const handleSort = useCallback((field: string) => {
     if (sortField === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
       setSortField(field);
       setSortOrder("desc");
     }
-  };
+  }, [sortField, sortOrder]);
 
   const sortedWatchlist = useMemo(() => {
     let sorted = [...watchlist];
@@ -392,7 +515,27 @@ export default function DashboardPage() {
     return sorted;
   }, [watchlist, sortField, sortOrder, quotes]);
 
-  const handleToggleStar = async (symbol: string) => {
+  const reportsBySymbol = useMemo(() => {
+    const map: Record<string, ReportSummary> = {};
+    for (const r of reports) {
+      map[r.symbol] = r;
+    }
+    return map;
+  }, [reports]);
+
+  const reminderCountBySymbol = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const r of reminders) {
+      map[r.symbol] = (map[r.symbol] || 0) + 1;
+    }
+    return map;
+  }, [reminders]);
+
+  const pagedWatchlist = useMemo(() => {
+    return sortedWatchlist.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  }, [sortedWatchlist, currentPage, pageSize]);
+
+  const handleToggleStar = useCallback(async (symbol: string) => {
     if (!canUseFeatures()) {
       showPendingAlert();
       return;
@@ -410,9 +553,9 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("切换关注失败:", error);
     }
-  };
+  }, [canUseFeatures, fetchWatchlist, getToken, showPendingAlert]);
 
-  const handleAddSymbol = async () => {
+  const handleAddSymbol = useCallback(async () => {
     if (!addSymbol.trim()) return;
     
     if (!canUseFeatures()) {
@@ -455,7 +598,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [addCostPrice, addPosition, addSymbol, canUseFeatures, fetchWatchlist, getToken, showPendingAlert]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -567,7 +710,7 @@ export default function DashboardPage() {
     ));
   };
 
-  const handleDeleteSingle = async (symbol: string) => {
+  const handleDeleteSingle = useCallback(async (symbol: string) => {
     if (!canUseFeatures()) {
       showPendingAlert();
       return;
@@ -584,15 +727,18 @@ export default function DashboardPage() {
 
       if (response.ok) {
         fetchWatchlist();
-        selectedItems.delete(symbol);
-        setSelectedItems(new Set(selectedItems));
+        setSelectedItems((prev) => {
+          const next = new Set(prev);
+          next.delete(symbol);
+          return next;
+        });
       }
     } catch (error) {
       console.error("删除失败:", error);
     }
-  };
+  }, [canUseFeatures, fetchWatchlist, getToken, showPendingAlert]);
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = useCallback(async () => {
     if (selectedItems.size === 0) return;
     
     if (!canUseFeatures()) {
@@ -620,14 +766,28 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [canUseFeatures, fetchWatchlist, getToken, selectedItems, showPendingAlert]);
 
-  const handleAnalyzeSingle = async (symbol: string) => {
+  const handleAnalyzeSingle = useCallback(async (symbol: string) => {
     if (!canUseFeatures()) {
       showPendingAlert();
       return;
     }
-    
+
+    const existing = tasksRef.current[symbol];
+    const optimisticTaskId = existing?.task_id || `optimistic-${Date.now()}`;
+    setTasks((prev) => ({
+      ...prev,
+      [symbol]: {
+        task_id: optimisticTaskId,
+        symbol,
+        status: "running",
+        progress: 0,
+        current_step: "分析中",
+        updated_at: new Date().toISOString(),
+      },
+    }));
+
     try {
       const response = await fetch(`${API_BASE}/api/analyze/background`, {
         method: "POST",
@@ -638,23 +798,81 @@ export default function DashboardPage() {
         body: JSON.stringify({ ticker: symbol }),
       });
 
-      if (response.ok) {
-        fetchTasks();
+      if (!response.ok) {
+        const msg = await getErrorMessageFromResponse(response);
+        setTasks((prev) => {
+          const next = { ...prev };
+          if (existing) {
+            next[symbol] = existing;
+          } else {
+            delete next[symbol];
+          }
+          return next;
+        });
+        showAlertModal("分析失败", msg, "error");
+        return;
       }
+
+      const data = await response.json().catch(() => ({}));
+      if (data?.task_id) {
+        setTasks((prev) => ({
+          ...prev,
+          [symbol]: {
+            task_id: data.task_id,
+            symbol: data.symbol || symbol,
+            status: "running",
+            progress: 0,
+            current_step: "分析中",
+            updated_at: new Date().toISOString(),
+          },
+        }));
+      }
+
+      fetchTasks();
     } catch (error) {
       console.error("启动分析失败:", error);
+      setTasks((prev) => {
+        const next = { ...prev };
+        if (existing) {
+          next[symbol] = existing;
+        } else {
+          delete next[symbol];
+        }
+        return next;
+      });
+      showAlertModal("分析失败", error instanceof Error ? error.message : "网络错误，请稍后重试", "error");
     }
-  };
+  }, [canUseFeatures, fetchTasks, getErrorMessageFromResponse, getToken, showAlertModal, showPendingAlert]);
 
-  const handleBatchAnalyze = async () => {
+  const handleBatchAnalyze = useCallback(async () => {
     if (selectedItems.size === 0) return;
     
     if (!canUseFeatures()) {
       showPendingAlert();
       return;
     }
+    const symbols = Array.from(selectedItems);
+    const prevTasks: Record<string, TaskStatus | undefined> = {};
+    for (const sym of symbols) {
+      prevTasks[sym] = tasksRef.current[sym];
+    }
 
-    setLoading(true);
+    setTasks((prev) => {
+      const next = { ...prev };
+      for (const sym of symbols) {
+        const optimisticTaskId = next[sym]?.task_id || `optimistic-${Date.now()}-${sym}`;
+        next[sym] = {
+          task_id: optimisticTaskId,
+          symbol: sym,
+          status: "running",
+          progress: 0,
+          current_step: "分析中",
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return next;
+    });
+
     try {
       const response = await fetch(`${API_BASE}/api/analyze/batch`, {
         method: "POST",
@@ -665,39 +883,108 @@ export default function DashboardPage() {
         body: JSON.stringify(Array.from(selectedItems)),
       });
 
-      if (response.ok) {
-        fetchTasks();
+      if (!response.ok) {
+        const msg = await getErrorMessageFromResponse(response);
+        setTasks((prev) => {
+          const next = { ...prev };
+          for (const sym of symbols) {
+            const old = prevTasks[sym];
+            if (old) {
+              next[sym] = old;
+            } else {
+              delete next[sym];
+            }
+          }
+          return next;
+        });
+        showAlertModal("批量分析失败", msg, "error");
+        return;
       }
+
+      const data = await response.json().catch(() => ({}));
+      if (Array.isArray(data?.tasks)) {
+        setTasks((prev) => {
+          const next = { ...prev };
+          for (const t of data.tasks) {
+            if (!t?.symbol) continue;
+            next[t.symbol] = {
+              task_id: t.task_id,
+              symbol: t.symbol,
+              status: "running",
+              progress: 0,
+              current_step: "分析中",
+              updated_at: new Date().toISOString(),
+            };
+          }
+          return next;
+        });
+      }
+
+      fetchTasks();
     } catch (error) {
       console.error("批量分析失败:", error);
-    } finally {
-      setLoading(false);
+      setTasks((prev) => {
+        const next = { ...prev };
+        for (const sym of symbols) {
+          const old = prevTasks[sym];
+          if (old) {
+            next[sym] = old;
+          } else {
+            delete next[sym];
+          }
+        }
+        return next;
+      });
+      showAlertModal("批量分析失败", error instanceof Error ? error.message : "网络错误，请稍后重试", "error");
     }
-  };
+  }, [canUseFeatures, fetchTasks, getErrorMessageFromResponse, getToken, selectedItems, showAlertModal, showPendingAlert]);
 
-  const handleViewReport = (symbol: string) => {
+  const handleViewReport = useCallback((symbol: string) => {
     if (!canUseFeatures()) {
       showPendingAlert();
       return;
     }
     router.push(`/report/${encodeURIComponent(symbol)}`);
-  };
+  }, [canUseFeatures, router, showPendingAlert]);
 
-  const openReminderModal = (symbol: string, name?: string) => {
+  const openReminderModal = useCallback((symbol: string, name?: string) => {
     if (!canUseFeatures()) {
       showPendingAlert();
       return;
+    }
+    
+    // 检查是否配置了 PushPlus Token
+    if (!userSettings?.pushplus_configured) {
+      showAlertModal(
+        "请先配置推送",
+        "您还未配置微信推送，请先在设置中绑定 PushPlus Token 才能使用提醒功能。",
+        "warning"
+      );
+      setShowSettingsModal(true);
+      return;
+    }
+    
+    // 检查剩余推送次数
+    if (userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining < 5) {
+      showAlertModal(
+        "推送额度不足",
+        `您本月剩余推送次数仅 ${userSettings.pushplus_remaining.remaining} 次，请合理设置提醒频率。`,
+        "warning"
+      );
     }
     
     setReminderSymbol(symbol);
     setReminderName(name || symbol);
     setReminderType("both");
     setReminderFrequency("trading_day");
-    setAnalysisTime("09:30");
     setAnalysisWeekday(1);
     setAnalysisDayOfMonth(1);
+    setAiAnalysisFrequency("trading_day");
+    setAiAnalysisTime("09:30");
+    setAiAnalysisWeekday(1);
+    setAiAnalysisDayOfMonth(1);
     setShowReminderModal(true);
-  };
+  }, [canUseFeatures, showPendingAlert, userSettings, showAlertModal]);
 
   const handleCreateReminder = async () => {
     if (!reminderSymbol) return;
@@ -709,7 +996,7 @@ export default function DashboardPage() {
         name: reminderName,
         reminder_type: reminderType,
         frequency: reminderFrequency,
-        analysis_time: analysisTime,
+        analysis_time: aiAnalysisTime,
         weekday: reminderFrequency === "weekly" ? analysisWeekday : undefined,
         day_of_month: reminderFrequency === "monthly" ? analysisDayOfMonth : undefined,
         // AI 自动分析设置
@@ -741,6 +1028,7 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error("创建提醒失败:", error);
+      showAlertModal("创建提醒失败", error instanceof Error ? error.message : "网络错误，请稍后重试", "error");
     } finally {
       setLoading(false);
     }
@@ -770,7 +1058,7 @@ export default function DashboardPage() {
       const params = new URLSearchParams({
         reminder_type: reminderType,
         frequency: reminderFrequency,
-        analysis_time: analysisTime,
+        analysis_time: aiAnalysisTime,
       });
       if (reminderFrequency === "weekly") {
         params.set("weekday", analysisWeekday.toString());
@@ -809,7 +1097,7 @@ export default function DashboardPage() {
   };
 
   const getReminderCount = (symbol: string) => {
-    return reminders.filter(r => r.symbol === symbol).length;
+    return reminderCountBySymbol[symbol] || 0;
   };
 
   const getTaskStatus = (symbol: string): TaskStatus | null => {
@@ -817,7 +1105,7 @@ export default function DashboardPage() {
   };
 
   const getReport = (symbol: string): ReportSummary | null => {
-    return reports.find((r) => r.symbol === symbol) || null;
+    return reportsBySymbol[symbol] || null;
   };
 
   const getTypeLabel = (type?: string) => {
@@ -862,7 +1150,29 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {user && <UserHeader user={user} onLogout={handleLogout} />}
+          {user && (
+            <div className="flex items-center gap-2">
+              {/* 推送额度提醒 */}
+              {userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining < 5 && (
+                <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-xs text-amber-400">剩余{userSettings.pushplus_remaining.remaining}次</span>
+                </div>
+              )}
+              {/* 设置按钮 */}
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                className="p-2 hover:bg-white/[0.05] rounded-lg transition-all relative"
+                title="设置"
+              >
+                <Settings className="w-5 h-5 text-slate-400" />
+                {!userSettings?.pushplus_configured && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full"></span>
+                )}
+              </button>
+              <UserHeader user={user} onLogout={handleLogout} />
+            </div>
+          )}
         </div>
       </header>
 
@@ -990,9 +1300,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-white/[0.04]">
-              {sortedWatchlist
-                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
-                .map((item) => {
+              {pagedWatchlist.map((item) => {
                 const task = getTaskStatus(item.symbol);
                 const report = getReport(item.symbol);
                 const isSelected = selectedItems.has(item.symbol);
@@ -1203,9 +1511,9 @@ export default function DashboardPage() {
                             <span className="text-xs">{task?.progress}%</span>
                           </div>
                         ) : isPending ? (
-                          <div className="flex items-center gap-1 text-slate-400">
-                            <Clock className="w-4 h-4" />
-                            <span className="text-xs">等待</span>
+                          <div className="flex items-center gap-1 text-amber-400">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span className="text-xs">分析中</span>
                           </div>
                         ) : report ? (
                           <div className="flex items-center gap-1 text-emerald-400">
@@ -1557,11 +1865,56 @@ export default function DashboardPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base sm:text-lg font-semibold text-white">设置提醒 - {reminderSymbol}</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-white">提醒设置 - {reminderSymbol}</h3>
                 <button onClick={() => setShowReminderModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
                   <X className="w-5 h-5 text-slate-400" />
                 </button>
               </div>
+
+              {/* 已有提醒列表 */}
+              {reminders.filter(r => r.symbol === reminderSymbol).length > 0 && (
+                <div className="mb-4 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <BellRing className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm font-medium text-slate-300">已设置的提醒</span>
+                  </div>
+                  <div className="space-y-2">
+                    {reminders.filter(r => r.symbol === reminderSymbol).map((reminder) => (
+                      <div key={reminder.id} className="flex items-center justify-between p-2 bg-white/[0.03] rounded-lg">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className={`px-1.5 py-0.5 rounded ${
+                              reminder.reminder_type === 'buy' ? 'bg-emerald-500/20 text-emerald-400' :
+                              reminder.reminder_type === 'sell' ? 'bg-rose-500/20 text-rose-400' :
+                              'bg-indigo-500/20 text-indigo-400'
+                            }`}>
+                              {reminder.reminder_type === 'buy' ? '买入' : reminder.reminder_type === 'sell' ? '卖出' : '买+卖'}
+                            </span>
+                            <span className="text-slate-400">
+                              {reminder.ai_analysis_frequency === 'trading_day' ? '每交易日' :
+                               reminder.ai_analysis_frequency === 'weekly' ? `每周${['一','二','三','四','五','六','日'][((reminder.ai_analysis_weekday || 1) - 1)]}` :
+                               `每月${reminder.ai_analysis_day_of_month || 1}号`}
+                            </span>
+                            <span className="text-slate-500">{reminder.ai_analysis_time || '09:30'}</span>
+                          </div>
+                          {(reminder.buy_price || reminder.sell_price) && (
+                            <div className="text-[10px] text-slate-500 mt-1">
+                              {reminder.buy_price && <span className="mr-2">买入价: ¥{reminder.buy_price}</span>}
+                              {reminder.sell_price && <span>卖出价: ¥{reminder.sell_price}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleDeleteReminder(reminder.id)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-4">
                 {/* AI 自动分析设置 */}
@@ -1605,17 +1958,17 @@ export default function DashboardPage() {
                     {aiAnalysisFrequency === "monthly" && (
                       <div>
                         <label className="text-xs text-slate-400 mb-1.5 block">选择日期</label>
-                        <div className="grid grid-cols-7 gap-1 max-h-[120px] overflow-y-auto">
-                          {Array.from({length: 31}, (_, i) => i + 1).map((day) => (
-                            <button
-                              key={day}
-                              onClick={() => setAiAnalysisDayOfMonth(day)}
-                              className={`py-1.5 rounded text-xs font-medium ${aiAnalysisDayOfMonth === day ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
-                            >
-                              {day}
-                            </button>
+                        <select
+                          value={aiAnalysisDayOfMonth}
+                          onChange={(e) => setAiAnalysisDayOfMonth(Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
+                        >
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                            <option key={day} value={day} className="bg-slate-800">
+                              {day} 号
+                            </option>
                           ))}
-                        </div>
+                        </select>
                       </div>
                     )}
 
@@ -1625,6 +1978,7 @@ export default function DashboardPage() {
                         type="time"
                         value={aiAnalysisTime}
                         onChange={(e) => setAiAnalysisTime(e.target.value)}
+                        onClick={openNativeTimePicker}
                         className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
                       />
                     </div>
@@ -1678,29 +2032,19 @@ export default function DashboardPage() {
                 {reminderFrequency === "monthly" && (
                   <div>
                     <label className="text-xs sm:text-sm text-slate-400 mb-2 block">选择日期</label>
-                    <div className="grid grid-cols-7 gap-1 max-h-[180px] overflow-y-auto">
-                      {Array.from({length: 31}, (_, i) => i + 1).map((day) => (
-                        <button
-                          key={day}
-                          onClick={() => setAnalysisDayOfMonth(day)}
-                          className={`py-2 rounded-lg text-xs font-medium transition-all ${analysisDayOfMonth === day ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
-                        >
-                          {day}
-                        </button>
+                    <select
+                      value={analysisDayOfMonth}
+                      onChange={(e) => setAnalysisDayOfMonth(Number(e.target.value))}
+                      className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none text-sm"
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                        <option key={day} value={day} className="bg-slate-800">
+                          {day} 号
+                        </option>
                       ))}
-                    </div>
+                    </select>
                   </div>
                 )}
-
-                <div>
-                  <label className="text-xs sm:text-sm text-slate-400 mb-2 block">分析时间</label>
-                  <input
-                    type="time"
-                    value={analysisTime}
-                    onChange={(e) => setAnalysisTime(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none text-sm"
-                  />
-                </div>
               </div>
 
               <div className="flex gap-3 mt-6">
@@ -1716,6 +2060,152 @@ export default function DashboardPage() {
                   className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base"
                 >
                   {loading ? "创建中..." : "创建提醒"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 设置弹窗 */}
+      <AnimatePresence>
+        {showSettingsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
+            onClick={() => setShowSettingsModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 max-h-[85vh] overflow-y-auto safe-area-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-indigo-400" />
+                  推送设置
+                </h3>
+                <button onClick={() => setShowSettingsModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              {/* PushPlus 说明 */}
+              <div className="mb-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                <div className="flex items-start gap-2">
+                  <MessageSquare className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-medium text-indigo-400 mb-1">微信推送服务</h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      本系统使用 PushPlus 实现微信推送。免费版每月 200 次推送额度，足够日常使用。
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 操作指引 */}
+              <div className="mb-4 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
+                <h4 className="text-sm font-medium text-slate-300 mb-2">绑定步骤</h4>
+                <ol className="text-xs text-slate-400 space-y-2">
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">1</span>
+                    <span>访问 PushPlus 官网注册账号</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">2</span>
+                    <span>微信扫码关注公众号并绑定</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">3</span>
+                    <span>在个人中心复制 Token 填入下方</span>
+                  </li>
+                </ol>
+                <a
+                  href="https://www.pushplus.plus"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 flex items-center justify-center gap-1.5 py-2 bg-indigo-600/20 text-indigo-400 rounded-lg text-sm hover:bg-indigo-600/30 transition-all"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  前往 PushPlus 官网
+                </a>
+              </div>
+
+              {/* Token 输入 */}
+              <div className="mb-4">
+                <label className="text-xs sm:text-sm text-slate-400 mb-2 block">PushPlus Token</label>
+                <input
+                  type="text"
+                  value={pushplusToken}
+                  onChange={(e) => setPushplusToken(e.target.value)}
+                  placeholder="请输入您的 PushPlus Token"
+                  className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-mono"
+                />
+              </div>
+
+              {/* 状态显示 */}
+              {userSettings?.pushplus_configured && (
+                <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-sm text-emerald-400">已配置</span>
+                    </div>
+                    {userSettings.pushplus_remaining && (
+                      <div className="text-xs text-slate-400">
+                        本月剩余: <span className={userSettings.pushplus_remaining.remaining < 5 ? "text-amber-400 font-medium" : "text-emerald-400"}>
+                          {userSettings.pushplus_remaining.remaining}
+                        </span> / {userSettings.pushplus_remaining.total} 次
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 低额度警告 */}
+              {userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining < 5 && (
+                <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-medium text-amber-400">推送额度不足</h4>
+                      <p className="text-xs text-amber-400/70 mt-0.5">
+                        本月剩余推送次数较少，建议减少提醒频率或等待下月额度刷新。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 操作按钮 */}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleTestPush}
+                  disabled={testPushLoading || !userSettings?.pushplus_configured}
+                  className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm sm:text-base disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {testPushLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <MessageSquare className="w-4 h-4" />
+                  )}
+                  测试推送
+                </button>
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={settingsLoading || !pushplusToken.trim()}
+                  className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base flex items-center justify-center gap-2"
+                >
+                  {settingsLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  保存设置
                 </button>
               </div>
             </motion.div>

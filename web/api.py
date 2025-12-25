@@ -2582,7 +2582,8 @@ _quote_cache = {
     'lof': {'data': None, 'time': None},
     'stock': {'data': None, 'time': None}
 }
-_cache_ttl = 10  # 缓存10秒
+_cache_ttl = 10  # 交易时间缓存10秒
+_cache_ttl_non_trading = 300  # 非交易时间缓存5分钟
 
 
 def get_batch_quotes(symbols: list) -> dict:
@@ -2593,6 +2594,9 @@ def get_batch_quotes(symbols: list) -> dict:
     now = datetime.now()
     quotes = {}
     
+    # 根据是否交易时间调整缓存时间
+    cache_ttl = _cache_ttl if is_trading_time() else _cache_ttl_non_trading
+    
     # 提取纯数字代码
     code_map = {}
     for symbol in symbols:
@@ -2600,17 +2604,22 @@ def get_batch_quotes(symbols: list) -> dict:
         code_map[code] = symbol
     
     codes = set(code_map.keys())
+    print(f"[Quotes] 请求代码: {codes}, 交易时间: {is_trading_time()}, 缓存TTL: {cache_ttl}s")
     
     # 获取 ETF 数据（使用缓存）
     try:
         if _quote_cache['etf']['data'] is None or \
            _quote_cache['etf']['time'] is None or \
-           (now - _quote_cache['etf']['time']).seconds > _cache_ttl:
+           (now - _quote_cache['etf']['time']).seconds > cache_ttl:
+            print("[Quotes] 正在获取 ETF 数据...")
             _quote_cache['etf']['data'] = ak.fund_etf_spot_em()
             _quote_cache['etf']['time'] = now
+            print(f"[Quotes] ETF 数据获取成功，共 {len(_quote_cache['etf']['data'])} 条")
         
         df_etf = _quote_cache['etf']['data']
-        for _, row in df_etf[df_etf['代码'].isin(codes)].iterrows():
+        matched = df_etf[df_etf['代码'].isin(codes)]
+        print(f"[Quotes] ETF 匹配到 {len(matched)} 条")
+        for _, row in matched.iterrows():
             code = row['代码']
             symbol = code_map.get(code, code)
             quotes[symbol] = {
@@ -2621,13 +2630,15 @@ def get_batch_quotes(symbols: list) -> dict:
             codes.discard(code)
     except Exception as e:
         print(f"ETF批量行情获取失败: {e}")
+        import traceback
+        traceback.print_exc()
     
     # 获取 LOF 数据
     if codes:
         try:
             if _quote_cache['lof']['data'] is None or \
                _quote_cache['lof']['time'] is None or \
-               (now - _quote_cache['lof']['time']).seconds > _cache_ttl:
+               (now - _quote_cache['lof']['time']).seconds > cache_ttl:
                 _quote_cache['lof']['data'] = ak.fund_lof_spot_em()
                 _quote_cache['lof']['time'] = now
             
@@ -2649,7 +2660,7 @@ def get_batch_quotes(symbols: list) -> dict:
         try:
             if _quote_cache['stock']['data'] is None or \
                _quote_cache['stock']['time'] is None or \
-               (now - _quote_cache['stock']['time']).seconds > _cache_ttl:
+               (now - _quote_cache['stock']['time']).seconds > cache_ttl:
                 _quote_cache['stock']['data'] = ak.stock_zh_a_spot_em()
                 _quote_cache['stock']['time'] = now
             
@@ -2665,6 +2676,7 @@ def get_batch_quotes(symbols: list) -> dict:
         except Exception as e:
             print(f"A股批量行情获取失败: {e}")
     
+    print(f"[Quotes] 返回 {len(quotes)} 条行情数据")
     return quotes
 
 
@@ -2732,6 +2744,16 @@ def get_realtime_quote(symbol: str) -> dict:
 def is_trading_day() -> bool:
     """检查今天是否是交易日（简单判断：周一到周五）"""
     return datetime.now().weekday() < 5
+
+
+def is_trading_time() -> bool:
+    """检查当前是否在交易时间内（A股：9:30-11:30, 13:00-15:00）"""
+    now = datetime.now()
+    if now.weekday() >= 5:  # 周末
+        return False
+    current_time = now.strftime("%H:%M")
+    # A股交易时间
+    return ("09:30" <= current_time <= "11:30") or ("13:00" <= current_time <= "15:00")
 
 
 def should_analyze_today(frequency: str, last_analysis_at: str, weekday: int = None, day_of_month: int = None) -> bool:
@@ -2891,18 +2913,270 @@ async def trigger_ai_analysis(username: str, symbol: str):
         update_analysis_task(username, task_id, status='failed', error=str(e))
 
 
-def send_sms_notification(phone: str, message: str):
-    """发送短信通知
-    这里需要接入实际的短信服务商 API
+def send_sms_notification(phone: str, message: str) -> bool:
+    """发送通知（使用微信推送）
+    使用 PushPlus 服务发送微信通知
     """
-    # TODO: 接入实际短信服务
-    print(f"[SMS] 发送到 {phone}: {message}")
+    return send_wechat_notification(message)
+
+
+def send_wechat_notification(message: str, title: str = "AI智能投研提醒", token: str = None) -> bool:
+    """发送微信推送通知
+    使用 PushPlus 服务：https://www.pushplus.plus/
+    """
+    import requests
+    import os
     
-    # 示例：阿里云短信
-    # from alibabacloud_dysmsapi20170525 import Client, models
-    # client = Client(...)
-    # request = models.SendSmsRequest(phone_numbers=phone, sign_name="...", template_code="...", template_param=json.dumps({"message": message}))
-    # client.send_sms(request)
+    # 优先使用传入的 token，否则使用环境变量
+    pushplus_token = token or os.environ.get("PUSHPLUS_TOKEN", "")
+    
+    if not pushplus_token:
+        print(f"[WeChat] PushPlus Token 未配置，消息: {message}")
+        return False
+    
+    try:
+        url = "http://www.pushplus.plus/send"
+        data = {
+            "token": pushplus_token,
+            "title": title,
+            "content": message,
+            "template": "html"
+        }
+        
+        response = requests.post(url, json=data, timeout=10)
+        result = response.json()
+        
+        if result.get("code") == 200:
+            print(f"[WeChat] 推送成功: {title}")
+            return True
+        else:
+            print(f"[WeChat] 推送失败: {result.get('msg')}")
+            return False
+            
+    except Exception as e:
+        print(f"[WeChat] 推送异常: {e}")
+        return False
+
+
+def get_pushplus_remaining(token: str) -> dict:
+    """获取 PushPlus 剩余推送次数"""
+    import requests
+    
+    if not token:
+        return {"remaining": 0, "total": 200, "error": "Token 未配置"}
+    
+    try:
+        # PushPlus 查询接口
+        url = f"http://www.pushplus.plus/api/open/user/info?token={token}"
+        response = requests.get(url, timeout=10)
+        result = response.json()
+        
+        if result.get("code") == 200:
+            data = result.get("data", {})
+            return {
+                "remaining": data.get("limitCount", 200) - data.get("sendCount", 0),
+                "total": data.get("limitCount", 200),
+                "used": data.get("sendCount", 0)
+            }
+        else:
+            return {"remaining": 0, "total": 200, "error": result.get("msg")}
+    except Exception as e:
+        return {"remaining": 0, "total": 200, "error": str(e)}
+
+
+def send_price_alert_notification(username: str, symbol: str, name: str, 
+                                   alert_type: str, current_price: float, 
+                                   target_price: float, ai_summary: str = "") -> bool:
+    """发送价格提醒通知（带 AI 分析）"""
+    from web.database import get_db
+    
+    # 获取用户的 PushPlus Token
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT pushplus_token FROM users WHERE username = ?", (username,))
+        row = cursor.fetchone()
+        user_token = row['pushplus_token'] if row else None
+    
+    if not user_token:
+        print(f"[Alert] 用户 {username} 未配置 PushPlus Token")
+        return False
+    
+    # 构建富文本消息
+    action = "买入" if alert_type == "buy" else "卖出"
+    action_color = "#10B981" if alert_type == "buy" else "#F43F5E"
+    
+    message = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 20px; border-radius: 12px 12px 0 0;">
+            <h2 style="margin: 0; font-size: 18px;">🔔 {action}价格提醒</h2>
+        </div>
+        
+        <div style="background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div>
+                    <div style="font-size: 20px; font-weight: bold; color: #1e293b;">{name}</div>
+                    <div style="font-size: 14px; color: #64748b;">{symbol}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 24px; font-weight: bold; color: {action_color};">¥{current_price:.3f}</div>
+                    <div style="font-size: 12px; color: #64748b;">当前价格</div>
+                </div>
+            </div>
+            
+            <div style="background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="color: #64748b;">触发类型</span>
+                    <span style="color: {action_color}; font-weight: bold;">{action}提醒</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: #64748b;">目标价格</span>
+                    <span style="font-weight: bold;">¥{target_price:.3f}</span>
+                </div>
+            </div>
+            
+            {f'''
+            <div style="background: #eff6ff; border-left: 4px solid #6366f1; padding: 12px; border-radius: 0 8px 8px 0; margin-bottom: 15px;">
+                <div style="font-size: 12px; color: #6366f1; font-weight: bold; margin-bottom: 5px;">🤖 AI 分析摘要</div>
+                <div style="font-size: 13px; color: #334155; line-height: 1.5;">{ai_summary}</div>
+            </div>
+            ''' if ai_summary else ''}
+            
+            <div style="font-size: 11px; color: #94a3b8; text-align: center;">
+                {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} · AI智能投研
+            </div>
+        </div>
+    </div>
+    """
+    
+    return send_wechat_notification(message, f"【{action}提醒】{name} ¥{current_price:.3f}", user_token)
+
+
+# ============================================
+# 用户设置 API
+# ============================================
+
+@app.get("/api/user/settings")
+async def get_user_settings(authorization: str = Header(None)):
+    """获取用户设置"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import get_db
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT pushplus_token FROM users WHERE username = ?", (user['username'],))
+        row = cursor.fetchone()
+        pushplus_token = row['pushplus_token'] if row else None
+    
+    # 获取剩余推送次数
+    remaining_info = get_pushplus_remaining(pushplus_token) if pushplus_token else None
+    
+    return {
+        "status": "success",
+        "settings": {
+            "pushplus_token": pushplus_token or "",
+            "pushplus_configured": bool(pushplus_token),
+            "pushplus_remaining": remaining_info
+        }
+    }
+
+
+@app.post("/api/user/settings")
+async def update_user_settings(
+    pushplus_token: str = "",
+    authorization: str = Header(None)
+):
+    """更新用户设置"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import get_db
+    
+    # 验证 Token 是否有效
+    if pushplus_token:
+        remaining_info = get_pushplus_remaining(pushplus_token)
+        if "error" in remaining_info and remaining_info.get("remaining", 0) == 0:
+            raise HTTPException(status_code=400, detail=f"PushPlus Token 无效: {remaining_info.get('error')}")
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET pushplus_token = ? WHERE username = ?",
+            (pushplus_token if pushplus_token else None, user['username'])
+        )
+        conn.commit()
+    
+    return {
+        "status": "success",
+        "message": "设置已保存"
+    }
+
+
+@app.post("/api/user/test-push")
+async def test_user_push(authorization: str = Header(None)):
+    """测试用户的推送配置"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import get_db
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT pushplus_token FROM users WHERE username = ?", (user['username'],))
+        row = cursor.fetchone()
+        pushplus_token = row['pushplus_token'] if row else None
+    
+    if not pushplus_token:
+        raise HTTPException(status_code=400, detail="请先配置 PushPlus Token")
+    
+    # 发送测试消息
+    test_message = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 20px; border-radius: 12px 12px 0 0;">
+            <h2 style="margin: 0; font-size: 18px;">✅ 推送测试成功</h2>
+        </div>
+        
+        <div style="background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0; border-radius: 0 0 12px 12px;">
+            <p style="color: #334155; margin: 0 0 15px 0;">恭喜！您的微信推送已配置成功。</p>
+            <p style="color: #64748b; font-size: 13px; margin: 0 0 15px 0;">当您设置的价格提醒触发时，将会收到类似的推送通知。</p>
+            
+            <div style="background: #eff6ff; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 12px; color: #6366f1; font-weight: bold;">💡 温馨提示</div>
+                <div style="font-size: 13px; color: #334155; margin-top: 5px;">
+                    PushPlus 免费版每月有 200 次推送额度，请合理设置提醒频率。
+                </div>
+            </div>
+            
+            <div style="font-size: 11px; color: #94a3b8; text-align: center;">
+                {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} · AI智能投研
+            </div>
+        </div>
+    </div>
+    """
+    
+    result = send_wechat_notification(test_message, "AI智能投研 - 推送测试", pushplus_token)
+    
+    if result:
+        return {"status": "success", "message": "测试推送已发送，请检查微信"}
+    else:
+        raise HTTPException(status_code=500, detail="推送失败，请检查 Token 是否正确")
 
 
 # ============================================
