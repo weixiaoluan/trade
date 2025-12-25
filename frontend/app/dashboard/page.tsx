@@ -372,9 +372,14 @@ export default function DashboardPage() {
 
   // 测试推送
   const handleTestPush = useCallback(async () => {
+    if (!pushplusToken.trim()) {
+      showAlertModal("请输入 Token", "请先输入 PushPlus Token 再测试", "warning");
+      return;
+    }
+    
     setTestPushLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/user/test-push`, {
+      const response = await fetch(`${API_BASE}/api/user/test-push?token=${encodeURIComponent(pushplusToken)}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}` },
       });
@@ -391,7 +396,7 @@ export default function DashboardPage() {
     } finally {
       setTestPushLoading(false);
     }
-  }, [getToken, showAlertModal, fetchUserSettings]);
+  }, [getToken, pushplusToken, showAlertModal, fetchUserSettings]);
 
   const hasActiveTasks = useMemo(() => {
     return Object.values(tasks).some((t) => t.status === "running" || t.status === "pending");
@@ -965,7 +970,7 @@ export default function DashboardPage() {
     }
     
     // 检查剩余推送次数
-    if (userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining < 5) {
+    if (userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining >= 0 && userSettings.pushplus_remaining.remaining < 10) {
       showAlertModal(
         "推送额度不足",
         `您本月剩余推送次数仅 ${userSettings.pushplus_remaining.remaining} 次，请合理设置提醒频率。`,
@@ -1153,7 +1158,7 @@ export default function DashboardPage() {
           {user && (
             <div className="flex items-center gap-2">
               {/* 推送额度提醒 */}
-              {userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining < 5 && (
+              {userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining >= 0 && userSettings.pushplus_remaining.remaining < 10 && (
                 <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
                   <span className="text-xs text-amber-400">剩余{userSettings.pushplus_remaining.remaining}次</span>
@@ -1404,13 +1409,18 @@ export default function DashboardPage() {
                               </button>
                               
                               {report && (
-                                <button
-                                  onClick={() => handleViewReport(item.symbol)}
-                                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600/20 text-emerald-400 text-sm rounded-xl min-w-[90px] touch-target active:bg-emerald-600/30"
-                                >
-                                  <FileText className="w-4 h-4" />
-                                  报告
-                                </button>
+                                <div className="flex flex-col">
+                                  <button
+                                    onClick={() => handleViewReport(item.symbol)}
+                                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600/20 text-emerald-400 text-sm rounded-xl min-w-[90px] touch-target active:bg-emerald-600/30"
+                                  >
+                                    <FileText className="w-4 h-4" />
+                                    报告
+                                  </button>
+                                  <span className="text-[10px] text-slate-500 text-center mt-1">
+                                    {new Date(report.created_at).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                  </span>
+                                </div>
                               )}
                             </div>
                             
@@ -1538,13 +1548,18 @@ export default function DashboardPage() {
                         </button>
 
                         {report && (
-                          <button
-                            onClick={() => handleViewReport(item.symbol)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600/20 text-emerald-400 text-xs rounded-lg"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            查看报告
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleViewReport(item.symbol)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600/20 text-emerald-400 text-xs rounded-lg"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              报告
+                            </button>
+                            <span className="text-[10px] text-slate-500">
+                              {new Date(report.created_at).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}
+                            </span>
+                          </div>
                         )}
 
                         <button
@@ -2155,9 +2170,9 @@ export default function DashboardPage() {
                       <Check className="w-4 h-4 text-emerald-400" />
                       <span className="text-sm text-emerald-400">已配置</span>
                     </div>
-                    {userSettings.pushplus_remaining && (
+                    {userSettings.pushplus_remaining && userSettings.pushplus_remaining.remaining >= 0 && (
                       <div className="text-xs text-slate-400">
-                        本月剩余: <span className={userSettings.pushplus_remaining.remaining < 5 ? "text-amber-400 font-medium" : "text-emerald-400"}>
+                        本月剩余: <span className={userSettings.pushplus_remaining.remaining < 10 ? "text-amber-400 font-medium" : "text-emerald-400"}>
                           {userSettings.pushplus_remaining.remaining}
                         </span> / {userSettings.pushplus_remaining.total} 次
                       </div>
@@ -2167,7 +2182,7 @@ export default function DashboardPage() {
               )}
 
               {/* 低额度警告 */}
-              {userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining < 5 && (
+              {userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining >= 0 && userSettings.pushplus_remaining.remaining < 10 && (
                 <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
@@ -2185,7 +2200,7 @@ export default function DashboardPage() {
               <div className="flex gap-3">
                 <button
                   onClick={handleTestPush}
-                  disabled={testPushLoading || !userSettings?.pushplus_configured}
+                  disabled={testPushLoading || !pushplusToken.trim()}
                   className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm sm:text-base disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {testPushLoading ? (

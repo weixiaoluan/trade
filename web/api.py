@@ -2963,7 +2963,7 @@ def get_pushplus_remaining(token: str) -> dict:
     import requests
     
     if not token:
-        return {"remaining": 0, "total": 200, "error": "Token 未配置"}
+        return {"remaining": -1, "total": 200, "error": "Token 未配置"}
     
     try:
         # PushPlus 查询接口
@@ -2979,9 +2979,11 @@ def get_pushplus_remaining(token: str) -> dict:
                 "used": data.get("sendCount", 0)
             }
         else:
-            return {"remaining": 0, "total": 200, "error": result.get("msg")}
+            # API 返回错误，返回 -1 表示未知
+            return {"remaining": -1, "total": 200, "error": result.get("msg")}
     except Exception as e:
-        return {"remaining": 0, "total": 200, "error": str(e)}
+        # 网络错误，返回 -1 表示未知
+        return {"remaining": -1, "total": 200, "error": str(e)}
 
 
 def send_price_alert_notification(username: str, symbol: str, name: str, 
@@ -3104,11 +3106,9 @@ async def update_user_settings(
     
     from web.database import get_db
     
-    # 验证 Token 是否有效
-    if pushplus_token:
-        remaining_info = get_pushplus_remaining(pushplus_token)
-        if "error" in remaining_info and remaining_info.get("remaining", 0) == 0:
-            raise HTTPException(status_code=400, detail=f"PushPlus Token 无效: {remaining_info.get('error')}")
+    # 验证 Token 格式（简单验证，不调用远程 API）
+    if pushplus_token and len(pushplus_token) < 10:
+        raise HTTPException(status_code=400, detail="PushPlus Token 格式不正确")
     
     with get_db() as conn:
         cursor = conn.cursor()
@@ -3125,26 +3125,32 @@ async def update_user_settings(
 
 
 @app.post("/api/user/test-push")
-async def test_user_push(authorization: str = Header(None)):
+async def test_user_push(
+    token: str = Query(default=""),
+    authorization: str = Header(None)
+):
     """测试用户的推送配置"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
-    token = authorization.replace("Bearer ", "")
-    user = get_current_user(token)
+    auth_token = authorization.replace("Bearer ", "")
+    user = get_current_user(auth_token)
     
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    from web.database import get_db
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT pushplus_token FROM users WHERE username = ?", (user['username'],))
-        row = cursor.fetchone()
-        pushplus_token = row['pushplus_token'] if row else None
+    # 优先使用传入的 token，否则使用已保存的
+    pushplus_token = token
+    if not pushplus_token:
+        from web.database import get_db
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT pushplus_token FROM users WHERE username = ?", (user['username'],))
+            row = cursor.fetchone()
+            pushplus_token = row['pushplus_token'] if row else None
     
     if not pushplus_token:
-        raise HTTPException(status_code=400, detail="请先配置 PushPlus Token")
+        raise HTTPException(status_code=400, detail="请先输入或配置 PushPlus Token")
     
     # 发送测试消息
     test_message = f"""
