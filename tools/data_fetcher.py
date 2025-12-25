@@ -645,8 +645,8 @@ def is_cn_onexchange_etf(code: str) -> bool:
         return False
     # 深交所场内ETF: 159xxx
     # 深交所LOF基金: 16xxxx (如 161226 国投白银LOF, 164824 印度基金LOF)
-    # 上交所场内ETF: 510xxx, 511xxx, 512xxx, 513xxx, 515xxx, 516xxx, 518xxx, 560xxx, 561xxx, 562xxx, 563xxx
-    etf_prefixes = ('159', '16', '510', '511', '512', '513', '515', '516', '518', '560', '561', '562', '563', '588')
+    # 上交所场内ETF: 510xxx, 511xxx, 512xxx, 513xxx, 515xxx, 516xxx, 517xxx, 518xxx, 520xxx, 560xxx, 561xxx, 562xxx, 563xxx, 588xxx
+    etf_prefixes = ('159', '16', '510', '511', '512', '513', '515', '516', '517', '518', '520', '560', '561', '562', '563', '588')
     return code.startswith(etf_prefixes)
 
 
