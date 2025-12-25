@@ -24,7 +24,7 @@ class APIConfig:
     GEMINI_MODEL: str = "gemini-1.5-pro"  # Gemini 3.0 Pro 对应最新版本
     
     # 硅基流动 (SiliconFlow) API - DeepSeek
-    SILICONFLOW_API_KEY: str = "sk-muoigvectooargythxattxwslxhcvuvhyujbnbshlifrqsal"
+    SILICONFLOW_API_KEY: str = os.getenv("SILICONFLOW_API_KEY", "")
     SILICONFLOW_BASE_URL: str = "https://api.siliconflow.cn/v1"
     SILICONFLOW_MODEL: str = "deepseek-ai/DeepSeek-V3.2"  # DeepSeek 主模型
     

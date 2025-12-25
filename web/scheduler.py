@@ -24,7 +24,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from web.auth import (
-    get_reminders, save_reminders, get_user_reminders,
+    get_reminders, get_user_reminders,
     update_reminder, get_user_report
 )
 from tools.data_fetcher import get_stock_info
