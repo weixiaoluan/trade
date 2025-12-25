@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -3089,7 +3089,7 @@ async def get_user_settings(authorization: str = Header(None)):
 
 @app.post("/api/user/settings")
 async def update_user_settings(
-    pushplus_token: str = "",
+    pushplus_token: str = Query(default=""),
     authorization: str = Header(None)
 ):
     """更新用户设置"""
