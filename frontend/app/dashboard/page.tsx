@@ -279,12 +279,17 @@ export default function DashboardPage() {
         const data = await response.json();
         const newTasks = data.tasks || {};
         
-        // 检查是否有新的失败任务
+        // 检查是否有新变成失败的任务（之前是 running，现在是 failed）
         const failedTasks: string[] = [];
         const failedErrors: string[] = [];
         
         Object.entries(newTasks).forEach(([symbol, task]: [string, any]) => {
-          if (task.status === "failed" && !shownErrorTasks.has(symbol)) {
+          const prevTask = tasksRef.current[symbol];
+          // 只有从 running/pending 变成 failed 才弹窗
+          if (task.status === "failed" && 
+              prevTask && 
+              (prevTask.status === "running" || prevTask.status === "pending") &&
+              !shownErrorTasks.has(symbol)) {
             failedTasks.push(symbol);
             if (task.error) {
               failedErrors.push(`${symbol}: ${task.error}`);
@@ -292,7 +297,7 @@ export default function DashboardPage() {
           }
         });
         
-        // 如果有失败任务且未显示过，弹窗提示（只弹一次）
+        // 如果有新失败的任务，弹窗提示（只弹一次）
         if (failedTasks.length > 0 && !hasShownBatchError) {
           setShownErrorTasks(prev => new Set([...Array.from(prev), ...failedTasks]));
           setHasShownBatchError(true);
