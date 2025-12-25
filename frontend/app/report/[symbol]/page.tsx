@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Bot, FileText, AlertCircle, ExternalLink } from "lucide-react";
+import { Bot, FileText, AlertCircle, ExternalLink, ArrowLeft } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { StockCard } from "@/components/ui/StockCard";
@@ -12,6 +12,52 @@ import { AIRecommendationCard } from "@/components/ui/AIRecommendationCard";
 import { PredictionTimeline } from "@/components/ui/PredictionTimeline";
 
 import { API_BASE } from "@/lib/config";
+
+// 骨架屏组件
+const SkeletonCard = ({ className = "" }: { className?: string }) => (
+  <div className={`glass-card rounded-xl border border-white/[0.06] p-4 sm:p-5 ${className}`}>
+    <div className="skeleton h-4 w-24 rounded mb-3"></div>
+    <div className="skeleton h-8 w-32 rounded mb-2"></div>
+    <div className="skeleton h-3 w-full rounded mb-2"></div>
+    <div className="skeleton h-3 w-3/4 rounded"></div>
+  </div>
+);
+
+const ReportSkeleton = () => (
+  <div className="min-h-screen bg-[#020617]">
+    <div className="sticky top-0 z-40 bg-[#020617]/90 backdrop-blur-md border-b border-white/[0.06]">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="skeleton h-8 w-20 rounded-lg"></div>
+          <div className="flex items-center gap-3">
+            <div className="skeleton h-6 w-24 rounded"></div>
+            <div className="skeleton h-6 w-32 rounded"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+        <SkeletonCard className="lg:col-span-1 h-48" />
+        <div className="lg:col-span-2 space-y-3 sm:space-y-4">
+          <SkeletonCard className="h-32" />
+          <SkeletonCard className="h-24" />
+        </div>
+        <SkeletonCard className="lg:col-span-3 h-40" />
+        <div className="lg:col-span-3 glass-card rounded-xl border border-white/[0.06] p-4 sm:p-6">
+          <div className="skeleton h-6 w-32 rounded mb-4"></div>
+          <div className="space-y-3">
+            <div className="skeleton h-4 w-full rounded"></div>
+            <div className="skeleton h-4 w-5/6 rounded"></div>
+            <div className="skeleton h-4 w-4/5 rounded"></div>
+            <div className="skeleton h-4 w-full rounded"></div>
+            <div className="skeleton h-4 w-3/4 rounded"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 export default function ReportPage() {
   const router = useRouter();
@@ -199,24 +245,18 @@ export default function ReportPage() {
   };
 
   if (loading) {
-    return (
-      <main className="min-h-screen bg-[#020617] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-24 w-24 border-b-4 border-indigo-500 mx-auto"></div>
-        </div>
-      </main>
-    );
+    return <ReportSkeleton />;
   }
 
   if (error) {
     return (
-      <main className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <main className="min-h-screen bg-[#020617] flex items-center justify-center px-4">
         <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-rose-400 mx-auto mb-4" />
-          <p className="text-slate-300 mb-4">{error}</p>
+          <AlertCircle className="w-12 h-12 sm:w-16 sm:h-16 text-rose-400 mx-auto mb-4" />
+          <p className="text-slate-300 mb-4 text-sm sm:text-base">{error}</p>
           <button
             onClick={() => router.push("/dashboard")}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500"
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 text-sm sm:text-base"
           >
             返回首页
           </button>
@@ -233,28 +273,26 @@ export default function ReportPage() {
       animate={{ opacity: 1 }}
       className="min-h-screen bg-[#020617]"
     >
-      {/* Sticky Header - 完全按照原始代码 */}
-      <div className="sticky top-0 z-40 bg-[#020617]/90 backdrop-blur-md border-b border-white/[0.06]">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
+      {/* Sticky Header - 移动端优化 */}
+      <div className="sticky top-0 z-40 bg-[#020617]/90 backdrop-blur-md border-b border-white/[0.06] safe-area-top">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+          <div className="flex items-center justify-between gap-2">
             <button
               onClick={() => router.push("/dashboard")}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-sm text-slate-400 hover:text-slate-200 transition-all"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-xs sm:text-sm text-slate-400 hover:text-slate-200 transition-all flex-shrink-0"
             >
-              <Bot className="w-4 h-4" />
-              <span>返回</span>
+              <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">返回</span>
             </button>
             
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-wider text-slate-600">标的</span>
-                <span className="font-mono font-bold text-indigo-400">{result.ticker}</span>
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 justify-end">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <span className="font-mono font-bold text-indigo-400 text-sm sm:text-base">{result.ticker}</span>
+                <span className="text-xs sm:text-sm text-slate-400 truncate max-w-[100px] sm:max-w-[200px]">{result.name}</span>
               </div>
-              <div className="w-px h-4 bg-white/10" />
-              <span className="text-sm text-slate-400 max-w-[200px] truncate">{result.name}</span>
               {typeof result.quantScore === 'number' && (
                 <div
-                  className={`ml-2 px-2.5 py-1 rounded-full border text-[10px] flex items-center gap-1 whitespace-nowrap
+                  className={`px-2 py-1 rounded-full border text-[9px] sm:text-[10px] flex items-center gap-1 whitespace-nowrap flex-shrink-0
                     ${result.quantScore >= 80
                       ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
                       : result.quantScore >= 60
@@ -264,20 +302,8 @@ export default function ReportPage() {
                       : 'bg-slate-900/80 text-slate-300 border-slate-600/60'
                     }`}
                 >
-                  <span className="font-mono text-[11px]">{result.quantScore.toFixed(1)}</span>
+                  <span className="font-mono text-[10px] sm:text-[11px]">{result.quantScore.toFixed(1)}</span>
                   <span className="opacity-70">分</span>
-                  <span className="w-px h-3 bg-white/10 mx-1" />
-                  <span className="truncate max-w-[80px]">
-                    {result.marketRegime === 'trending' ? '趋势市'
-                      : result.marketRegime === 'ranging' ? '震荡市'
-                      : result.marketRegime === 'squeeze' ? '窄幅整理'
-                      : '待判定'}
-                  </span>
-                  <span className="hidden sm:inline text-[9px] opacity-60">
-                    · {result.volatilityState === 'low' ? '低波动'
-                      : result.volatilityState === 'high' ? '高波动'
-                      : '中等波动'}
-                  </span>
                 </div>
               )}
             </div>
@@ -285,9 +311,9 @@ export default function ReportPage() {
         </div>
       </div>
 
-      {/* Main Content - Bento Grid Layout 完全按照原始代码 */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Main Content - 移动端优化的 Bento Grid */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
           {/* Stock Overview Card */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -316,7 +342,7 @@ export default function ReportPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="lg:col-span-2 flex flex-col gap-4"
+            className="lg:col-span-2 flex flex-col gap-3 sm:gap-4"
           >
             <AIRecommendationCard
               recommendation={result.recommendation as any}
@@ -344,16 +370,16 @@ export default function ReportPage() {
             />
 
             {result.signalDetails && result.signalDetails.length > 0 && (
-              <div className="glass-card rounded-xl border border-white/[0.06] p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="badge-tech text-indigo-300 border-indigo-500/30 bg-indigo-500/10 text-[10px]">
-                      QUANT STRATEGY SIGNALS
+              <div className="glass-card rounded-xl border border-white/[0.06] p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="badge-tech text-indigo-300 border-indigo-500/30 bg-indigo-500/10 text-[9px] sm:text-[10px]">
+                      QUANT SIGNALS
                     </span>
-                    <span className="text-xs text-slate-500">量化策略信号（核心打分依据）</span>
+                    <span className="text-[10px] sm:text-xs text-slate-500">量化策略信号</span>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1 sm:gap-1.5">
                   {result.signalDetails.slice(0, 12).map((signal: string, idx: number) => {
                     const s = signal as string;
                     const bullish = /多头|金叉|支撑|超卖|放量确认上涨|资金流入/.test(s);
@@ -366,7 +392,7 @@ export default function ReportPage() {
                     return (
                       <span
                         key={idx}
-                        className={`px-2 py-0.5 rounded-full text-[11px] border font-mono ${tone}`}
+                        className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] border font-mono ${tone}`}
                       >
                         {s}
                       </span>
@@ -377,14 +403,14 @@ export default function ReportPage() {
             )}
           </motion.div>
 
-          {/* Prediction Timeline - Full Width */}
+          {/* Prediction Timeline */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
             className="lg:col-span-3"
           >
-            <div className="glass-card rounded-xl p-5 border border-white/[0.06]">
+            <div className="glass-card rounded-xl p-3 sm:p-5 border border-white/[0.06]">
               <PredictionTimeline
                 predictions={result.predictions}
                 onHoverHorizon={setActiveHorizon}
@@ -402,30 +428,31 @@ export default function ReportPage() {
           >
             <div className="glass-card rounded-xl border border-white/[0.06] overflow-hidden">
               {/* Report Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] bg-white/[0.02]">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                    <FileText className="w-4 h-4 text-indigo-400" />
+              <div className="flex items-center justify-between px-3 sm:px-5 py-3 sm:py-4 border-b border-white/[0.06] bg-white/[0.02]">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white tracking-wide">智能研报</h3>
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500">AI QUANTITATIVE ANALYSIS</span>
+                    <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide">智能研报</h3>
+                    <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500 hidden sm:block">AI QUANTITATIVE ANALYSIS</span>
                   </div>
                 </div>
                 <button
                   onClick={handleDownloadReport}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-xs font-medium text-indigo-400 transition-all"
+                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-[10px] sm:text-xs font-medium text-indigo-400 transition-all"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  下载报告
+                  <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  <span className="hidden sm:inline">下载报告</span>
+                  <span className="sm:hidden">下载</span>
                 </button>
               </div>
 
               {/* Report Content */}
-              <div className="p-8">
+              <div className="p-4 sm:p-6 md:p-8">
                 <div 
                   className="markdown-content prose prose-invert prose-sm max-w-none overflow-y-auto scrollbar-thin" 
-                  style={{ maxHeight: 'calc(100vh - 400px)', minHeight: '450px' }}
+                  style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '300px' }}
                 >
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {result.report || '报告生成中...'}

@@ -14,6 +14,12 @@
   --bearish: #F43F5E; /* Rose-500 */
   --accent: #6366f1;  /* Indigo-500 */
   --accent-glow: rgba(99, 102, 241, 0.5);
+  
+  /* 安全区域 */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
 }
 
 /* 响应式视口设置 */
@@ -24,6 +30,12 @@ html {
 }
 
 @media (max-width: 640px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 375px) {
   html {
     font-size: 14px;
   }
@@ -38,6 +50,8 @@ html, body {
 @layer base {
   body {
     @apply bg-gradient-to-br from-slate-950 via-[#0B1121] to-slate-900 min-h-screen text-slate-300 antialiased font-sans;
+    padding-top: var(--safe-area-inset-top);
+    padding-bottom: var(--safe-area-inset-bottom);
   }
   
   h1, h2, h3, h4, h5, h6 {
@@ -60,12 +74,34 @@ html, body {
   .badge-tech {
     @apply px-2 py-0.5 rounded text-[10px] font-mono tracking-wider border border-white/10 bg-white/5 text-slate-400 uppercase;
   }
+  
+  /* 移动端优化按钮 */
+  .btn-mobile {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+  
+  /* 移动端卡片 */
+  .card-mobile {
+    @apply p-3 sm:p-4 md:p-6;
+  }
+  
+  /* 移动端表格行 */
+  .table-row-mobile {
+    @apply flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-3 sm:px-4 md:px-6 py-3 sm:py-4;
+  }
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
+}
+
+@media (min-width: 640px) {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
 }
 
 ::-webkit-scrollbar-track {
@@ -83,31 +119,31 @@ html, body {
 
 /* Markdown Styles - "Structured Intelligence" */
 .markdown-content {
-  @apply text-base leading-relaxed;
+  @apply text-sm sm:text-base leading-relaxed;
 }
 
 .markdown-content h1 {
-  @apply text-2xl font-bold text-white mb-6 mt-8 flex items-center gap-2;
+  @apply text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 mt-6 sm:mt-8 flex items-center gap-2;
 }
 
 .markdown-content h2 {
-  @apply text-lg font-semibold text-indigo-200 mb-4 mt-8 flex items-center gap-2 border-b border-white/5 pb-2;
+  @apply text-base sm:text-lg font-semibold text-indigo-200 mb-3 sm:mb-4 mt-6 sm:mt-8 flex items-center gap-2 border-b border-white/5 pb-2;
 }
 
 .markdown-content h3 {
-  @apply text-base font-medium text-slate-200 mb-3 mt-6;
+  @apply text-sm sm:text-base font-medium text-slate-200 mb-2 sm:mb-3 mt-4 sm:mt-6;
 }
 
 .markdown-content p {
-  @apply text-slate-300 mb-4 leading-7;
+  @apply text-slate-300 mb-3 sm:mb-4 leading-6 sm:leading-7;
 }
 
 .markdown-content ul {
-  @apply space-y-2 mb-6;
+  @apply space-y-1.5 sm:space-y-2 mb-4 sm:mb-6;
 }
 
 .markdown-content li {
-  @apply text-slate-300 pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:bg-indigo-500 before:rounded-full;
+  @apply text-slate-300 pl-3 sm:pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2 sm:before:top-2.5 before:w-1 sm:before:w-1.5 before:h-1 sm:before:h-1.5 before:bg-indigo-500 before:rounded-full text-sm sm:text-base;
 }
 
 .markdown-content strong {
@@ -115,15 +151,15 @@ html, body {
 }
 
 .markdown-content table {
-  @apply w-full border-collapse mb-6 text-sm bg-slate-900/40 rounded-lg overflow-hidden border border-white/5;
+  @apply w-full border-collapse mb-4 sm:mb-6 text-xs sm:text-sm bg-slate-900/40 rounded-lg overflow-hidden border border-white/5;
 }
 
 .markdown-content th {
-  @apply bg-slate-800/50 text-slate-400 px-4 py-3 text-left text-xs uppercase tracking-wider font-medium border-b border-white/10;
+  @apply bg-slate-800/50 text-slate-400 px-2 sm:px-4 py-2 sm:py-3 text-left text-[10px] sm:text-xs uppercase tracking-wider font-medium border-b border-white/10;
 }
 
 .markdown-content td {
-  @apply px-4 py-4 text-slate-300 border-b border-white/5;
+  @apply px-2 sm:px-4 py-2 sm:py-4 text-slate-300 border-b border-white/5;
 }
 
 .markdown-content tr:last-child td {
@@ -135,11 +171,11 @@ html, body {
 }
 
 .markdown-content code {
-  @apply font-mono text-sm bg-slate-800/80 px-1.5 py-0.5 rounded text-indigo-300 border border-white/5;
+  @apply font-mono text-xs sm:text-sm bg-slate-800/80 px-1 sm:px-1.5 py-0.5 rounded text-indigo-300 border border-white/5;
 }
 
 .markdown-content blockquote {
-  @apply border-l-2 border-indigo-500 pl-4 py-1 my-6 bg-indigo-500/5 italic text-slate-400 rounded-r;
+  @apply border-l-2 border-indigo-500 pl-3 sm:pl-4 py-1 my-4 sm:my-6 bg-indigo-500/5 italic text-slate-400 rounded-r text-sm sm:text-base;
 }
 
 /* 性能优化 */
@@ -169,6 +205,21 @@ html, body {
   .touch-action-pan {
     touch-action: pan-x pan-y;
   }
+  
+  /* 移动端隐藏 */
+  .hide-mobile {
+    @apply hidden sm:block;
+  }
+  
+  /* 仅移动端显示 */
+  .show-mobile {
+    @apply block sm:hidden;
+  }
+  
+  /* 移动端文字截断 */
+  .truncate-mobile {
+    @apply truncate max-w-[80px] sm:max-w-none;
+  }
 }
 
 /* 移动端触摸反馈优化 */
@@ -176,10 +227,49 @@ html, body {
   button, a, [role="button"] {
     -webkit-tap-highlight-color: transparent;
   }
+  
+  /* 增大触摸目标 */
+  button, a, [role="button"], input, select {
+    min-height: 44px;
+  }
 }
 
 /* 表格滚动优化 */
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+}
+
+/* 移动端弹窗优化 */
+@media (max-width: 640px) {
+  .modal-mobile {
+    @apply mx-2 max-h-[90vh] overflow-y-auto;
+  }
+}
+
+/* 骨架屏动画 */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* 移动端安全区域 */
+@supports (padding: max(0px)) {
+  .safe-area-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  
+  .safe-area-top {
+    padding-top: max(0px, env(safe-area-inset-top));
+  }
 }

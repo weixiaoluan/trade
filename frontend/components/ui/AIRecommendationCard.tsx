@@ -102,29 +102,29 @@ export function AIRecommendationCard({
       <div className="flex h-full">
         <div className={`w-1 ${config.accentColor} flex-shrink-0`} />
         
-        <div className="flex-1 p-5">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-5">
-            <div className="flex items-center gap-4">
+        <div className="flex-1 p-3 sm:p-5">
+          {/* Header - 移动端优化 */}
+          <div className="flex items-start justify-between mb-3 sm:mb-5 gap-2">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               {/* Icon */}
-              <div className={`w-12 h-12 rounded-xl ${config.bgTint} border border-white/10 flex items-center justify-center shadow-lg shadow-black/20`}>
-                <Icon className={`w-6 h-6 ${config.textColor}`} />
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl ${config.bgTint} border border-white/10 flex items-center justify-center shadow-lg shadow-black/20 flex-shrink-0`}>
+                <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${config.textColor}`} />
               </div>
               
-              <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="badge-tech text-indigo-300 border-indigo-500/30 bg-indigo-500/10">AI深度解读</span>
-                  <span className="text-[10px] text-slate-500 font-mono">{new Date().toLocaleDateString()}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-1.5 flex-wrap">
+                  <span className="badge-tech text-indigo-300 border-indigo-500/30 bg-indigo-500/10 text-[9px] sm:text-[10px]">AI深度解读</span>
+                  <span className="text-[9px] sm:text-[10px] text-slate-500 font-mono hidden sm:inline">{new Date().toLocaleDateString()}</span>
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <span className={`text-xl font-bold tracking-tight ${config.textColor}`}>{config.label}</span>
-                  <span className="text-xs font-bold opacity-60 tracking-wider">{config.labelEn}</span>
+                <div className="flex items-baseline gap-1.5 sm:gap-2">
+                  <span className={`text-base sm:text-xl font-bold tracking-tight ${config.textColor}`}>{config.label}</span>
+                  <span className="text-[10px] sm:text-xs font-bold opacity-60 tracking-wider hidden sm:inline">{config.labelEn}</span>
                 </div>
               </div>
             </div>
             
             {/* Actions */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0">
               <button 
                 onClick={handleCopy}
                 className="p-1.5 rounded-md hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-colors"
@@ -132,20 +132,14 @@ export function AIRecommendationCard({
               >
                 <Copy className="w-3.5 h-3.5" />
               </button>
-              <button 
-                className="p-1.5 rounded-md hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-colors"
-                title="分享"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-              </button>
             </div>
           </div>
 
           {/* Confidence Meter */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] uppercase tracking-wider text-slate-500">AI 置信度</span>
-              <span className={`text-sm font-mono font-bold ${config.textColor}`}>{confidence}%</span>
+          <div className="mb-3 sm:mb-4">
+            <div className="flex items-center justify-between mb-1 sm:mb-1.5">
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500">AI 置信度</span>
+              <span className={`text-xs sm:text-sm font-mono font-bold ${config.textColor}`}>{confidence}%</span>
             </div>
             <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
               <motion.div
@@ -159,17 +153,17 @@ export function AIRecommendationCard({
 
           {/* Summary */}
           {summary && (
-            <div className={`p-3 rounded-lg ${config.bgTint} border border-white/5 mb-4`}>
-              <p className="text-slate-300 text-sm leading-relaxed">{summary}</p>
+            <div className={`p-2.5 sm:p-3 rounded-lg ${config.bgTint} border border-white/5 mb-3 sm:mb-4`}>
+              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">{summary}</p>
             </div>
           )}
 
-          {/* Risk Level */}
-          <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
-            <div className="flex items-center gap-2">
-              <Shield className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-[10px] uppercase tracking-wider text-slate-500">风险等级</span>
-              <div className={`px-2 py-0.5 rounded text-xs font-medium ${
+          {/* Risk Level - 移动端优化 */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 sm:pt-3 border-t border-white/[0.06]">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500" />
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500">风险</span>
+              <div className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium ${
                 riskLevel === 'low' 
                   ? 'bg-emerald-500/10 text-emerald-400' 
                   : riskLevel === 'medium' 
@@ -183,7 +177,7 @@ export function AIRecommendationCard({
                 {[1, 2, 3].map((level) => (
                   <div
                     key={level}
-                    className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                    className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full transition-colors ${
                       level <= (riskLevel === 'low' ? 1 : riskLevel === 'medium' ? 2 : 3)
                         ? riskLevel === 'low' ? 'bg-emerald-500' : riskLevel === 'medium' ? 'bg-amber-500' : 'bg-rose-500'
                         : 'bg-slate-700'
@@ -193,9 +187,9 @@ export function AIRecommendationCard({
               </div>
             </div>
             
-            <div className="flex items-center gap-1 text-[10px] text-slate-600">
-              <AlertCircle className="w-3 h-3" />
-              <span>AI 生成，仅供参考</span>
+            <div className="flex items-center gap-1 text-[9px] sm:text-[10px] text-slate-600">
+              <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+              <span>仅供参考</span>
             </div>
           </div>
         </div>

@@ -381,7 +381,7 @@ async def add_watchlist_item(
     item: WatchlistItem,
     authorization: str = Header(None)
 ):
-    """添加自选"""
+    """添加自选 - 自动识别股票名称和类型"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -391,10 +391,34 @@ async def add_watchlist_item(
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    success = add_to_watchlist(user['username'], item.dict())
+    # 自动获取股票名称和类型
+    item_data = item.dict()
+    symbol = item_data.get('symbol', '').upper()
+    
+    # 如果没有提供名称，自动获取
+    if not item_data.get('name'):
+        try:
+            stock_info_result = await asyncio.to_thread(get_stock_info, symbol)
+            info_dict = json.loads(stock_info_result)
+            if info_dict.get('status') == 'success':
+                basic_info = info_dict.get('basic_info', {})
+                item_data['name'] = basic_info.get('name', '')
+                # 自动识别类型
+                quote_type = basic_info.get('quote_type', '').upper()
+                if not item_data.get('type'):
+                    if quote_type == 'ETF':
+                        item_data['type'] = 'etf'
+                    elif quote_type == 'MUTUALFUND':
+                        item_data['type'] = 'fund'
+                    else:
+                        item_data['type'] = 'stock'
+        except Exception as e:
+            print(f"获取股票信息失败: {e}")
+    
+    success = add_to_watchlist(user['username'], item_data)
     
     if success:
-        return {"status": "success", "message": "添加成功"}
+        return {"status": "success", "message": "添加成功", "name": item_data.get('name', '')}
     else:
         return {"status": "error", "message": "该标的已在自选列表中"}
 
@@ -427,7 +451,7 @@ async def batch_add_watchlist_items(
     items: List[WatchlistItem],
     authorization: str = Header(None)
 ):
-    """批量添加自选"""
+    """批量添加自选 - 自动识别股票名称和类型"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -437,7 +461,35 @@ async def batch_add_watchlist_items(
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    result = batch_add_to_watchlist(user['username'], [item.dict() for item in items])
+    # 处理每个标的，自动获取名称
+    processed_items = []
+    for item in items:
+        item_data = item.dict()
+        symbol = item_data.get('symbol', '').upper()
+        
+        # 如果没有提供名称，自动获取
+        if not item_data.get('name'):
+            try:
+                stock_info_result = await asyncio.to_thread(get_stock_info, symbol)
+                info_dict = json.loads(stock_info_result)
+                if info_dict.get('status') == 'success':
+                    basic_info = info_dict.get('basic_info', {})
+                    item_data['name'] = basic_info.get('name', '')
+                    # 自动识别类型
+                    quote_type = basic_info.get('quote_type', '').upper()
+                    if not item_data.get('type'):
+                        if quote_type == 'ETF':
+                            item_data['type'] = 'etf'
+                        elif quote_type == 'MUTUALFUND':
+                            item_data['type'] = 'fund'
+                        else:
+                            item_data['type'] = 'stock'
+            except Exception as e:
+                print(f"获取股票信息失败 [{symbol}]: {e}")
+        
+        processed_items.append(item_data)
+    
+    result = batch_add_to_watchlist(user['username'], processed_items)
     
     return {
         "status": "success",

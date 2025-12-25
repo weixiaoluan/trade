@@ -129,29 +129,34 @@ export function QuantDashboardCard({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glass-card rounded-xl border border-white/[0.06] p-4 flex flex-col gap-4"
+      className="glass-card rounded-xl border border-white/[0.06] p-3 sm:p-4 flex flex-col gap-3 sm:gap-4"
     >
+      {/* Header - 移动端优化 */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-            <Gauge className="w-4 h-4 text-indigo-300" />
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+            <Gauge className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-300" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-400 tracking-wider">量化状态仪表盘</div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-600">QUANT SCORE · REGIME · VOLATILITY</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-400 tracking-wider">量化状态仪表盘</div>
+            <div className="text-[8px] sm:text-[10px] uppercase tracking-wider text-slate-600 hidden sm:block">QUANT SCORE · REGIME · VOLATILITY</div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 items-center">
-        <div className="col-span-1 flex flex-col items-start gap-2">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500">量化评分</div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-slate-50 font-mono">{scoreText}</span>
-            {displayScore !== undefined && <span className="text-[11px] text-slate-500">/ 100</span>}
+      {/* Stats Grid - 移动端优化为垂直布局 */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 items-start">
+        {/* 量化评分 */}
+        <div className="flex sm:flex-col items-center sm:items-start justify-between sm:justify-start gap-2">
+          <div className="flex items-center sm:flex-col sm:items-start gap-2 sm:gap-0">
+            <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500">量化评分</div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-xl sm:text-2xl font-bold text-slate-50 font-mono">{scoreText}</span>
+              {displayScore !== undefined && <span className="text-[10px] sm:text-[11px] text-slate-500">/ 100</span>}
+            </div>
           </div>
           {displayScore !== undefined && (
-            <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mt-1">
+            <div className="w-24 sm:w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
               <div
                 className={`h-full bg-gradient-to-r ${scoreColor}`}
                 style={{ width: `${displayScore}%` }}
@@ -160,14 +165,15 @@ export function QuantDashboardCard({
           )}
         </div>
 
-        <div className="col-span-1 flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Activity className="w-3.5 h-3.5 text-emerald-400" />
+        {/* 市场状态 */}
+        <div className="flex sm:flex-col items-start gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-400">
+            <Activity className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
             <span>市场状态</span>
           </div>
-          <div className="text-sm font-medium flex flex-col gap-1">
+          <div className="text-xs sm:text-sm font-medium flex flex-col gap-0.5 sm:gap-1">
             <span className={regimeInfo.tone}>{regimeInfo.label}</span>
-            <span className="text-[11px] text-slate-500">
+            <span className="text-[9px] sm:text-[11px] text-slate-500 hidden sm:block">
               {marketRegime === 'trending'
                 ? '趋势主导，适合顺势策略'
                 : marketRegime === 'ranging'
@@ -179,14 +185,15 @@ export function QuantDashboardCard({
           </div>
         </div>
 
-        <div className="col-span-1 flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Waves className="w-3.5 h-3.5 text-sky-400" />
+        {/* 波动强度 */}
+        <div className="flex sm:flex-col items-start gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-400">
+            <Waves className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-sky-400" />
             <span>波动强度</span>
           </div>
-          <div className="text-sm font-medium flex flex-col gap-1">
+          <div className="text-xs sm:text-sm font-medium flex flex-col gap-0.5 sm:gap-1">
             <span className={volInfo.tone}>{volInfo.label}</span>
-            <span className="text-[11px] text-slate-500">
+            <span className="text-[9px] sm:text-[11px] text-slate-500 hidden sm:block">
               {volatilityState === 'low'
                 ? '价格相对平稳，适合稳健资金'
                 : volatilityState === 'high'
@@ -197,54 +204,36 @@ export function QuantDashboardCard({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500">
-        <div className="flex items-center gap-3">
-          {adxText && <span className="font-mono">ADX {adxText}</span>}
-          {atrText && <span className="font-mono">ATR {atrText}</span>}
+      {/* Footer - 移动端优化 */}
+      <div className="mt-1 sm:mt-3 flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-slate-500">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {adxText && <span className="font-mono text-[9px] sm:text-[11px]">ADX {adxText}</span>}
+          {atrText && <span className="font-mono text-[9px] sm:text-[11px]">ATR {atrText}</span>}
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] uppercase tracking-wider text-slate-600">策略模式</span>
+            <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-600">策略</span>
             <span
-              className={`px-2 py-0.5 rounded-full border text-[10px] font-medium ${strategyMode.badgeClass}`}
+              className={`px-1.5 sm:px-2 py-0.5 rounded-full border text-[9px] sm:text-[10px] font-medium ${strategyMode.badgeClass}`}
             >
               {strategyMode.label}
             </span>
-            <span className="hidden md:inline text-[10px] text-slate-600 font-mono">
-              {strategyMode.en}
-            </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] uppercase tracking-wider text-slate-600">时间视角</span>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1">
+            {['short', 'mid', 'long'].map((h) => (
               <span
-                className={`px-2 py-0.5 rounded-full border text-[10px] cursor-default ${
-                  activeHorizon === 'short'
-                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                key={h}
+                className={`px-1.5 sm:px-2 py-0.5 rounded-full border text-[8px] sm:text-[10px] cursor-default ${
+                  activeHorizon === h
+                    ? h === 'short' ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                      : h === 'mid' ? 'bg-sky-500/20 border-sky-500/40 text-sky-300'
+                      : 'bg-violet-500/20 border-violet-500/40 text-violet-300'
                     : 'bg-slate-900/80 border-slate-700 text-slate-400'
                 }`}
               >
-                短期
+                {h === 'short' ? '短' : h === 'mid' ? '中' : '长'}
               </span>
-              <span
-                className={`px-2 py-0.5 rounded-full border text-[10px] cursor-default ${
-                  activeHorizon === 'mid'
-                    ? 'bg-sky-500/20 border-sky-500/40 text-sky-300'
-                    : 'bg-slate-900/80 border-slate-700 text-slate-400'
-                }`}
-              >
-                中期
-              </span>
-              <span
-                className={`px-2 py-0.5 rounded-full border text-[10px] cursor-default ${
-                  activeHorizon === 'long'
-                    ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
-                    : 'bg-slate-900/80 border-slate-700 text-slate-400'
-                }`}
-              >
-                长期
-              </span>
-            </div>
+            ))}
           </div>
         </div>
       </div>
