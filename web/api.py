@@ -2787,14 +2787,15 @@ async def check_price_triggers():
                     symbol = reminder['symbol']
                     reminder_id = reminder.get('reminder_id', reminder.get('id'))
                     reminder_type = reminder['reminder_type']
-                    frequency = reminder.get('frequency', 'trading_day')
-                    analysis_time = reminder.get('analysis_time', '09:30')
-                    weekday = reminder.get('weekday')
-                    day_of_month = reminder.get('day_of_month')
+                    # 使用 AI 分析频率设置
+                    ai_frequency = reminder.get('ai_analysis_frequency', 'trading_day')
+                    ai_time = reminder.get('ai_analysis_time', '09:30')
+                    ai_weekday = reminder.get('ai_analysis_weekday')
+                    ai_day_of_month = reminder.get('ai_analysis_day_of_month')
                     last_analysis_at = reminder.get('last_analysis_at')
                     
-                    # 检查是否到了AI分析时间
-                    if current_time == analysis_time and should_analyze_today(frequency, last_analysis_at, weekday, day_of_month):
+                    # 检查是否到了AI分析时间（使用 AI 分析频率设置）
+                    if current_time == ai_time and should_analyze_today(ai_frequency, last_analysis_at, ai_weekday, ai_day_of_month):
                         print(f"[AI分析] 开始分析 {symbol} for {username}")
                         try:
                             # 触发AI分析

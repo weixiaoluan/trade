@@ -89,6 +89,18 @@ html, body {
   .table-row-mobile {
     @apply flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-3 sm:px-4 md:px-6 py-3 sm:py-4;
   }
+  
+  /* 触摸目标优化 - 确保移动端按钮足够大 */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* 移动端操作按钮组 */
+  .action-btn-mobile {
+    @apply flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm rounded-xl min-w-[90px] min-h-[44px] transition-all;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 /* Custom Scrollbar */

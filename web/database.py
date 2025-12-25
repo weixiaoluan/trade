@@ -176,6 +176,26 @@ def migrate_database():
             print("迁移: 添加 starred 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN starred INTEGER DEFAULT 0")
         
+        # 检查 reminders 表是否有 AI 分析相关字段
+        cursor.execute("PRAGMA table_info(reminders)")
+        reminder_columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'ai_analysis_frequency' not in reminder_columns:
+            print("迁移: 添加 AI 分析频率字段到 reminders 表")
+            cursor.execute("ALTER TABLE reminders ADD COLUMN ai_analysis_frequency TEXT DEFAULT 'trading_day'")
+        
+        if 'ai_analysis_time' not in reminder_columns:
+            print("迁移: 添加 AI 分析时间字段到 reminders 表")
+            cursor.execute("ALTER TABLE reminders ADD COLUMN ai_analysis_time TEXT DEFAULT '09:30'")
+        
+        if 'ai_analysis_weekday' not in reminder_columns:
+            print("迁移: 添加 AI 分析周几字段到 reminders 表")
+            cursor.execute("ALTER TABLE reminders ADD COLUMN ai_analysis_weekday INTEGER")
+        
+        if 'ai_analysis_day_of_month' not in reminder_columns:
+            print("迁移: 添加 AI 分析日期字段到 reminders 表")
+            cursor.execute("ALTER TABLE reminders ADD COLUMN ai_analysis_day_of_month INTEGER")
+        
         conn.commit()
         print("数据库迁移完成")
 
@@ -503,15 +523,19 @@ def db_add_reminder(username: str, reminder_id: str, symbol: str, name: str,
                     reminder_type: str, frequency: str = 'trading_day',
                     analysis_time: str = '09:30', weekday: int = None,
                     day_of_month: int = None,
+                    ai_analysis_frequency: str = 'trading_day',
+                    ai_analysis_time: str = '09:30',
+                    ai_analysis_weekday: int = None,
+                    ai_analysis_day_of_month: int = None,
                     buy_price: float = None, sell_price: float = None) -> Dict:
     """添加价格触发提醒"""
     with get_db() as conn:
         cursor = conn.cursor()
         created_at = datetime.now().isoformat()
         cursor.execute('''
-            INSERT INTO reminders (reminder_id, username, symbol, name, reminder_type, frequency, analysis_time, weekday, day_of_month, buy_price, sell_price, enabled, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-        ''', (reminder_id, username, symbol, name, reminder_type, frequency, analysis_time, weekday, day_of_month, buy_price, sell_price, created_at))
+            INSERT INTO reminders (reminder_id, username, symbol, name, reminder_type, frequency, analysis_time, weekday, day_of_month, ai_analysis_frequency, ai_analysis_time, ai_analysis_weekday, ai_analysis_day_of_month, buy_price, sell_price, enabled, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        ''', (reminder_id, username, symbol, name, reminder_type, frequency, analysis_time, weekday, day_of_month, ai_analysis_frequency, ai_analysis_time, ai_analysis_weekday, ai_analysis_day_of_month, buy_price, sell_price, created_at))
         
         return {
             'id': reminder_id,
@@ -522,6 +546,10 @@ def db_add_reminder(username: str, reminder_id: str, symbol: str, name: str,
             'analysis_time': analysis_time,
             'weekday': weekday,
             'day_of_month': day_of_month,
+            'ai_analysis_frequency': ai_analysis_frequency,
+            'ai_analysis_time': ai_analysis_time,
+            'ai_analysis_weekday': ai_analysis_weekday,
+            'ai_analysis_day_of_month': ai_analysis_day_of_month,
             'buy_price': buy_price,
             'sell_price': sell_price,
             'enabled': True,

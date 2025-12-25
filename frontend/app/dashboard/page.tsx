@@ -132,6 +132,12 @@ export default function DashboardPage() {
   const [analysisDayOfMonth, setAnalysisDayOfMonth] = useState<number>(1);
   const [showBatchReminderModal, setShowBatchReminderModal] = useState(false);
 
+  // AI 自动分析设置
+  const [aiAnalysisFrequency, setAiAnalysisFrequency] = useState<string>("trading_day");
+  const [aiAnalysisTime, setAiAnalysisTime] = useState<string>("09:30");
+  const [aiAnalysisWeekday, setAiAnalysisWeekday] = useState<number>(1);
+  const [aiAnalysisDayOfMonth, setAiAnalysisDayOfMonth] = useState<number>(1);
+
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -706,6 +712,11 @@ export default function DashboardPage() {
         analysis_time: analysisTime,
         weekday: reminderFrequency === "weekly" ? analysisWeekday : undefined,
         day_of_month: reminderFrequency === "monthly" ? analysisDayOfMonth : undefined,
+        // AI 自动分析设置
+        ai_analysis_frequency: aiAnalysisFrequency,
+        ai_analysis_time: aiAnalysisTime,
+        ai_analysis_weekday: aiAnalysisFrequency === "weekly" ? aiAnalysisWeekday : undefined,
+        ai_analysis_day_of_month: aiAnalysisFrequency === "monthly" ? aiAnalysisDayOfMonth : undefined,
       };
 
       const response = await fetch(`${API_BASE}/api/reminders`, {
@@ -1018,9 +1029,9 @@ export default function DashboardPage() {
                             <span className="font-mono text-sm font-semibold text-slate-100">{item.symbol}</span>
                             <button
                               onClick={() => handleToggleStar(item.symbol)}
-                              className={`p-0.5 ${item.starred ? "text-amber-400" : "text-slate-600"}`}
+                              className={`p-1.5 rounded-lg touch-target ${item.starred ? "text-amber-400 bg-amber-500/10" : "text-slate-500 bg-white/[0.05]"}`}
                             >
-                              <Star className={`w-3.5 h-3.5 ${item.starred ? "fill-current" : ""}`} />
+                              <Star className={`w-5 h-5 ${item.starred ? "fill-current" : ""}`} />
                             </button>
                             {item.type && (
                               <span className="px-1.5 py-0.5 text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded">
@@ -1064,56 +1075,62 @@ export default function DashboardPage() {
                             )}
                           </div>
                           
-                          {/* 操作按钮 */}
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <button
-                              onClick={() => handleAnalyzeSingle(item.symbol)}
-                              disabled={isRunning || isPending}
-                              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-all disabled:opacity-50 ${
-                                isFailed 
-                                  ? "bg-rose-600/20 text-rose-400" 
-                                  : "bg-indigo-600/20 text-indigo-400"
-                              }`}
-                            >
-                              {isRunning ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Play className="w-3.5 h-3.5" />
-                              )}
-                              {isRunning ? `${task?.progress}%` : isFailed ? "重试" : "分析"}
-                            </button>
-                            
-                            {report && (
+                          {/* 操作按钮 - 移动端竖向排列 */}
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
                               <button
-                                onClick={() => handleViewReport(item.symbol)}
-                                className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600/20 text-emerald-400 text-xs rounded-lg"
+                                onClick={() => handleAnalyzeSingle(item.symbol)}
+                                disabled={isRunning || isPending}
+                                className={`flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm rounded-xl transition-all disabled:opacity-50 min-w-[90px] touch-target ${
+                                  isFailed 
+                                    ? "bg-rose-600/20 text-rose-400 active:bg-rose-600/30" 
+                                    : "bg-indigo-600/20 text-indigo-400 active:bg-indigo-600/30"
+                                }`}
                               >
-                                <FileText className="w-3.5 h-3.5" />
-                                报告
+                                {isRunning ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Play className="w-4 h-4" />
+                                )}
+                                {isRunning ? `${task?.progress}%` : isFailed ? "重新分析" : "分析"}
                               </button>
-                            )}
-                            
-                            <button
-                              onClick={() => openReminderModal(item.symbol, item.name)}
-                              className={`relative p-1.5 rounded-lg ${
-                                getReminderCount(item.symbol) > 0
-                                  ? "bg-amber-600/20 text-amber-400"
-                                  : "text-slate-500"
-                              }`}
-                            >
-                              {getReminderCount(item.symbol) > 0 ? (
-                                <BellRing className="w-4 h-4" />
-                              ) : (
-                                <Bell className="w-4 h-4" />
+                              
+                              {report && (
+                                <button
+                                  onClick={() => handleViewReport(item.symbol)}
+                                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600/20 text-emerald-400 text-sm rounded-xl min-w-[90px] touch-target active:bg-emerald-600/30"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  报告
+                                </button>
                               )}
-                            </button>
+                            </div>
                             
-                            <button
-                              onClick={() => handleDeleteSingle(item.symbol)}
-                              className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => openReminderModal(item.symbol, item.name)}
+                                className={`flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm rounded-xl min-w-[90px] touch-target ${
+                                  getReminderCount(item.symbol) > 0
+                                    ? "bg-amber-600/20 text-amber-400 active:bg-amber-600/30"
+                                    : "bg-white/[0.05] text-slate-400 active:bg-white/[0.1]"
+                                }`}
+                              >
+                                {getReminderCount(item.symbol) > 0 ? (
+                                  <BellRing className="w-4 h-4" />
+                                ) : (
+                                  <Bell className="w-4 h-4" />
+                                )}
+                                提醒
+                              </button>
+                              
+                              <button
+                                onClick={() => handleDeleteSingle(item.symbol)}
+                                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white/[0.05] text-slate-400 hover:text-rose-400 text-sm rounded-xl min-w-[90px] touch-target active:bg-rose-600/20"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                删除
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1547,14 +1564,80 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-4">
+                {/* AI 自动分析设置 */}
+                <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Bot className="w-4 h-4 text-indigo-400" />
+                    <span className="text-sm font-medium text-indigo-400">AI 自动分析</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1.5 block">分析频率</label>
+                      <select
+                        value={aiAnalysisFrequency}
+                        onChange={(e) => setAiAnalysisFrequency(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
+                      >
+                        <option value="trading_day" className="bg-slate-800">每个交易日</option>
+                        <option value="weekly" className="bg-slate-800">每周</option>
+                        <option value="monthly" className="bg-slate-800">每月</option>
+                      </select>
+                    </div>
+
+                    {aiAnalysisFrequency === "weekly" && (
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1.5 block">选择周几</label>
+                        <div className="grid grid-cols-7 gap-1">
+                          {["一", "二", "三", "四", "五", "六", "日"].map((day, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setAiAnalysisWeekday(idx + 1)}
+                              className={`py-1.5 rounded text-xs font-medium ${aiAnalysisWeekday === idx + 1 ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {aiAnalysisFrequency === "monthly" && (
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1.5 block">选择日期</label>
+                        <div className="grid grid-cols-7 gap-1 max-h-[120px] overflow-y-auto">
+                          {Array.from({length: 31}, (_, i) => i + 1).map((day) => (
+                            <button
+                              key={day}
+                              onClick={() => setAiAnalysisDayOfMonth(day)}
+                              className={`py-1.5 rounded text-xs font-medium ${aiAnalysisDayOfMonth === day ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1.5 block">分析时间</label>
+                      <input
+                        type="time"
+                        value={aiAnalysisTime}
+                        onChange={(e) => setAiAnalysisTime(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
                 <div>
                   <label className="text-xs sm:text-sm text-slate-400 mb-2 block">提醒类型</label>
                   <div className="grid grid-cols-3 gap-2">
-                    {[{v: "buy", l: "买入"}, {v: "sell", l: "卖出"}, {v: "both", l: "双向"}].map(({v, l}) => (
+                    {[{v: "buy", l: "买入"}, {v: "sell", l: "卖出"}, {v: "both", l: "买+卖"}].map(({v, l}) => (
                       <button
                         key={v}
                         onClick={() => setReminderType(v)}
-                        className={`py-2 rounded-lg text-xs sm:text-sm ${reminderType === v ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
+                        className={`py-2.5 rounded-xl text-sm font-medium transition-all ${reminderType === v ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300 active:bg-white/[0.1]"}`}
                       >
                         {l}
                       </button>
@@ -1574,6 +1657,40 @@ export default function DashboardPage() {
                     <option value="monthly" className="bg-slate-800">每月</option>
                   </select>
                 </div>
+
+                {reminderFrequency === "weekly" && (
+                  <div>
+                    <label className="text-xs sm:text-sm text-slate-400 mb-2 block">选择周几</label>
+                    <div className="grid grid-cols-7 gap-1">
+                      {["一", "二", "三", "四", "五", "六", "日"].map((day, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setAnalysisWeekday(idx + 1)}
+                          className={`py-2 rounded-lg text-xs font-medium transition-all ${analysisWeekday === idx + 1 ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {reminderFrequency === "monthly" && (
+                  <div>
+                    <label className="text-xs sm:text-sm text-slate-400 mb-2 block">选择日期</label>
+                    <div className="grid grid-cols-7 gap-1 max-h-[180px] overflow-y-auto">
+                      {Array.from({length: 31}, (_, i) => i + 1).map((day) => (
+                        <button
+                          key={day}
+                          onClick={() => setAnalysisDayOfMonth(day)}
+                          className={`py-2 rounded-lg text-xs font-medium transition-all ${analysisDayOfMonth === day ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-xs sm:text-sm text-slate-400 mb-2 block">分析时间</label>
