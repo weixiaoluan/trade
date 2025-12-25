@@ -177,7 +177,6 @@ export default function DashboardPage() {
 
   // 错误弹窗控制 - 避免重复弹窗
   const [shownErrorTasks, setShownErrorTasks] = useState<Set<string>>(new Set());
-  const [hasShownBatchError, setHasShownBatchError] = useState(false);
 
   const getToken = useCallback(() => localStorage.getItem("token"), []);
 
@@ -266,6 +265,24 @@ export default function DashboardPage() {
     }
   }, [getToken]);
 
+  const fetchReports = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/reports`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setReports(data.reports || []);
+      }
+    } catch (error) {
+      console.error("获取报告列表失败:", error);
+    }
+  }, [getToken]);
+
   const fetchTasks = useCallback(async () => {
     const token = getToken();
     if (!token) return;
@@ -282,25 +299,35 @@ export default function DashboardPage() {
         // 检查是否有新变成失败的任务（之前是 running，现在是 failed）
         const failedTasks: string[] = [];
         const failedErrors: string[] = [];
+        // 检查是否有新完成的任务，需要刷新报告
+        let hasNewCompleted = false;
         
         Object.entries(newTasks).forEach(([symbol, task]: [string, any]) => {
           const prevTask = tasksRef.current[symbol];
           // 只有从 running/pending 变成 failed 才弹窗
+          // 必须有 prevTask 且之前是 running/pending 状态，才说明是刚刚失败的
           if (task.status === "failed" && 
               prevTask && 
-              (prevTask.status === "running" || prevTask.status === "pending") &&
-              !shownErrorTasks.has(symbol)) {
-            failedTasks.push(symbol);
-            if (task.error) {
-              failedErrors.push(`${symbol}: ${task.error}`);
+              (prevTask.status === "running" || prevTask.status === "pending")) {
+            // 检查是否已经弹过窗
+            if (!shownErrorTasks.has(symbol)) {
+              failedTasks.push(symbol);
+              if (task.error) {
+                failedErrors.push(`${symbol}: ${task.error}`);
+              }
             }
+          }
+          // 检查是否有新完成的任务
+          if (task.status === "completed" && 
+              prevTask && 
+              (prevTask.status === "running" || prevTask.status === "pending")) {
+            hasNewCompleted = true;
           }
         });
         
-        // 如果有新失败的任务，弹窗提示（只弹一次）
-        if (failedTasks.length > 0 && !hasShownBatchError) {
+        // 如果有新失败的任务，弹窗提示
+        if (failedTasks.length > 0) {
           setShownErrorTasks(prev => new Set([...Array.from(prev), ...failedTasks]));
-          setHasShownBatchError(true);
           
           if (failedTasks.length === 1) {
             showAlertModal(
@@ -318,29 +345,16 @@ export default function DashboardPage() {
         }
         
         setTasks(newTasks);
+        
+        // 如果有新完成的任务，立即刷新报告列表
+        if (hasNewCompleted) {
+          fetchReports();
+        }
       }
     } catch (error) {
       console.error("获取任务状态失败:", error);
     }
-  }, [getToken, shownErrorTasks, hasShownBatchError, showAlertModal]);
-
-  const fetchReports = useCallback(async () => {
-    const token = getToken();
-    if (!token) return;
-
-    try {
-      const response = await fetch(`${API_BASE}/api/reports`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setReports(data.reports || []);
-      }
-    } catch (error) {
-      console.error("获取报告列表失败:", error);
-    }
-  }, []);
+  }, [getToken, shownErrorTasks, showAlertModal, fetchReports]);
 
   const fetchQuotes = useCallback(async () => {
     const token = getToken();
@@ -829,7 +843,6 @@ export default function DashboardPage() {
       next.delete(symbol);
       return next;
     });
-    setHasShownBatchError(false);
 
     const existing = tasksRef.current[symbol];
     const optimisticTaskId = existing?.task_id || `optimistic-${Date.now()}`;
@@ -911,7 +924,6 @@ export default function DashboardPage() {
     
     // 重置错误状态
     setShownErrorTasks(new Set());
-    setHasShownBatchError(false);
     
     const symbols = Array.from(selectedItems);
     const prevTasks: Record<string, TaskStatus | undefined> = {};
@@ -1367,11 +1379,24 @@ export default function DashboardPage() {
                 const report = getReport(item.symbol);
                 const isSelected = selectedItems.has(item.symbol);
                 const quote = quotes[item.symbol];
+                
+                // 改进状态判断逻辑：
+                // 1. 如果任务正在运行且超过10分钟没更新，视为超时失败
+                // 2. 如果任务显示running但报告更新时间比任务更新时间新，说明已完成
+                // 3. 如果任务显示completed，以任务状态为准
+                const taskUpdatedAt = task?.updated_at ? new Date(task.updated_at).getTime() : 0;
+                const reportCreatedAt = report?.created_at ? new Date(report.created_at).getTime() : 0;
                 const isTaskTimeout = task?.status === "running" && task?.updated_at && 
-                  (Date.now() - new Date(task.updated_at).getTime() > 10 * 60 * 1000);
-                const isFailed = task?.status === "failed" || isTaskTimeout;
-                const isRunning = task?.status === "running" && !isTaskTimeout;
-                const isPending = task?.status === "pending";
+                  (Date.now() - taskUpdatedAt > 10 * 60 * 1000);
+                
+                // 如果报告比任务更新时间新，说明分析已完成（任务状态可能还没同步）
+                const isReportNewer = report && reportCreatedAt > taskUpdatedAt;
+                
+                // 最终状态判断
+                const isFailed = (task?.status === "failed" || isTaskTimeout) && !isReportNewer;
+                const isRunning = task?.status === "running" && !isTaskTimeout && !isReportNewer;
+                const isPending = task?.status === "pending" && !isReportNewer;
+                const isCompleted = task?.status === "completed" || isReportNewer;
 
                 return (
                   <div
@@ -1454,15 +1479,17 @@ export default function DashboardPage() {
                                 className={`flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm rounded-xl transition-all disabled:opacity-50 min-w-[90px] touch-target ${
                                   isFailed 
                                     ? "bg-rose-600/20 text-rose-400 active:bg-rose-600/30" 
+                                    : (isRunning || isPending)
+                                    ? "bg-amber-600/20 text-amber-400"
                                     : "bg-indigo-600/20 text-indigo-400 active:bg-indigo-600/30"
                                 }`}
                               >
-                                {isRunning ? (
+                                {(isRunning || isPending) ? (
                                   <Loader2 className="w-4 h-4 animate-spin" />
                                 ) : (
                                   <Play className="w-4 h-4" />
                                 )}
-                                {isRunning ? `${task?.progress}%` : isFailed ? "重新分析" : "分析"}
+                                {isRunning ? `${task?.progress}%` : isPending ? "排队中" : isFailed ? "重新分析" : "分析"}
                               </button>
                               
                               {report && (

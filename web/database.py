@@ -381,6 +381,10 @@ def db_update_watchlist_item(username: str, symbol: str, **kwargs) -> bool:
 
 def db_save_report(username: str, symbol: str, name: str, report_data: Dict) -> int:
     """保存报告"""
+    from datetime import timedelta
+    # 使用北京时间 (UTC+8)
+    beijing_now = datetime.utcnow() + timedelta(hours=8)
+    
     with get_db() as conn:
         cursor = conn.cursor()
         # 先删除旧报告
@@ -389,7 +393,7 @@ def db_save_report(username: str, symbol: str, name: str, report_data: Dict) -> 
         cursor.execute('''
             INSERT INTO reports (username, symbol, name, report_data, created_at)
             VALUES (?, ?, ?, ?, ?)
-        ''', (username, symbol, name, json.dumps(report_data, ensure_ascii=False), datetime.now().isoformat()))
+        ''', (username, symbol, name, json.dumps(report_data, ensure_ascii=False), beijing_now.isoformat()))
         return cursor.lastrowid
 
 
@@ -440,9 +444,13 @@ def db_delete_report(username: str, symbol: str) -> bool:
 
 def db_create_task(username: str, symbol: str, task_id: str) -> Dict:
     """创建分析任务"""
+    from datetime import timedelta
+    # 使用北京时间 (UTC+8)
+    beijing_now = datetime.utcnow() + timedelta(hours=8)
+    now = beijing_now.isoformat()
+    
     with get_db() as conn:
         cursor = conn.cursor()
-        now = datetime.now().isoformat()
         
         # 删除旧任务
         cursor.execute('DELETE FROM analysis_tasks WHERE username = ? AND symbol = ?', (username, symbol))
@@ -465,9 +473,13 @@ def db_create_task(username: str, symbol: str, task_id: str) -> Dict:
 
 def db_update_task(username: str, symbol: str, **kwargs) -> None:
     """更新任务状态"""
+    from datetime import timedelta
+    # 使用北京时间 (UTC+8)
+    beijing_now = datetime.utcnow() + timedelta(hours=8)
+    
     with get_db() as conn:
         cursor = conn.cursor()
-        kwargs['updated_at'] = datetime.now().isoformat()
+        kwargs['updated_at'] = beijing_now.isoformat()
         
         updates = []
         values = []
