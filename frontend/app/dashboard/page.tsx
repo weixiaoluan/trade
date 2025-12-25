@@ -175,6 +175,10 @@ export default function DashboardPage() {
   const [pushplusToken, setPushplusToken] = useState("");
   const [testPushLoading, setTestPushLoading] = useState(false);
 
+  // 错误弹窗控制 - 避免重复弹窗
+  const [shownErrorTasks, setShownErrorTasks] = useState<Set<string>>(new Set());
+  const [hasShownBatchError, setHasShownBatchError] = useState(false);
+
   const getToken = useCallback(() => localStorage.getItem("token"), []);
 
   const tasksRef = useRef(tasks);
@@ -273,12 +277,47 @@ export default function DashboardPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setTasks(data.tasks || {});
+        const newTasks = data.tasks || {};
+        
+        // 检查是否有新的失败任务
+        const failedTasks: string[] = [];
+        const failedErrors: string[] = [];
+        
+        Object.entries(newTasks).forEach(([symbol, task]: [string, any]) => {
+          if (task.status === "failed" && !shownErrorTasks.has(symbol)) {
+            failedTasks.push(symbol);
+            if (task.error) {
+              failedErrors.push(`${symbol}: ${task.error}`);
+            }
+          }
+        });
+        
+        // 如果有失败任务且未显示过，弹窗提示（只弹一次）
+        if (failedTasks.length > 0 && !hasShownBatchError) {
+          setShownErrorTasks(prev => new Set([...Array.from(prev), ...failedTasks]));
+          setHasShownBatchError(true);
+          
+          if (failedTasks.length === 1) {
+            showAlertModal(
+              "分析失败",
+              failedErrors[0] || `${failedTasks[0]} 分析失败，请稍后重试`,
+              "error"
+            );
+          } else {
+            showAlertModal(
+              "部分分析失败",
+              `${failedTasks.length} 个标的分析失败：${failedTasks.join(", ")}`,
+              "error"
+            );
+          }
+        }
+        
+        setTasks(newTasks);
       }
     } catch (error) {
       console.error("获取任务状态失败:", error);
     }
-  }, []);
+  }, [getToken, shownErrorTasks, hasShownBatchError, showAlertModal]);
 
   const fetchReports = useCallback(async () => {
     const token = getToken();
@@ -779,6 +818,14 @@ export default function DashboardPage() {
       return;
     }
 
+    // 重置该标的的错误状态
+    setShownErrorTasks(prev => {
+      const next = new Set(prev);
+      next.delete(symbol);
+      return next;
+    });
+    setHasShownBatchError(false);
+
     const existing = tasksRef.current[symbol];
     const optimisticTaskId = existing?.task_id || `optimistic-${Date.now()}`;
     setTasks((prev) => ({
@@ -856,6 +903,11 @@ export default function DashboardPage() {
       showPendingAlert();
       return;
     }
+    
+    // 重置错误状态
+    setShownErrorTasks(new Set());
+    setHasShownBatchError(false);
+    
     const symbols = Array.from(selectedItems);
     const prevTasks: Record<string, TaskStatus | undefined> = {};
     for (const sym of symbols) {
