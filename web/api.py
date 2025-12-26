@@ -935,6 +935,18 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
     后台执行完整的多 Agent 分析（复用原有分析逻辑）
     """
     try:
+        # 检查是否是场外基金（不支持技术分析）
+        pure_code = ticker.replace('.SZ', '').replace('.SS', '').replace('.SH', '')
+        if pure_code.isdigit() and len(pure_code) == 6:
+            # 场外基金代码通常以 0、1、2、3、4、5、6、7、8、9 开头
+            # ETF代码：51xxxx(上证), 15xxxx/16xxxx(深证)
+            # 场外基金：00xxxx, 01xxxx, 02xxxx 等
+            if pure_code.startswith(('00', '01', '02', '03', '04', '05', '06', '07', '08', '09')) and \
+               not pure_code.startswith(('000', '001', '002', '003')):  # 排除A股
+                # 可能是场外基金
+                if not pure_code.startswith(('51', '15', '16', '58', '56')):  # 排除ETF
+                    raise Exception(f"{ticker} 是场外基金，暂不支持技术分析。请添加对应的ETF代码进行分析。")
+        
         # === 第一阶段：数据获取 ===
         update_analysis_task(username, ticker, {
             'status': 'running',
