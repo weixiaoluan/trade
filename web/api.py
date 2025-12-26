@@ -2702,15 +2702,13 @@ def get_batch_quotes(symbols: list) -> dict:
         except Exception as e:
             print(f"A股批量行情获取失败: {e}")
     
-    # 获取场外基金净值数据
+    # 获取场外基金净值数据（剩余未匹配的代码）
     if codes:
         remaining_codes = list(codes)
+        print(f"[Quotes] 尝试获取场外基金数据，剩余代码: {remaining_codes}")
         for code in remaining_codes:
-            # 判断是否为场外基金（6位数字，非ETF/LOF/A股）
+            # 6位数字代码，尝试从天天基金获取
             if code.isdigit() and len(code) == 6:
-                # 排除场内代码
-                if code.startswith(('159', '16', '51', '56', '58', '52', '6', '0', '3')):
-                    continue
                 try:
                     # 使用天天基金接口获取实时估值
                     import requests
@@ -2729,14 +2727,18 @@ def get_batch_quotes(symbols: list) -> dict:
                             fund_info = json.loads(json_str.group(1))
                             symbol = code_map.get(code, code)
                             # gsz: 估算净值, gszzl: 估算涨跌幅
-                            quotes[symbol] = {
-                                'symbol': symbol,
-                                'current_price': safe_float(fund_info.get('gsz', fund_info.get('dwjz', 0))),
-                                'change_percent': safe_float(fund_info.get('gszzl', 0))
-                            }
-                            codes.discard(code)
+                            nav = safe_float(fund_info.get('gsz', fund_info.get('dwjz', 0)))
+                            change = safe_float(fund_info.get('gszzl', 0))
+                            if nav > 0:
+                                quotes[symbol] = {
+                                    'symbol': symbol,
+                                    'current_price': nav,
+                                    'change_percent': change
+                                }
+                                codes.discard(code)
+                                print(f"[Quotes] 场外基金 {code} 获取成功: 净值={nav}, 涨跌={change}%")
                 except Exception as e:
-                    print(f"场外基金 {code} 净值获取失败: {e}")
+                    print(f"[Quotes] 场外基金 {code} 净值获取失败: {e}")
     
     print(f"[Quotes] 返回 {len(quotes)} 条行情数据")
     return quotes
