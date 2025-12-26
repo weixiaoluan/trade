@@ -40,3 +40,8 @@ Thumbs.db
 # Reports and logs
 logs/*.log
 reports/*.json
+
+# Database and data files
+web/data/*.json
+web/data/*.db
+web/data/.migrated
