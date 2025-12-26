@@ -1220,7 +1220,8 @@ export default function DashboardPage() {
       case "stock": return "股票";
       case "etf": return "ETF";
       case "fund": return "基金";
-      default: return "";
+      case "lof": return "LOF";
+      default: return type || "";
     }
   };
 

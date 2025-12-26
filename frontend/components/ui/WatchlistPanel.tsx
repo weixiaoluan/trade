@@ -190,8 +190,10 @@ export function WatchlistPanel({
         return "ETF";
       case "fund":
         return "基金";
+      case "lof":
+        return "LOF";
       default:
-        return "";
+        return type || "";
     }
   };
 
