@@ -7,7 +7,7 @@ Database Module - SQLite
 
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 from contextlib import contextmanager
@@ -564,23 +564,25 @@ def db_add_reminder(username: str, reminder_id: str, symbol: str, name: str,
                     ai_analysis_weekday: int = None,
                     ai_analysis_day_of_month: int = None,
                     buy_price: float = None, sell_price: float = None) -> Dict:
-    """添加价格触发提醒（自动去重）"""
+    """添加价格触发提醒（24小时内相同字段去重）"""
     with get_db() as conn:
         cursor = conn.cursor()
         
-        # 检查是否已存在相同的提醒
+        # 检查24小时内是否已存在相同配置的提醒（不比较 analysis_time）
+        time_24h_ago = (datetime.now() - timedelta(hours=24)).isoformat()
         cursor.execute('''
             SELECT reminder_id FROM reminders 
             WHERE username = ? AND symbol = ? AND reminder_type = ? 
-            AND frequency = ? AND analysis_time = ?
+            AND frequency = ?
             AND (weekday IS ? OR (weekday IS NULL AND ? IS NULL))
             AND (day_of_month IS ? OR (day_of_month IS NULL AND ? IS NULL))
-        ''', (username, symbol, reminder_type, frequency, analysis_time, 
-              weekday, weekday, day_of_month, day_of_month))
+            AND created_at > ?
+        ''', (username, symbol, reminder_type, frequency,
+              weekday, weekday, day_of_month, day_of_month, time_24h_ago))
         
         existing = cursor.fetchone()
         if existing:
-            # 已存在相同提醒，返回 None 表示重复
+            # 24小时内已存在相同配置的提醒，返回 None 表示重复
             return None
         
         created_at = datetime.now().isoformat()
