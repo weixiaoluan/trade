@@ -503,6 +503,250 @@ def get_cn_etf_info(etf_code: str) -> str:
     }, ensure_ascii=False)
 
 
+def get_cn_lof_info(lof_code: str) -> str:
+    """
+    获取中国LOF基金的基本信息（使用东方财富API + akshare）
+    LOF基金是场内交易的开放式基金，代码以16开头
+    
+    Args:
+        lof_code: LOF代码 (如: 164701, 164824, 161226)
+    
+    Returns:
+        JSON 格式的LOF信息
+    """
+    import os
+    import re
+    os.environ['NO_PROXY'] = '*'
+    os.environ['no_proxy'] = '*'
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://quote.eastmoney.com/"
+    }
+    proxies = {"http": None, "https": None}
+    
+    # LOF基金都在深交所
+    market = "0"  # 深圳
+    exchange = "深交所"
+    
+    lof_name = f"LOF {lof_code}"
+    current_price = 0
+    prev_close = 0
+    change_pct = 0.0
+    day_high = 0
+    day_low = 0
+    high_52w = 0
+    low_52w = 0
+    volume = 0
+    amount = 0
+    fund_scale = None
+    nav = None  # 净值
+    
+    try:
+        # 1. 尝试使用 akshare 获取 LOF 实时行情（最准确）
+        try:
+            import akshare as ak
+            df_lof = ak.fund_lof_spot_em()
+            row = df_lof[df_lof['代码'] == lof_code]
+            if not row.empty:
+                row = row.iloc[0]
+                lof_name = row.get('名称', lof_name)
+                current_price = float(row.get('最新价', 0) or 0)
+                prev_close = float(row.get('昨收', 0) or 0)
+                change_pct = float(row.get('涨跌幅', 0) or 0)
+                day_high = float(row.get('最高', 0) or 0)
+                day_low = float(row.get('最低', 0) or 0)
+                volume = int(float(row.get('成交量', 0) or 0))
+                amount = float(row.get('成交额', 0) or 0)
+        except Exception as e:
+            print(f"akshare获取LOF数据失败: {e}")
+        
+        # 2. 如果akshare失败，使用东财API
+        if current_price == 0:
+            quote_url = f"https://push2.eastmoney.com/api/qt/stock/get"
+            quote_params = {
+                "secid": f"{market}.{lof_code}",
+                "fields": "f43,f44,f45,f46,f47,f48,f57,f58,f60,f116,f117,f169,f170,f171"
+            }
+            response = requests.get(quote_url, headers=headers, params=quote_params, timeout=10, proxies=proxies)
+            
+            if response.status_code == 200:
+                data = response.json().get("data", {})
+                if data:
+                    lof_name = data.get("f58", lof_name)
+                    raw_price = data.get("f43")
+                    if raw_price and raw_price > 0:
+                        current_price = raw_price / 1000
+                    raw_prev = data.get("f60")
+                    if raw_prev and raw_prev > 0:
+                        prev_close = raw_prev / 1000
+                    raw_high = data.get("f44")
+                    if raw_high and raw_high > 0:
+                        day_high = raw_high / 1000
+                    raw_low = data.get("f45")
+                    if raw_low and raw_low > 0:
+                        day_low = raw_low / 1000
+                    raw_change = data.get("f170")
+                    if raw_change:
+                        change_pct = raw_change / 100
+                    volume = data.get("f47", 0)
+                    amount = data.get("f48", 0)
+                    raw_cap = data.get("f116") or data.get("f117")
+                    if raw_cap and raw_cap > 0:
+                        fund_scale = raw_cap
+        
+        # 3. 获取基金净值信息
+        fund_detail_url = f"https://fundgz.1234567.com.cn/js/{lof_code}.js"
+        try:
+            fund_resp = requests.get(fund_detail_url, headers=headers, timeout=5, proxies=proxies)
+            if fund_resp.status_code == 200:
+                # 解析基金名称
+                name_match = re.search(r'"name":"([^"]+)"', fund_resp.text)
+                if name_match:
+                    lof_name = name_match.group(1)
+                # 解析净值
+                dwjz_match = re.search(r'"dwjz":"([\d.]+)"', fund_resp.text)
+                if dwjz_match:
+                    nav = float(dwjz_match.group(1))
+                # 解析估值
+                gsz_match = re.search(r'"gsz":"([\d.]+)"', fund_resp.text)
+                if gsz_match and nav is None:
+                    nav = float(gsz_match.group(1))
+        except:
+            pass
+        
+        # 4. 获取52周高低点 (通过K线数据)
+        kline_url = f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        kline_params = {
+            "secid": f"{market}.{lof_code}",
+            "fields1": "f1,f2,f3,f4,f5,f6",
+            "fields2": "f51,f52,f53,f54,f55,f56",
+            "klt": "101",
+            "fqt": "1",
+            "end": "20500101",
+            "lmt": "252"
+        }
+        try:
+            kline_resp = requests.get(kline_url, headers=headers, params=kline_params, timeout=10, proxies=proxies)
+            if kline_resp.status_code == 200:
+                kline_data = kline_resp.json().get("data", {})
+                if kline_data:
+                    klines = kline_data.get("klines", [])
+                    if klines:
+                        highs = []
+                        lows = []
+                        for kline in klines:
+                            parts = kline.split(",")
+                            if len(parts) >= 5:
+                                try:
+                                    highs.append(float(parts[3]))
+                                    lows.append(float(parts[4]))
+                                except:
+                                    pass
+                        if highs:
+                            high_52w = max(highs)
+                        if lows:
+                            low_52w = min(lows)
+        except:
+            pass
+        
+        # 如果没有获取到52周数据，用当日数据估算
+        if high_52w == 0 and current_price > 0:
+            high_52w = current_price * 1.3
+        if low_52w == 0 and current_price > 0:
+            low_52w = current_price * 0.7
+        
+        # 格式化基金规模
+        fund_scale_str = None
+        if fund_scale:
+            if fund_scale >= 1e12:
+                fund_scale_str = f"¥{fund_scale/1e12:.2f}万亿"
+            elif fund_scale >= 1e8:
+                fund_scale_str = f"¥{fund_scale/1e8:.2f}亿"
+            elif fund_scale >= 1e4:
+                fund_scale_str = f"¥{fund_scale/1e4:.2f}万"
+            else:
+                fund_scale_str = f"¥{fund_scale:.0f}"
+        
+        # 格式化成交额
+        amount_str = None
+        if amount:
+            if amount >= 1e8:
+                amount_str = f"¥{amount/1e8:.2f}亿"
+            elif amount >= 1e4:
+                amount_str = f"¥{amount/1e4:.2f}万"
+            else:
+                amount_str = f"¥{amount:.0f}"
+        
+        return json.dumps({
+            "status": "success",
+            "ticker": lof_code,
+            "basic_info": {
+                "name": lof_name,
+                "symbol": lof_code,
+                "exchange": exchange,
+                "currency": "CNY",
+                "quote_type": "LOF",  # 标记为LOF类型
+            },
+            "price_info": {
+                "current_price": current_price,
+                "previous_close": prev_close,
+                "day_high": day_high,
+                "day_low": day_low,
+                "52_week_high": high_52w,
+                "52_week_low": low_52w,
+                "change_pct": change_pct,
+            },
+            "volume_info": {
+                "volume": volume,
+                "amount": amount,
+                "amount_str": amount_str,
+            },
+            "valuation": {
+                "market_cap": fund_scale,
+                "market_cap_str": fund_scale_str,
+                "pe_ratio": None,  # LOF 没有 P/E
+                "nav": nav,  # 净值
+            },
+            "etf_specific": {  # 保持兼容性
+                "nav": nav,
+                "discount_rate": None,
+                "tracking_index": lof_name.replace("LOF", "").replace("lof", "").strip(),
+            },
+            "source": "eastmoney",
+            "timestamp": datetime.now().isoformat()
+        }, ensure_ascii=False)
+        
+    except Exception as e:
+        print(f"获取LOF信息失败: {e}")
+    
+    # 返回基本信息
+    return json.dumps({
+        "status": "success",
+        "ticker": lof_code,
+        "basic_info": {
+            "name": lof_name,
+            "symbol": lof_code,
+            "exchange": exchange,
+            "currency": "CNY",
+            "quote_type": "LOF",
+        },
+        "price_info": {
+            "current_price": current_price,
+            "previous_close": prev_close,
+            "52_week_high": high_52w,
+            "52_week_low": low_52w,
+        },
+        "valuation": {
+            "market_cap": None,
+            "pe_ratio": None,
+            "nav": nav,
+        },
+        "source": "estimated",
+        "timestamp": datetime.now().isoformat()
+    }, ensure_ascii=False)
+
+
 def search_ticker(query: str) -> str:
     """
     智能搜索和识别标的代码（支持股票、ETF、基金、期货等多市场）
@@ -639,8 +883,26 @@ def search_ticker(query: str) -> str:
     }, ensure_ascii=False)
 
 
+def is_cn_lof(code: str) -> bool:
+    """判断是否为中国LOF基金代码（场内交易的开放式基金）"""
+    if not code.isdigit() or len(code) != 6:
+        return False
+    # 深交所LOF基金: 16xxxx (如 161226 国投白银LOF, 164701 汇添富黄金LOF, 164824 印度基金LOF)
+    return code.startswith('16')
+
+
+def is_cn_etf(code: str) -> bool:
+    """判断是否为中国场内ETF代码（不包括LOF）"""
+    if not code.isdigit() or len(code) != 6:
+        return False
+    # 深交所场内ETF: 159xxx
+    # 上交所场内ETF: 510xxx, 511xxx, 512xxx, 513xxx, 515xxx, 516xxx, 517xxx, 518xxx, 520xxx, 560xxx, 561xxx, 562xxx, 563xxx, 588xxx
+    etf_prefixes = ('159', '510', '511', '512', '513', '515', '516', '517', '518', '520', '560', '561', '562', '563', '588')
+    return code.startswith(etf_prefixes)
+
+
 def is_cn_onexchange_etf(code: str) -> bool:
-    """判断是否为中国场内ETF/LOF代码"""
+    """判断是否为中国场内ETF/LOF代码（包括ETF和LOF）"""
     if not code.isdigit() or len(code) != 6:
         return False
     # 深交所场内ETF: 159xxx
@@ -1254,8 +1516,11 @@ def get_stock_info(ticker: str) -> str:
     """
     original_ticker = ticker
     
-    # 如果是中国场内ETF，直接使用东财接口（跳过yfinance）
-    if is_cn_onexchange_etf(ticker):
+    # 如果是中国LOF基金，使用专门的LOF接口
+    if is_cn_lof(ticker):
+        return get_cn_lof_info(ticker)
+    # 如果是中国场内ETF（不包括LOF），使用ETF接口
+    elif is_cn_etf(ticker):
         return get_cn_etf_info(ticker)
     # 如果是中国场外基金，直接使用东财接口
     elif is_cn_offexchange_fund(ticker):
@@ -1273,7 +1538,13 @@ def get_stock_info(ticker: str) -> str:
             if is_cn_a_stock(original_ticker):
                 return get_cn_a_stock_info(original_ticker)
             if original_ticker.isdigit() and len(original_ticker) == 6:
-                return get_cn_etf_info(original_ticker)
+                # 根据代码前缀判断类型
+                if is_cn_lof(original_ticker):
+                    return get_cn_lof_info(original_ticker)
+                elif is_cn_etf(original_ticker):
+                    return get_cn_etf_info(original_ticker)
+                else:
+                    return get_cn_etf_info(original_ticker)  # 默认尝试ETF
             return json.dumps({
                 "status": "error",
                 "ticker": ticker,

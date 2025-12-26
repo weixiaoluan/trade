@@ -4,6 +4,8 @@ import { useState, useEffect, memo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { FileText, AlertCircle, ArrowLeft, ExternalLink } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { API_BASE } from "@/lib/config";
 
@@ -430,12 +432,13 @@ export default function ReportPage() {
               {/* Report Content */}
               <div className="p-4 sm:p-6 md:p-8">
                 <div 
-                  className="prose prose-invert prose-sm max-w-none overflow-y-auto scrollbar-thin whitespace-pre-wrap" 
+                  className="markdown-content prose prose-invert prose-sm max-w-none overflow-y-auto scrollbar-thin" 
                   style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '300px' }}
-                  dangerouslySetInnerHTML={{ 
-                    __html: (result.report || '报告生成中...').replace(/\n/g, '<br/>') 
-                  }}
-                />
+                >
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {result.report || '报告生成中...'}
+                  </ReactMarkdown>
+                </div>
               </div>
             </div>
           </div>
