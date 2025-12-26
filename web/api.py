@@ -429,16 +429,36 @@ async def add_watchlist_item(
 def update_watchlist_name(username: str, symbol: str):
     """后台任务：更新自选标的的名称"""
     try:
-        from tools.data_fetcher import get_stock_info
+        from tools.data_fetcher import get_stock_info, is_cn_etf, is_cn_lof, is_cn_a_stock, is_cn_offexchange_fund
         from web.auth import update_watchlist_item
+        
+        # 获取股票信息
         stock_info_result = get_stock_info(symbol)
         info_dict = json.loads(stock_info_result)
+        
         if info_dict.get('status') == 'success':
             basic_info = info_dict.get('basic_info', {})
             name = basic_info.get('name', '')
-            if name and name != symbol:
+            
+            # 如果名称为空或者是默认名称，尝试其他方式获取
+            if not name or name == symbol or name.startswith('股票 ') or name.startswith('ETF ') or name.startswith('基金 ') or name.startswith('LOF '):
+                # 尝试从 fund_info 获取（场外基金）
+                fund_info = info_dict.get('fund_info', {})
+                if fund_info.get('name'):
+                    name = fund_info.get('name')
+                # 尝试从 etf_specific 获取
+                etf_info = info_dict.get('etf_specific', {})
+                if etf_info.get('tracking_index') and not name:
+                    name = etf_info.get('tracking_index')
+            
+            # 如果获取到有效名称，更新数据库
+            if name and name != symbol and not name.startswith('股票 ') and not name.startswith('ETF ') and not name.startswith('基金 ') and not name.startswith('LOF '):
                 update_watchlist_item(username, symbol, name=name)
                 print(f"[Watchlist] 更新 {symbol} 名称为: {name}")
+            else:
+                print(f"[Watchlist] {symbol} 未获取到有效名称，保持原样")
+        else:
+            print(f"[Watchlist] 获取 {symbol} 信息失败: {info_dict.get('message', '未知错误')}")
     except Exception as e:
         print(f"[Watchlist] 获取 {symbol} 名称失败: {e}")
 
