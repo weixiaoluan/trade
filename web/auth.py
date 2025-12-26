@@ -242,6 +242,11 @@ def remove_from_watchlist(username: str, symbol: str) -> bool:
     return db_remove_from_watchlist(username, symbol)
 
 
+def update_watchlist_item(username: str, symbol: str, **kwargs) -> bool:
+    """更新自选项信息"""
+    return db_update_watchlist_item(username, symbol, **kwargs)
+
+
 def batch_add_to_watchlist(username: str, items: list) -> Dict:
     """批量添加到自选列表"""
     added = []

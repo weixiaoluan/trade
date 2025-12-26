@@ -379,9 +379,10 @@ async def get_watchlist(authorization: str = Header(None)):
 @app.post("/api/watchlist")
 async def add_watchlist_item(
     item: WatchlistItem,
+    background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
-    """添加自选 - 快速添加，名称异步获取"""
+    """添加自选 - 快速添加，名称后台异步获取"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -405,11 +406,11 @@ async def add_watchlist_item(
             item_data['type'] = 'stock'
         else:
             item_data['type'] = 'fund'
-        # 名称暂时用代码，后续通过行情接口获取
+        # 名称暂时用代码
         if not item_data.get('name'):
             item_data['name'] = symbol
     else:
-        # 非中国标的，也先快速添加
+        # 非中国标的
         if not item_data.get('type'):
             item_data['type'] = 'stock'
         if not item_data.get('name'):
@@ -418,9 +419,28 @@ async def add_watchlist_item(
     success = add_to_watchlist(user['username'], item_data)
     
     if success:
+        # 后台异步获取名称
+        background_tasks.add_task(update_watchlist_name, user['username'], symbol)
         return {"status": "success", "message": "添加成功", "name": item_data.get('name', '')}
     else:
         return {"status": "error", "message": "该标的已在自选列表中"}
+
+
+def update_watchlist_name(username: str, symbol: str):
+    """后台任务：更新自选标的的名称"""
+    try:
+        from tools.data_fetcher import get_stock_info
+        from web.auth import update_watchlist_item
+        stock_info_result = get_stock_info(symbol)
+        info_dict = json.loads(stock_info_result)
+        if info_dict.get('status') == 'success':
+            basic_info = info_dict.get('basic_info', {})
+            name = basic_info.get('name', '')
+            if name and name != symbol:
+                update_watchlist_item(username, symbol, name=name)
+                print(f"[Watchlist] 更新 {symbol} 名称为: {name}")
+    except Exception as e:
+        print(f"[Watchlist] 获取 {symbol} 名称失败: {e}")
 
 
 @app.delete("/api/watchlist/{symbol}")
@@ -1578,6 +1598,7 @@ def generate_predictions(
 ) -> list:
     """
     基于技术指标生成多周期预测
+    每个标的根据实际数据动态计算，不使用固定值
     """
     ind = indicators.get("indicators", indicators)
     if isinstance(ind, list):
@@ -1597,11 +1618,23 @@ def generate_predictions(
     
     kdj = ind.get("kdj", {})
     kdj_status = kdj.get("status", "neutral") if isinstance(kdj, dict) else "neutral"
+    kdj_k = kdj.get("k", 50) if isinstance(kdj, dict) else 50
+    kdj_d = kdj.get("d", 50) if isinstance(kdj, dict) else 50
     
     ma_trend = ind.get("ma_trend", "unknown")
     
     bb = ind.get("bollinger_bands", {})
     bb_position = bb.get("position", 0) if isinstance(bb, dict) else 0
+    bb_width = bb.get("width", 0.05) if isinstance(bb, dict) else 0.05  # 布林带宽度反映波动率
+    
+    # 获取ATR（平均真实波幅）作为波动率参考
+    atr = ind.get("atr", {})
+    atr_value = atr.get("value", 0) if isinstance(atr, dict) else 0
+    atr_pct = atr.get("pct", 2.0) if isinstance(atr, dict) else 2.0  # ATR占价格的百分比
+    
+    # 获取ADX（趋势强度）
+    adx = ind.get("adx", {})
+    adx_value = adx.get("value", 25) if isinstance(adx, dict) else 25
     
     # 获取当前价格和支撑阻力位
     latest_price = ind.get("latest_price", stock_data.get("summary", {}).get("latest_price", 1.0))
@@ -1621,14 +1654,17 @@ def generate_predictions(
     if isinstance(nearest_resistance, str):
         nearest_resistance = latest_price * 1.05
     
+    # 计算动态波动率基准（基于ATR和布林带宽度）
+    base_volatility = max(atr_pct / 100, bb_width, 0.01)  # 至少1%
+    
     # 计算综合得分 (-100 到 100)
     score = 0
     
     # RSI 贡献 (-30 到 30)
     if rsi_value < 30:
-        score += 25  # 超卖，看涨
+        score += 25 + (30 - rsi_value)  # 越超卖越看涨
     elif rsi_value > 70:
-        score -= 25  # 超买，看跌
+        score -= 25 + (rsi_value - 70)  # 越超买越看跌
     else:
         score += (50 - rsi_value) * 0.5  # 中性区间
     
@@ -1637,22 +1673,32 @@ def generate_predictions(
         score += 20
     elif macd_trend == "bearish":
         score -= 20
-    if macd_histogram > 0:
-        score += 5
-    elif macd_histogram < 0:
-        score -= 5
+    if isinstance(macd_histogram, (int, float)):
+        if macd_histogram > 0:
+            score += min(macd_histogram * 2, 5)
+        elif macd_histogram < 0:
+            score += max(macd_histogram * 2, -5)
     
     # KDJ 贡献 (-20 到 20)
-    if kdj_status == "oversold":
-        score += 15
-    elif kdj_status == "overbought":
-        score -= 15
+    if kdj_status == "oversold" or kdj_k < 20:
+        score += 15 + (20 - kdj_k) * 0.5
+    elif kdj_status == "overbought" or kdj_k > 80:
+        score -= 15 + (kdj_k - 80) * 0.5
+    # 金叉死叉
+    if kdj_k > kdj_d:
+        score += 5
+    else:
+        score -= 5
     
     # 均线趋势贡献 (-15 到 15)
     if ma_trend == "bullish_alignment":
         score += 15
     elif ma_trend == "bearish_alignment":
         score -= 15
+    elif ma_trend == "bullish":
+        score += 10
+    elif ma_trend == "bearish":
+        score -= 10
     
     # 布林带位置贡献 (-10 到 10)
     if bb_position < -50:
@@ -1660,43 +1706,45 @@ def generate_predictions(
     elif bb_position > 50:
         score -= 10  # 接近上轨，看跌
     
+    # ADX趋势强度调整（趋势越强，预测越可靠）
+    trend_strength_factor = min(adx_value / 25, 1.5)  # ADX>25表示强趋势
+    
     # 根据得分生成预测
-    def get_trend_and_target(base_score, period_factor, volatility=0.02):
-        adjusted_score = base_score * period_factor
+    def get_trend_and_target(base_score, period_factor, period_volatility):
+        adjusted_score = base_score * period_factor * trend_strength_factor
         
         if adjusted_score > 30:
             trend = "bullish"
-            # 计算目标涨幅
-            target_pct = min(adjusted_score * volatility, 50)
+            target_pct = min(adjusted_score * period_volatility, 50)
         elif adjusted_score < -30:
             trend = "bearish"
-            target_pct = max(adjusted_score * volatility, -50)
+            target_pct = max(adjusted_score * period_volatility, -50)
         else:
             trend = "neutral"
-            target_pct = adjusted_score * volatility * 0.5
+            target_pct = adjusted_score * period_volatility * 0.5
         
-        # 置信度
+        # 置信度 - 基于得分绝对值和ADX
         abs_score = abs(adjusted_score)
-        if abs_score > 50:
+        if abs_score > 50 and adx_value > 30:
             confidence = "high"
-        elif abs_score > 25:
+        elif abs_score > 35 or (abs_score > 25 and adx_value > 25):
             confidence = "medium"
         else:
             confidence = "low"
         
         return trend, target_pct, confidence
     
-    # 生成各周期预测
+    # 生成各周期预测 - 波动率根据实际数据动态计算
     predictions = []
     periods = [
-        ("1D", "明日", 0.3, 0.005),
-        ("3D", "3天", 0.5, 0.01),
-        ("1W", "1周", 0.7, 0.02),
-        ("15D", "15天", 0.85, 0.03),
-        ("1M", "1个月", 1.0, 0.05),
-        ("3M", "3个月", 1.2, 0.10),
-        ("6M", "6个月", 1.3, 0.15),
-        ("1Y", "1年", 1.5, 0.25),
+        ("1D", "明日", 0.3, base_volatility * 0.3),
+        ("3D", "3天", 0.5, base_volatility * 0.5),
+        ("1W", "1周", 0.7, base_volatility * 1.0),
+        ("15D", "15天", 0.85, base_volatility * 1.5),
+        ("1M", "1个月", 1.0, base_volatility * 2.5),
+        ("3M", "3个月", 1.2, base_volatility * 5.0),
+        ("6M", "6个月", 1.3, base_volatility * 7.5),
+        ("1Y", "1年", 1.5, base_volatility * 12.0),
     ]
     
     for period, label, factor, volatility in periods:
