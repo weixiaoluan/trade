@@ -147,7 +147,9 @@ export default function DashboardPage() {
   const [aiAnalysisDayOfMonth, setAiAnalysisDayOfMonth] = useState<number>(1);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  // 移动端默认10条，桌面端默认50条
+  const [pageSize, setPageSize] = useState(10);
+  const [isMobile, setIsMobile] = useState(true);
 
   const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
 
@@ -184,6 +186,23 @@ export default function DashboardPage() {
   useEffect(() => {
     tasksRef.current = tasks;
   }, [tasks]);
+
+  // 检测移动端并设置合适的分页大小
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // 只在首次加载时设置默认分页大小
+      if (mobile && pageSize === 50) {
+        setPageSize(10);
+      } else if (!mobile && pageSize === 10) {
+        setPageSize(50);
+      }
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const showAlertModal = useCallback(
     (title: string, message: string, type: "warning" | "info" | "success" | "error" = "warning") => {
@@ -1021,6 +1040,11 @@ export default function DashboardPage() {
     router.push(`/report/${encodeURIComponent(symbol)}`);
   }, [canUseFeatures, router, showPendingAlert]);
 
+  // 预加载报告页面
+  const prefetchReport = useCallback((symbol: string) => {
+    router.prefetch(`/report/${encodeURIComponent(symbol)}`);
+  }, [router]);
+
   const openReminderModal = useCallback((symbol: string, name?: string) => {
     if (!canUseFeatures()) {
       showPendingAlert();
@@ -1496,6 +1520,7 @@ export default function DashboardPage() {
                                 <div className="flex flex-col">
                                   <button
                                     onClick={() => handleViewReport(item.symbol)}
+                                    onTouchStart={() => prefetchReport(item.symbol)}
                                     className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600/20 text-emerald-400 text-sm rounded-xl min-w-[90px] touch-target active:bg-emerald-600/30"
                                   >
                                     <FileText className="w-4 h-4" />
@@ -1635,7 +1660,8 @@ export default function DashboardPage() {
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => handleViewReport(item.symbol)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600/20 text-emerald-400 text-xs rounded-lg"
+                              onMouseEnter={() => prefetchReport(item.symbol)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600/20 text-emerald-400 text-xs rounded-lg hover:bg-emerald-600/30 transition-colors"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               报告
@@ -1684,6 +1710,8 @@ export default function DashboardPage() {
                   onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
                   className="px-2 py-1 bg-white/[0.05] border border-white/[0.1] rounded text-slate-300 focus:outline-none text-xs sm:text-sm"
                 >
+                  <option value={10} className="bg-slate-800">10条/页</option>
+                  <option value={20} className="bg-slate-800">20条/页</option>
                   <option value={50} className="bg-slate-800">50条/页</option>
                   <option value={100} className="bg-slate-800">100条/页</option>
                 </select>
@@ -1696,7 +1724,7 @@ export default function DashboardPage() {
                 >
                   上一页
                 </button>
-                <span className="text-xs sm:text-sm text-slate-500">{currentPage}/{Math.ceil(watchlist.length / pageSize)}</span>
+                <span className="text-xs sm:text-sm text-slate-500">{currentPage}/{Math.ceil(watchlist.length / pageSize) || 1}</span>
                 <button
                   onClick={() => setCurrentPage(p => Math.min(Math.ceil(watchlist.length / pageSize), p + 1))}
                   disabled={currentPage >= Math.ceil(watchlist.length / pageSize)}
