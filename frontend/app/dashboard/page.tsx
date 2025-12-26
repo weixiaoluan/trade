@@ -2149,13 +2149,18 @@ export default function DashboardPage() {
 
                     <div>
                       <label className="text-xs text-slate-400 mb-1.5 block">分析时间</label>
-                      <input
-                        type="time"
+                      <select
                         value={aiAnalysisTime}
                         onChange={(e) => setAiAnalysisTime(e.target.value)}
-                        onClick={openNativeTimePicker}
                         className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
-                      />
+                      >
+                        {Array.from({ length: 24 }, (_, h) => 
+                          ["00", "30"].map(m => {
+                            const time = `${h.toString().padStart(2, "0")}:${m}`;
+                            return <option key={time} value={time}>{time}</option>;
+                          })
+                        ).flat()}
+                      </select>
                     </div>
                   </div>
                 </div>
