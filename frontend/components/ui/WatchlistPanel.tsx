@@ -54,10 +54,14 @@ export function WatchlistPanel({
         body: JSON.stringify({ symbol: addSymbol.trim().toUpperCase() }),
       });
 
-      if (response.ok) {
+      const data = await response.json();
+      
+      if (response.ok && data.status === "success") {
         setAddSymbol("");
         setShowAddModal(false);
         onRefresh();
+      } else if (data.status === "error") {
+        alert(data.message || "添加失败");
       }
     } catch (error) {
       console.error("添加自选失败:", error);
@@ -151,7 +155,13 @@ export function WatchlistPanel({
       });
 
       if (response.ok) {
+        const data = await response.json();
         onRefresh();
+        
+        // 如果有重复的标的，显示提示
+        if (data.skipped && data.skipped.length > 0) {
+          alert(`以下标的已在自选列表中，已跳过：\n${data.skipped.join("、")}\n\n成功添加 ${data.added?.length || 0} 个标的`);
+        }
       }
     } catch (error) {
       console.error("批量添加失败:", error);

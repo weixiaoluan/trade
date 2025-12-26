@@ -775,9 +775,18 @@ export default function DashboardPage() {
       });
 
       if (response.ok) {
+        const data = await response.json();
         setShowOcrModal(false);
         setOcrResults([]);
         fetchWatchlist();
+        
+        // 如果有重复的标的，显示提示
+        if (data.skipped && data.skipped.length > 0) {
+          showAlertModal(
+            "部分标的已存在",
+            `以下标的已在自选列表中，已跳过：\n${data.skipped.join("、")}\n\n成功添加 ${data.added?.length || 0} 个标的`
+          );
+        }
       }
     } catch (error) {
       console.error("批量添加失败:", error);
