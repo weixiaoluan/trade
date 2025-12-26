@@ -175,10 +175,10 @@ export function StockCard({
             <div className="bg-gradient-to-br from-slate-800/60 to-slate-800/30 rounded-lg p-2.5 sm:p-3 border border-white/[0.05] hover:border-white/[0.1] transition-colors">
               <div className="flex items-center gap-1 sm:gap-1.5 mb-1 sm:mb-1.5">
                 <BarChart2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-500" />
-                <span className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-widest font-bold">{assetType === 'ETF' ? '净值/NAV' : 'P/E'}</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-widest font-bold">{(assetType === 'ETF' || assetType === 'LOF') ? '净值/NAV' : 'P/E'}</span>
               </div>
               <div className="font-mono text-xs sm:text-sm text-white font-semibold">
-                {assetType === 'ETF' 
+                {(assetType === 'ETF' || assetType === 'LOF')
                   ? (nav ? `¥${nav.toFixed(4)}` : '—')
                   : (pe && pe > 0 ? pe.toFixed(2) : '—')
                 }
