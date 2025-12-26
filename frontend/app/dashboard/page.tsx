@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -825,54 +826,36 @@ export default function DashboardPage() {
   };
 
   const handleDeleteSingle = useCallback((symbol: string) => {
-    console.log('[DELETE] 开始删除:', symbol, Date.now());
-    
     if (!canUseFeatures()) {
       showPendingAlert();
       return;
     }
     
-    // 检查是否正在分析中（使用 ref 避免依赖 tasks）
+    // 检查是否正在分析中
     const task = tasksRef.current[symbol];
     if (task && (task.status === "running" || task.status === "pending")) {
       showAlertModal("无法删除", `${symbol} 正在分析中，请等待分析完成后再删除`, "warning");
       return;
     }
     
-    console.log('[DELETE] 开始更新UI:', Date.now());
-    
-    // 乐观更新：立即从列表中移除
-    setWatchlist(prev => {
-      console.log('[DELETE] setWatchlist 执行:', Date.now());
-      return prev.filter(item => item.symbol !== symbol);
-    });
-    setSelectedItems(prev => {
-      const next = new Set(prev);
-      next.delete(symbol);
-      return next;
+    // 使用 flushSync 强制同步更新 UI，确保立即响应
+    flushSync(() => {
+      setWatchlist(prev => prev.filter(item => item.symbol !== symbol));
+      setSelectedItems(prev => {
+        const next = new Set(prev);
+        next.delete(symbol);
+        return next;
+      });
     });
     
-    console.log('[DELETE] UI更新完成，开始API请求:', Date.now());
-    
-    // 后台异步删除，不等待结果
-    fetch(
-      `${API_BASE}/api/watchlist/${encodeURIComponent(symbol)}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${getToken()}` },
-      }
-    ).then(response => {
-      console.log('[DELETE] API响应:', Date.now());
-      if (!response.ok) {
-        fetchWatchlist();
-        showAlertModal("删除失败", "请稍后重试", "error");
-      }
-    }).catch(error => {
-      console.error("删除失败:", error);
-      fetchWatchlist();
-      showAlertModal("删除失败", "网络错误，请稍后重试", "error");
+    // 后台异步删除
+    fetch(`${API_BASE}/api/watchlist/${encodeURIComponent(symbol)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }).catch(() => {
+      // 静默失败，下次刷新会恢复
     });
-  }, [canUseFeatures, fetchWatchlist, getToken, showPendingAlert, showAlertModal]);
+  }, [canUseFeatures, getToken, showPendingAlert, showAlertModal]);
 
   const handleBatchDelete = useCallback(() => {
     if (selectedItems.size === 0) return;
@@ -882,7 +865,7 @@ export default function DashboardPage() {
       return;
     }
 
-    // 检查是否有正在分析中的标的（使用 ref）
+    // 检查是否有正在分析中的标的
     const analyzingSymbols = Array.from(selectedItems).filter(symbol => {
       const task = tasksRef.current[symbol];
       return task && (task.status === "running" || task.status === "pending");
@@ -897,12 +880,14 @@ export default function DashboardPage() {
       return;
     }
 
-    // 乐观更新：立即从列表中移除
+    // 使用 flushSync 强制同步更新 UI
     const symbolsToDelete = Array.from(selectedItems);
-    setWatchlist(prev => prev.filter(item => !selectedItems.has(item.symbol)));
-    setSelectedItems(new Set());
+    flushSync(() => {
+      setWatchlist(prev => prev.filter(item => !selectedItems.has(item.symbol)));
+      setSelectedItems(new Set());
+    });
 
-    // 后台异步删除，不等待结果
+    // 后台异步删除
     fetch(`${API_BASE}/api/watchlist/batch-delete`, {
       method: "POST",
       headers: {
@@ -910,19 +895,10 @@ export default function DashboardPage() {
         Authorization: `Bearer ${getToken()}`,
       },
       body: JSON.stringify(symbolsToDelete),
-    }).then(response => {
-      if (!response.ok) {
-        // 删除失败，恢复列表
-        fetchWatchlist();
-        showAlertModal("删除失败", "请稍后重试", "error");
-      }
-    }).catch(error => {
-      console.error("批量删除失败:", error);
-      // 网络错误，恢复列表
-      fetchWatchlist();
-      showAlertModal("删除失败", "网络错误，请稍后重试", "error");
+    }).catch(() => {
+      // 静默失败
     });
-  }, [canUseFeatures, fetchWatchlist, getToken, selectedItems, showPendingAlert, showAlertModal]);
+  }, [canUseFeatures, getToken, selectedItems, showPendingAlert, showAlertModal]);
 
   const handleAnalyzeSingle = useCallback(async (symbol: string) => {
     if (!canUseFeatures()) {
