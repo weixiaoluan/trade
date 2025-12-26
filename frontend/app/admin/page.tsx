@@ -296,7 +296,7 @@ export default function AdminPage() {
                     <td className="px-6 py-4">{getRoleBadge(user.role)}</td>
                     <td className="px-6 py-4">{getStatusBadge(user.status)}</td>
                     <td className="px-6 py-4 text-sm text-slate-400">
-                      {new Date(user.created_at).toLocaleString("zh-CN")}
+                      {new Date(user.created_at).toLocaleString("zh-CN", { hour12: false })}
                     </td>
                     <td className="px-6 py-4 text-right">
                       {user.role !== "admin" && (

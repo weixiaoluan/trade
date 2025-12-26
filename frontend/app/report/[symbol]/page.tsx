@@ -225,7 +225,7 @@ export default function ReportPage() {
   <div class="container">
     <div class="header">
       <h1>${result.ticker} - ${result.name}</h1>
-      <p class="subtitle">生成时间: ${new Date().toLocaleString('zh-CN')} | AI 多维度分析报告</p>
+      <p class="subtitle">生成时间: ${new Date().toLocaleString('zh-CN', { hour12: false })} | AI 多维度分析报告</p>
     </div>
     <div class="card">
       <h2>📊 详细分析报告</h2>

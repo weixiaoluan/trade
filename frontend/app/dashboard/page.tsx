@@ -1610,7 +1610,7 @@ export default function DashboardPage() {
                                     报告
                                   </button>
                                   <span className="text-[10px] text-slate-500 text-center mt-1">
-                                    {new Date(report.created_at).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                    {new Date(report.created_at).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}
                                   </span>
                                 </div>
                               )}
@@ -1755,7 +1755,7 @@ export default function DashboardPage() {
                               报告
                             </button>
                             <span className="text-[10px] text-slate-500">
-                              {new Date(report.created_at).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                              {new Date(report.created_at).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}
                             </span>
                           </div>
                         )}
