@@ -644,11 +644,16 @@ def db_get_all_reminders() -> Dict[str, List[Dict]]:
 # ============================================
 
 def migrate_from_json():
-    """从 JSON 文件迁移数据到数据库"""
+    """从 JSON 文件迁移数据到数据库（只执行一次）"""
     import hashlib
     import secrets
     
     json_dir = Path(__file__).parent / "data"
+    migrated_flag = json_dir / ".migrated"
+    
+    # 如果已经迁移过，跳过
+    if migrated_flag.exists():
+        return
     
     # 迁移用户数据
     users_file = json_dir / "users.json"
@@ -706,6 +711,13 @@ def migrate_from_json():
     
     # 提醒数据不再从JSON迁移（新表结构不兼容旧数据）
     print("提醒数据使用新的价格触发模式，旧数据不迁移")
+    
+    # 标记已迁移
+    try:
+        migrated_flag.write_text("migrated")
+        print("数据迁移标记已创建")
+    except:
+        pass
 
 
 # 初始化数据库
