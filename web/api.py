@@ -2589,7 +2589,20 @@ _cache_ttl_non_trading = 300  # 非交易时间缓存5分钟
 def get_batch_quotes(symbols: list) -> dict:
     """批量获取行情数据，使用缓存优化"""
     import akshare as ak
+    import math
     from datetime import datetime, timedelta
+    
+    def safe_float(val, default=0.0):
+        """安全转换为float，处理NaN和Infinity"""
+        try:
+            if val is None:
+                return default
+            f = float(val)
+            if math.isnan(f) or math.isinf(f):
+                return default
+            return f
+        except (ValueError, TypeError):
+            return default
     
     now = datetime.now()
     quotes = {}
@@ -2624,8 +2637,8 @@ def get_batch_quotes(symbols: list) -> dict:
             symbol = code_map.get(code, code)
             quotes[symbol] = {
                 'symbol': symbol,
-                'current_price': float(row['最新价']) if row['最新价'] else 0,
-                'change_percent': float(row['涨跌幅']) if row['涨跌幅'] else 0
+                'current_price': safe_float(row['最新价']),
+                'change_percent': safe_float(row['涨跌幅'])
             }
             codes.discard(code)
     except Exception as e:
@@ -2648,8 +2661,8 @@ def get_batch_quotes(symbols: list) -> dict:
                 symbol = code_map.get(code, code)
                 quotes[symbol] = {
                     'symbol': symbol,
-                    'current_price': float(row['最新价']) if row['最新价'] else 0,
-                    'change_percent': float(row['涨跌幅']) if row['涨跌幅'] else 0
+                    'current_price': safe_float(row['最新价']),
+                    'change_percent': safe_float(row['涨跌幅'])
                 }
                 codes.discard(code)
         except Exception as e:
@@ -2670,8 +2683,8 @@ def get_batch_quotes(symbols: list) -> dict:
                 symbol = code_map.get(code, code)
                 quotes[symbol] = {
                     'symbol': symbol,
-                    'current_price': float(row['最新价']) if row['最新价'] else 0,
-                    'change_percent': float(row['涨跌幅']) if row['涨跌幅'] else 0
+                    'current_price': safe_float(row['最新价']),
+                    'change_percent': safe_float(row['涨跌幅'])
                 }
         except Exception as e:
             print(f"A股批量行情获取失败: {e}")
