@@ -1163,8 +1163,14 @@ export default function DashboardPage() {
         body: JSON.stringify(payload),
       });
 
+      const data = await response.json();
+      
+      if (data.status === "error") {
+        showAlertModal("提醒已存在", data.message || "该提醒已存在，请勿重复设置", "warning");
+        return;
+      }
+      
       if (response.ok) {
-        const data = await response.json();
         setShowReminderModal(false);
         fetchReminders();
         

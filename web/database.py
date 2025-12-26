@@ -564,9 +564,25 @@ def db_add_reminder(username: str, reminder_id: str, symbol: str, name: str,
                     ai_analysis_weekday: int = None,
                     ai_analysis_day_of_month: int = None,
                     buy_price: float = None, sell_price: float = None) -> Dict:
-    """添加价格触发提醒"""
+    """添加价格触发提醒（自动去重）"""
     with get_db() as conn:
         cursor = conn.cursor()
+        
+        # 检查是否已存在相同的提醒
+        cursor.execute('''
+            SELECT reminder_id FROM reminders 
+            WHERE username = ? AND symbol = ? AND reminder_type = ? 
+            AND frequency = ? AND analysis_time = ?
+            AND (weekday IS ? OR (weekday IS NULL AND ? IS NULL))
+            AND (day_of_month IS ? OR (day_of_month IS NULL AND ? IS NULL))
+        ''', (username, symbol, reminder_type, frequency, analysis_time, 
+              weekday, weekday, day_of_month, day_of_month))
+        
+        existing = cursor.fetchone()
+        if existing:
+            # 已存在相同提醒，返回 None 表示重复
+            return None
+        
         created_at = datetime.now().isoformat()
         cursor.execute('''
             INSERT INTO reminders (reminder_id, username, symbol, name, reminder_type, frequency, analysis_time, weekday, day_of_month, ai_analysis_frequency, ai_analysis_time, ai_analysis_weekday, ai_analysis_day_of_month, buy_price, sell_price, enabled, created_at)

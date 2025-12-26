@@ -2533,6 +2533,13 @@ async def create_reminder(
     
     result = add_reminder(user['username'], reminder_dict)
     
+    # 检查是否重复
+    if result is None:
+        return {
+            "status": "error",
+            "message": "该提醒已存在，请勿重复设置"
+        }
+    
     return {
         "status": "success",
         "reminder": result,
@@ -3287,7 +3294,7 @@ async def test_user_push(
     token: str = Query(default=""),
     authorization: str = Header(None)
 ):
-    """测试用户的推送配置"""
+    """测试用户的推送配置 - 使用正式模板"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -3310,21 +3317,52 @@ async def test_user_push(
     if not pushplus_token:
         raise HTTPException(status_code=400, detail="请先输入或配置 PushPlus Token")
     
-    # 发送测试消息
+    # 使用正式模板发送测试消息
+    test_symbol = "000001"
+    test_name = "测试标的"
+    test_price = 10.888
+    test_target = 10.500
+    action = "买入"
+    action_color = "#10B981"
+    
     test_message = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 20px; border-radius: 12px 12px 0 0;">
-            <h2 style="margin: 0; font-size: 18px;">✅ 推送测试成功</h2>
+        <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 20px; border-radius: 12px 12px 0 0;">
+            <h2 style="margin: 0; font-size: 18px;">🔔 {action}价格提醒 [测试]</h2>
         </div>
         
-        <div style="background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0; border-radius: 0 0 12px 12px;">
-            <p style="color: #334155; margin: 0 0 15px 0;">恭喜！您的微信推送已配置成功。</p>
-            <p style="color: #64748b; font-size: 13px; margin: 0 0 15px 0;">当您设置的价格提醒触发时，将会收到类似的推送通知。</p>
+        <div style="background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div>
+                    <div style="font-size: 20px; font-weight: bold; color: #1e293b;">{test_name}</div>
+                    <div style="font-size: 14px; color: #64748b;">{test_symbol}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 24px; font-weight: bold; color: {action_color};">¥{test_price:.3f}</div>
+                    <div style="font-size: 12px; color: #64748b;">当前价格</div>
+                </div>
+            </div>
             
-            <div style="background: #eff6ff; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                <div style="font-size: 12px; color: #6366f1; font-weight: bold;">💡 温馨提示</div>
-                <div style="font-size: 13px; color: #334155; margin-top: 5px;">
-                    PushPlus 免费版每月有 200 次推送额度，请合理设置提醒频率。
+            <div style="background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="color: #64748b;">触发类型</span>
+                    <span style="color: {action_color}; font-weight: bold;">{action}提醒</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: #64748b;">目标价格</span>
+                    <span style="font-weight: bold;">¥{test_target:.3f}</span>
+                </div>
+            </div>
+            
+            <div style="background: #eff6ff; border-left: 4px solid #6366f1; padding: 12px; border-radius: 0 8px 8px 0; margin-bottom: 15px;">
+                <div style="font-size: 12px; color: #6366f1; font-weight: bold; margin-bottom: 5px;">🤖 AI 分析摘要</div>
+                <div style="font-size: 13px; color: #334155; line-height: 1.5;">这是一条测试消息，用于验证您的推送配置是否正常工作。正式提醒将包含 AI 智能分析的投资建议摘要。</div>
+            </div>
+            
+            <div style="background: #fef3c7; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 12px; color: #d97706; font-weight: bold;">✅ 推送配置成功</div>
+                <div style="font-size: 13px; color: #92400e; margin-top: 5px;">
+                    恭喜！您的微信推送已配置成功。PushPlus 免费版每月有 200 次推送额度。
                 </div>
             </div>
             
@@ -3335,7 +3373,7 @@ async def test_user_push(
     </div>
     """
     
-    result = send_wechat_notification(test_message, "AI智能投研 - 推送测试", pushplus_token)
+    result = send_wechat_notification(test_message, f"【{action}提醒】{test_name} ¥{test_price:.3f} [测试]", pushplus_token)
     
     if result:
         return {"status": "success", "message": "测试推送已发送，请检查微信"}
