@@ -825,6 +825,8 @@ export default function DashboardPage() {
   };
 
   const handleDeleteSingle = useCallback((symbol: string) => {
+    console.log('[DELETE] 开始删除:', symbol, Date.now());
+    
     if (!canUseFeatures()) {
       showPendingAlert();
       return;
@@ -837,13 +839,20 @@ export default function DashboardPage() {
       return;
     }
     
+    console.log('[DELETE] 开始更新UI:', Date.now());
+    
     // 乐观更新：立即从列表中移除
-    setWatchlist(prev => prev.filter(item => item.symbol !== symbol));
+    setWatchlist(prev => {
+      console.log('[DELETE] setWatchlist 执行:', Date.now());
+      return prev.filter(item => item.symbol !== symbol);
+    });
     setSelectedItems(prev => {
       const next = new Set(prev);
       next.delete(symbol);
       return next;
     });
+    
+    console.log('[DELETE] UI更新完成，开始API请求:', Date.now());
     
     // 后台异步删除，不等待结果
     fetch(
@@ -853,14 +862,13 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${getToken()}` },
       }
     ).then(response => {
+      console.log('[DELETE] API响应:', Date.now());
       if (!response.ok) {
-        // 删除失败，恢复列表
         fetchWatchlist();
         showAlertModal("删除失败", "请稍后重试", "error");
       }
     }).catch(error => {
       console.error("删除失败:", error);
-      // 网络错误，恢复列表
       fetchWatchlist();
       showAlertModal("删除失败", "网络错误，请稍后重试", "error");
     });
