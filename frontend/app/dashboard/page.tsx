@@ -1188,14 +1188,10 @@ export default function DashboardPage() {
         
         if (!data.has_report) {
           const symbolToAnalyze = reminderSymbol;
-          showConfirmModal(
-            "尚无分析报告",
-            `${symbolToAnalyze} 尚无AI分析报告，无法获取买卖价格。是否立即分析？`,
-            () => {
-              setShowConfirm(false);
-              handleAnalyzeSingle(symbolToAnalyze);
-            },
-            "question"
+          showAlertModal(
+            "提醒已创建",
+            `${symbolToAnalyze} 尚无AI分析报告，建议先进行分析以获取买卖价格建议。`,
+            "info"
           );
         }
       }
@@ -1255,17 +1251,10 @@ export default function DashboardPage() {
         fetchReminders();
         
         if (data.symbols_without_report?.length > 0) {
-          const symbolsToAnalyze = [...data.symbols_without_report];
-          showConfirmModal(
-            "部分证券尚无分析报告",
-            `以下证券尚无AI分析报告：\n${symbolsToAnalyze.join("、")}\n\n是否批量分析？`,
-            () => {
-              setShowConfirm(false);
-              for (const symbol of symbolsToAnalyze) {
-                handleAnalyzeSingle(symbol);
-              }
-            },
-            "question"
+          showAlertModal(
+            "提醒已创建",
+            `以下证券尚无AI分析报告，建议先进行分析：\n${data.symbols_without_report.join("、")}`,
+            "info"
           );
         }
       }
