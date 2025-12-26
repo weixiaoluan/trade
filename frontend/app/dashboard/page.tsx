@@ -824,7 +824,7 @@ export default function DashboardPage() {
     ));
   };
 
-  const handleDeleteSingle = useCallback(async (symbol: string) => {
+  const handleDeleteSingle = useCallback((symbol: string) => {
     if (!canUseFeatures()) {
       showPendingAlert();
       return;
@@ -837,7 +837,7 @@ export default function DashboardPage() {
       return;
     }
     
-    // 乐观更新：先从列表中移除
+    // 乐观更新：立即从列表中移除
     setWatchlist(prev => prev.filter(item => item.symbol !== symbol));
     setSelectedItems(prev => {
       const next = new Set(prev);
@@ -845,29 +845,28 @@ export default function DashboardPage() {
       return next;
     });
     
-    try {
-      const response = await fetch(
-        `${API_BASE}/api/watchlist/${encodeURIComponent(symbol)}`,
-        {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${getToken()}` },
-        }
-      );
-
+    // 后台异步删除，不等待结果
+    fetch(
+      `${API_BASE}/api/watchlist/${encodeURIComponent(symbol)}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }
+    ).then(response => {
       if (!response.ok) {
         // 删除失败，恢复列表
         fetchWatchlist();
         showAlertModal("删除失败", "请稍后重试", "error");
       }
-    } catch (error) {
+    }).catch(error => {
       console.error("删除失败:", error);
       // 网络错误，恢复列表
       fetchWatchlist();
       showAlertModal("删除失败", "网络错误，请稍后重试", "error");
-    }
+    });
   }, [canUseFeatures, fetchWatchlist, getToken, showPendingAlert, tasks, showAlertModal]);
 
-  const handleBatchDelete = useCallback(async () => {
+  const handleBatchDelete = useCallback(() => {
     if (selectedItems.size === 0) return;
     
     if (!canUseFeatures()) {
@@ -890,32 +889,31 @@ export default function DashboardPage() {
       return;
     }
 
-    // 乐观更新：先从列表中移除
+    // 乐观更新：立即从列表中移除
     const symbolsToDelete = Array.from(selectedItems);
     setWatchlist(prev => prev.filter(item => !selectedItems.has(item.symbol)));
     setSelectedItems(new Set());
 
-    try {
-      const response = await fetch(`${API_BASE}/api/watchlist/batch-delete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
-        },
-        body: JSON.stringify(symbolsToDelete),
-      });
-
+    // 后台异步删除，不等待结果
+    fetch(`${API_BASE}/api/watchlist/batch-delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify(symbolsToDelete),
+    }).then(response => {
       if (!response.ok) {
         // 删除失败，恢复列表
         fetchWatchlist();
         showAlertModal("删除失败", "请稍后重试", "error");
       }
-    } catch (error) {
+    }).catch(error => {
       console.error("批量删除失败:", error);
       // 网络错误，恢复列表
       fetchWatchlist();
       showAlertModal("删除失败", "网络错误，请稍后重试", "error");
-    }
+    });
   }, [canUseFeatures, fetchWatchlist, getToken, selectedItems, showPendingAlert, tasks, showAlertModal]);
 
   const handleAnalyzeSingle = useCallback(async (symbol: string) => {
