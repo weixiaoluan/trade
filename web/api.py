@@ -381,7 +381,7 @@ async def add_watchlist_item(
     item: WatchlistItem,
     authorization: str = Header(None)
 ):
-    """添加自选 - 自动识别股票名称和类型"""
+    """添加自选 - 快速添加，名称异步获取"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -391,29 +391,29 @@ async def add_watchlist_item(
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    # 自动获取股票名称和类型
     item_data = item.dict()
-    symbol = item_data.get('symbol', '').upper()
+    symbol = item_data.get('symbol', '').upper().strip()
     
-    # 如果没有提供名称，自动获取
-    if not item_data.get('name'):
-        try:
-            stock_info_result = await asyncio.to_thread(get_stock_info, symbol)
-            info_dict = json.loads(stock_info_result)
-            if info_dict.get('status') == 'success':
-                basic_info = info_dict.get('basic_info', {})
-                item_data['name'] = basic_info.get('name', '')
-                # 自动识别类型
-                quote_type = basic_info.get('quote_type', '').upper()
-                if not item_data.get('type'):
-                    if quote_type == 'ETF':
-                        item_data['type'] = 'etf'
-                    elif quote_type == 'MUTUALFUND':
-                        item_data['type'] = 'fund'
-                    else:
-                        item_data['type'] = 'stock'
-        except Exception as e:
-            print(f"获取股票信息失败: {e}")
+    # 快速识别类型（不调用外部API）
+    if symbol.isdigit() and len(symbol) == 6:
+        # 中国标的快速识别
+        if symbol.startswith('159') or symbol.startswith(('51', '56', '58', '52')):
+            item_data['type'] = 'etf'
+        elif symbol.startswith('16'):
+            item_data['type'] = 'lof'
+        elif symbol.startswith(('6', '0', '3')):
+            item_data['type'] = 'stock'
+        else:
+            item_data['type'] = 'fund'
+        # 名称暂时用代码，后续通过行情接口获取
+        if not item_data.get('name'):
+            item_data['name'] = symbol
+    else:
+        # 非中国标的，也先快速添加
+        if not item_data.get('type'):
+            item_data['type'] = 'stock'
+        if not item_data.get('name'):
+            item_data['name'] = symbol
     
     success = add_to_watchlist(user['username'], item_data)
     
@@ -451,7 +451,7 @@ async def batch_add_watchlist_items(
     items: List[WatchlistItem],
     authorization: str = Header(None)
 ):
-    """批量添加自选 - 自动识别股票名称和类型"""
+    """批量添加自选 - 快速添加，不调用外部API"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -461,31 +461,29 @@ async def batch_add_watchlist_items(
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    # 处理每个标的，自动获取名称
+    # 快速处理每个标的
     processed_items = []
     for item in items:
         item_data = item.dict()
-        symbol = item_data.get('symbol', '').upper()
+        symbol = item_data.get('symbol', '').upper().strip()
         
-        # 如果没有提供名称，自动获取
+        # 快速识别类型（不调用外部API）
+        if not item_data.get('type'):
+            if symbol.isdigit() and len(symbol) == 6:
+                if symbol.startswith('159') or symbol.startswith(('51', '56', '58', '52')):
+                    item_data['type'] = 'etf'
+                elif symbol.startswith('16'):
+                    item_data['type'] = 'lof'
+                elif symbol.startswith(('6', '0', '3')):
+                    item_data['type'] = 'stock'
+                else:
+                    item_data['type'] = 'fund'
+            else:
+                item_data['type'] = 'stock'
+        
+        # 名称用传入的或代码
         if not item_data.get('name'):
-            try:
-                stock_info_result = await asyncio.to_thread(get_stock_info, symbol)
-                info_dict = json.loads(stock_info_result)
-                if info_dict.get('status') == 'success':
-                    basic_info = info_dict.get('basic_info', {})
-                    item_data['name'] = basic_info.get('name', '')
-                    # 自动识别类型
-                    quote_type = basic_info.get('quote_type', '').upper()
-                    if not item_data.get('type'):
-                        if quote_type == 'ETF':
-                            item_data['type'] = 'etf'
-                        elif quote_type == 'MUTUALFUND':
-                            item_data['type'] = 'fund'
-                        else:
-                            item_data['type'] = 'stock'
-            except Exception as e:
-                print(f"获取股票信息失败 [{symbol}]: {e}")
+            item_data['name'] = symbol
         
         processed_items.append(item_data)
     
