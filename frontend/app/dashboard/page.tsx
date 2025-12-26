@@ -661,7 +661,7 @@ export default function DashboardPage() {
     }
   }, [canUseFeatures, fetchWatchlist, getToken, showPendingAlert]);
 
-  const handleAddSymbol = useCallback(async () => {
+  const handleAddSymbol = useCallback(async (closeAfterAdd: boolean = true) => {
     if (!addSymbol.trim()) return;
     
     if (!canUseFeatures()) {
@@ -693,8 +693,13 @@ export default function DashboardPage() {
         setAddSymbol("");
         setAddPosition("");
         setAddCostPrice("");
-        setShowAddModal(false);
         fetchWatchlist();
+        if (closeAfterAdd) {
+          setShowAddModal(false);
+        } else {
+          // 继续添加模式：显示成功提示
+          alert("添加成功！可以继续添加下一个");
+        }
       } else {
         alert(data.message || "添加失败");
       }
@@ -1870,17 +1875,18 @@ export default function DashboardPage() {
 
               <div className="flex gap-3 mb-4">
                 <button
-                  onClick={() => { setShowAddModal(false); setAddSymbol(""); setAddPosition(""); setAddCostPrice(""); }}
-                  className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl hover:bg-white/[0.08] text-sm sm:text-base"
+                  onClick={() => handleAddSymbol(true)}
+                  disabled={loading || !addSymbol.trim()}
+                  className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl hover:bg-white/[0.08] disabled:opacity-50 text-sm sm:text-base"
                 >
-                  取消
+                  {loading ? "添加中..." : "添加"}
                 </button>
                 <button
-                  onClick={handleAddSymbol}
+                  onClick={() => handleAddSymbol(false)}
                   disabled={loading || !addSymbol.trim()}
                   className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-50 text-sm sm:text-base"
                 >
-                  {loading ? "添加中..." : "添加"}
+                  {loading ? "添加中..." : "继续添加"}
                 </button>
               </div>
 
