@@ -830,8 +830,8 @@ export default function DashboardPage() {
       return;
     }
     
-    // 检查是否正在分析中
-    const task = tasks[symbol];
+    // 检查是否正在分析中（使用 ref 避免依赖 tasks）
+    const task = tasksRef.current[symbol];
     if (task && (task.status === "running" || task.status === "pending")) {
       showAlertModal("无法删除", `${symbol} 正在分析中，请等待分析完成后再删除`, "warning");
       return;
@@ -864,7 +864,7 @@ export default function DashboardPage() {
       fetchWatchlist();
       showAlertModal("删除失败", "网络错误，请稍后重试", "error");
     });
-  }, [canUseFeatures, fetchWatchlist, getToken, showPendingAlert, tasks, showAlertModal]);
+  }, [canUseFeatures, fetchWatchlist, getToken, showPendingAlert, showAlertModal]);
 
   const handleBatchDelete = useCallback(() => {
     if (selectedItems.size === 0) return;
@@ -874,9 +874,9 @@ export default function DashboardPage() {
       return;
     }
 
-    // 检查是否有正在分析中的标的
+    // 检查是否有正在分析中的标的（使用 ref）
     const analyzingSymbols = Array.from(selectedItems).filter(symbol => {
-      const task = tasks[symbol];
+      const task = tasksRef.current[symbol];
       return task && (task.status === "running" || task.status === "pending");
     });
     
@@ -914,7 +914,7 @@ export default function DashboardPage() {
       fetchWatchlist();
       showAlertModal("删除失败", "网络错误，请稍后重试", "error");
     });
-  }, [canUseFeatures, fetchWatchlist, getToken, selectedItems, showPendingAlert, tasks, showAlertModal]);
+  }, [canUseFeatures, fetchWatchlist, getToken, selectedItems, showPendingAlert, showAlertModal]);
 
   const handleAnalyzeSingle = useCallback(async (symbol: string) => {
     if (!canUseFeatures()) {
