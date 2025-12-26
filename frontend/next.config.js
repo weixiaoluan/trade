@@ -9,11 +9,6 @@ const nextConfig = {
     formats: ['image/avif', 'image/webp'],
   },
   
-  // 实验性优化
-  experimental: {
-    optimizeCss: true, // CSS优化
-  },
-  
   // 编译优化
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production', // 生产环境移除console
