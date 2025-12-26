@@ -2698,8 +2698,45 @@ def get_batch_quotes(symbols: list) -> dict:
                     'current_price': safe_float(row['最新价']),
                     'change_percent': safe_float(row['涨跌幅'])
                 }
+                codes.discard(code)
         except Exception as e:
             print(f"A股批量行情获取失败: {e}")
+    
+    # 获取场外基金净值数据
+    if codes:
+        remaining_codes = list(codes)
+        for code in remaining_codes:
+            # 判断是否为场外基金（6位数字，非ETF/LOF/A股）
+            if code.isdigit() and len(code) == 6:
+                # 排除场内代码
+                if code.startswith(('159', '16', '51', '56', '58', '52', '6', '0', '3')):
+                    continue
+                try:
+                    # 使用天天基金接口获取实时估值
+                    import requests
+                    import re
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Referer": "http://fund.eastmoney.com/"
+                    }
+                    info_url = f"http://fundgz.1234567.com.cn/js/{code}.js"
+                    response = requests.get(info_url, headers=headers, timeout=5)
+                    
+                    if response.status_code == 200 and "jsonpgz" in response.text:
+                        json_str = re.search(r'jsonpgz\((.*)\)', response.text)
+                        if json_str:
+                            import json
+                            fund_info = json.loads(json_str.group(1))
+                            symbol = code_map.get(code, code)
+                            # gsz: 估算净值, gszzl: 估算涨跌幅
+                            quotes[symbol] = {
+                                'symbol': symbol,
+                                'current_price': safe_float(fund_info.get('gsz', fund_info.get('dwjz', 0))),
+                                'change_percent': safe_float(fund_info.get('gszzl', 0))
+                            }
+                            codes.discard(code)
+                except Exception as e:
+                    print(f"场外基金 {code} 净值获取失败: {e}")
     
     print(f"[Quotes] 返回 {len(quotes)} 条行情数据")
     return quotes
