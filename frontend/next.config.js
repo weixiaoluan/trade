@@ -1,5 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 启用生产优化
+  reactStrictMode: false, // 关闭严格模式减少双重渲染
+  swcMinify: true, // 使用SWC压缩
+  
+  // 优化图片
+  images: {
+    formats: ['image/avif', 'image/webp'],
+  },
+  
+  // 实验性优化
+  experimental: {
+    optimizeCss: true, // CSS优化
+  },
+  
+  // 编译优化
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production', // 生产环境移除console
+  },
+  
   async rewrites() {
     return [
       {

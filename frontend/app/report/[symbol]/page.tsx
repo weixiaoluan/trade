@@ -1,29 +1,29 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, memo } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { Bot, FileText, AlertCircle, ExternalLink, ArrowLeft } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { StockCard } from "@/components/ui/StockCard";
-import { QuantDashboardCard } from "@/components/ui/QuantDashboardCard";
-import { AIRecommendationCard } from "@/components/ui/AIRecommendationCard";
-import { PredictionTimeline } from "@/components/ui/PredictionTimeline";
+import dynamic from "next/dynamic";
+import { FileText, AlertCircle, ArrowLeft, ExternalLink } from "lucide-react";
 
 import { API_BASE } from "@/lib/config";
 
+// 动态导入重型组件，减少首屏加载
+const StockCard = dynamic(() => import("@/components/ui/StockCard").then(m => ({ default: m.StockCard })), { ssr: false });
+const QuantDashboardCard = dynamic(() => import("@/components/ui/QuantDashboardCard").then(m => ({ default: m.QuantDashboardCard })), { ssr: false });
+const AIRecommendationCard = dynamic(() => import("@/components/ui/AIRecommendationCard").then(m => ({ default: m.AIRecommendationCard })), { ssr: false });
+const PredictionTimeline = dynamic(() => import("@/components/ui/PredictionTimeline").then(m => ({ default: m.PredictionTimeline })), { ssr: false });
+
 // 骨架屏组件
-const SkeletonCard = ({ className = "" }: { className?: string }) => (
+const SkeletonCard = memo(({ className = "" }: { className?: string }) => (
   <div className={`glass-card rounded-xl border border-white/[0.06] p-4 sm:p-5 ${className}`}>
     <div className="skeleton h-4 w-24 rounded mb-3"></div>
     <div className="skeleton h-8 w-32 rounded mb-2"></div>
     <div className="skeleton h-3 w-full rounded mb-2"></div>
     <div className="skeleton h-3 w-3/4 rounded"></div>
   </div>
-);
+));
 
-const ReportSkeleton = () => (
+const ReportSkeleton = memo(() => (
   <div className="min-h-screen bg-[#020617]">
     <div className="sticky top-0 z-40 bg-[#020617]/90 backdrop-blur-md border-b border-white/[0.06]">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3">
@@ -57,7 +57,7 @@ const ReportSkeleton = () => (
       </div>
     </div>
   </div>
-);
+));
 
 export default function ReportPage() {
   const router = useRouter();
@@ -268,11 +268,7 @@ export default function ReportPage() {
   const result = parseReportData(report);
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="min-h-screen bg-[#020617]"
-    >
+    <div className="min-h-screen bg-[#020617] animate-fadeIn">
       {/* Sticky Header - 移动端优化 */}
       <div className="sticky top-0 z-40 bg-[#020617]/90 backdrop-blur-md border-b border-white/[0.06] safe-area-top">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
@@ -315,12 +311,7 @@ export default function ReportPage() {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
           {/* Stock Overview Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="lg:col-span-1"
-          >
+          <div className="lg:col-span-1 animate-slideUp" style={{ animationDelay: '0.1s' }}>
             <StockCard
               ticker={result.ticker}
               name={result.name}
@@ -335,15 +326,10 @@ export default function ReportPage() {
               nav={result.nav}
               volume={result.volume}
             />
-          </motion.div>
+          </div>
 
           {/* AI Analysis Panel */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="lg:col-span-2 flex flex-col gap-3 sm:gap-4"
-          >
+          <div className="lg:col-span-2 flex flex-col gap-3 sm:gap-4 animate-slideUp" style={{ animationDelay: '0.15s' }}>
             <AIRecommendationCard
               recommendation={result.recommendation as any}
               summary={result.summary}
@@ -401,29 +387,22 @@ export default function ReportPage() {
                 </div>
               </div>
             )}
-          </motion.div>
+          </div>
 
           {/* Prediction Timeline */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="lg:col-span-3"
-          >
+          <div className="lg:col-span-3 animate-slideUp" style={{ animationDelay: '0.2s' }}>
             <div className="glass-card rounded-xl p-3 sm:p-5 border border-white/[0.06]">
               <PredictionTimeline
                 predictions={result.predictions}
                 onHoverHorizon={setActiveHorizon}
               />
             </div>
-          </motion.div>
+          </div>
 
           {/* Analysis Report */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="lg:col-span-3"
+          <div
+            className="lg:col-span-3 animate-slideUp"
+            style={{ animationDelay: '0.25s' }}
             id="analysis-report-section"
           >
             <div className="glass-card rounded-xl border border-white/[0.06] overflow-hidden">
@@ -451,18 +430,17 @@ export default function ReportPage() {
               {/* Report Content */}
               <div className="p-4 sm:p-6 md:p-8">
                 <div 
-                  className="markdown-content prose prose-invert prose-sm max-w-none overflow-y-auto scrollbar-thin" 
+                  className="prose prose-invert prose-sm max-w-none overflow-y-auto scrollbar-thin whitespace-pre-wrap" 
                   style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '300px' }}
-                >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {result.report || '报告生成中...'}
-                  </ReactMarkdown>
-                </div>
+                  dangerouslySetInnerHTML={{ 
+                    __html: (result.report || '报告生成中...').replace(/\n/g, '<br/>') 
+                  }}
+                />
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
