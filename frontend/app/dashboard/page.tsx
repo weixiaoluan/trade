@@ -1745,40 +1745,6 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-
-        {/* 最近报告 */}
-        {reports.length > 0 && (
-          <div className="mt-6 sm:mt-8">
-            <h3 className="text-base sm:text-lg font-semibold text-slate-100 mb-3 sm:mb-4">最近分析报告</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {reports.slice(0, 6).map((report) => (
-                <div
-                  key={report.id}
-                  onClick={() => handleViewReport(report.symbol)}
-                  className="bg-white/[0.02] backdrop-blur-xl rounded-lg sm:rounded-xl border border-white/[0.06] p-3 sm:p-4 hover:bg-white/[0.04] transition-all cursor-pointer"
-                >
-                  <div className="flex items-start justify-between mb-2 sm:mb-3">
-                    <div className="min-w-0">
-                      <div className="font-mono font-semibold text-slate-100 text-sm sm:text-base">{report.symbol}</div>
-                      <div className="text-xs sm:text-sm text-slate-500 truncate">{report.name}</div>
-                    </div>
-                    {report.quant_score && (
-                      <div className={`px-2 py-1 rounded text-[10px] sm:text-xs font-medium flex-shrink-0 ${
-                        report.quant_score >= 70 ? "bg-emerald-500/20 text-emerald-400" :
-                        report.quant_score >= 50 ? "bg-amber-500/20 text-amber-400" : "bg-rose-500/20 text-rose-400"
-                      }`}>
-                        {report.quant_score}分
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-[10px] sm:text-xs text-slate-500">
-                    {new Date(report.created_at).toLocaleString("zh-CN")}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 添加自选弹窗 */}

@@ -346,11 +346,23 @@ def db_add_to_watchlist(username: str, symbol: str, name: str = None,
 
 
 def db_remove_from_watchlist(username: str, symbol: str) -> bool:
-    """从自选中移除"""
+    """从自选中移除，同时删除关联的报告、提醒、任务数据"""
     with get_db() as conn:
         cursor = conn.cursor()
+        # 删除自选
         cursor.execute('DELETE FROM watchlist WHERE username = ? AND symbol = ?', (username, symbol))
-        return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+        
+        if deleted:
+            # 删除关联的报告
+            cursor.execute('DELETE FROM reports WHERE username = ? AND symbol = ?', (username, symbol))
+            # 删除关联的提醒
+            cursor.execute('DELETE FROM reminders WHERE username = ? AND symbol = ?', (username, symbol))
+            # 删除关联的分析任务
+            cursor.execute('DELETE FROM analysis_tasks WHERE username = ? AND symbol = ?', (username, symbol))
+            conn.commit()
+        
+        return deleted
 
 
 def db_update_watchlist_item(username: str, symbol: str, **kwargs) -> bool:
