@@ -830,6 +830,21 @@ export default function DashboardPage() {
       return;
     }
     
+    // 检查是否正在分析中
+    const task = tasks[symbol];
+    if (task && (task.status === "running" || task.status === "pending")) {
+      showAlertModal("无法删除", `${symbol} 正在分析中，请等待分析完成后再删除`, "warning");
+      return;
+    }
+    
+    // 乐观更新：先从列表中移除
+    setWatchlist(prev => prev.filter(item => item.symbol !== symbol));
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      next.delete(symbol);
+      return next;
+    });
+    
     try {
       const response = await fetch(
         `${API_BASE}/api/watchlist/${encodeURIComponent(symbol)}`,
@@ -839,18 +854,18 @@ export default function DashboardPage() {
         }
       );
 
-      if (response.ok) {
+      if (!response.ok) {
+        // 删除失败，恢复列表
         fetchWatchlist();
-        setSelectedItems((prev) => {
-          const next = new Set(prev);
-          next.delete(symbol);
-          return next;
-        });
+        showAlertModal("删除失败", "请稍后重试", "error");
       }
     } catch (error) {
       console.error("删除失败:", error);
+      // 网络错误，恢复列表
+      fetchWatchlist();
+      showAlertModal("删除失败", "网络错误，请稍后重试", "error");
     }
-  }, [canUseFeatures, fetchWatchlist, getToken, showPendingAlert]);
+  }, [canUseFeatures, fetchWatchlist, getToken, showPendingAlert, tasks, showAlertModal]);
 
   const handleBatchDelete = useCallback(async () => {
     if (selectedItems.size === 0) return;
@@ -860,7 +875,26 @@ export default function DashboardPage() {
       return;
     }
 
-    setLoading(true);
+    // 检查是否有正在分析中的标的
+    const analyzingSymbols = Array.from(selectedItems).filter(symbol => {
+      const task = tasks[symbol];
+      return task && (task.status === "running" || task.status === "pending");
+    });
+    
+    if (analyzingSymbols.length > 0) {
+      showAlertModal(
+        "无法删除",
+        `以下标的正在分析中：${analyzingSymbols.join("、")}，请等待分析完成后再删除`,
+        "warning"
+      );
+      return;
+    }
+
+    // 乐观更新：先从列表中移除
+    const symbolsToDelete = Array.from(selectedItems);
+    setWatchlist(prev => prev.filter(item => !selectedItems.has(item.symbol)));
+    setSelectedItems(new Set());
+
     try {
       const response = await fetch(`${API_BASE}/api/watchlist/batch-delete`, {
         method: "POST",
@@ -868,19 +902,21 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
         },
-        body: JSON.stringify(Array.from(selectedItems)),
+        body: JSON.stringify(symbolsToDelete),
       });
 
-      if (response.ok) {
-        setSelectedItems(new Set());
+      if (!response.ok) {
+        // 删除失败，恢复列表
         fetchWatchlist();
+        showAlertModal("删除失败", "请稍后重试", "error");
       }
     } catch (error) {
       console.error("批量删除失败:", error);
-    } finally {
-      setLoading(false);
+      // 网络错误，恢复列表
+      fetchWatchlist();
+      showAlertModal("删除失败", "网络错误，请稍后重试", "error");
     }
-  }, [canUseFeatures, fetchWatchlist, getToken, selectedItems, showPendingAlert]);
+  }, [canUseFeatures, fetchWatchlist, getToken, selectedItems, showPendingAlert, tasks, showAlertModal]);
 
   const handleAnalyzeSingle = useCallback(async (symbol: string) => {
     if (!canUseFeatures()) {
@@ -1599,7 +1635,12 @@ export default function DashboardPage() {
                               
                               <button
                                 onClick={() => handleDeleteSingle(item.symbol)}
-                                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white/[0.05] text-slate-400 hover:text-rose-400 text-sm rounded-xl min-w-[90px] touch-target active:bg-rose-600/20"
+                                disabled={isRunning || isPending}
+                                className={`flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm rounded-xl min-w-[90px] touch-target ${
+                                  isRunning || isPending
+                                    ? "bg-slate-700/30 text-slate-600 cursor-not-allowed"
+                                    : "bg-white/[0.05] text-slate-400 hover:text-rose-400 active:bg-rose-600/20"
+                                }`}
                               >
                                 <Trash2 className="w-4 h-4" />
                                 删除
@@ -1735,7 +1776,12 @@ export default function DashboardPage() {
 
                         <button
                           onClick={() => handleDeleteSingle(item.symbol)}
-                          className="p-2 hover:bg-rose-600/20 text-slate-500 hover:text-rose-400 rounded-lg"
+                          disabled={isRunning || isPending}
+                          className={`p-2 rounded-lg ${
+                            isRunning || isPending
+                              ? "text-slate-600 cursor-not-allowed"
+                              : "hover:bg-rose-600/20 text-slate-500 hover:text-rose-400"
+                          }`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
