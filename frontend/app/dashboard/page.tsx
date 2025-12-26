@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { UserHeader } from "@/components/ui/UserHeader";
 import { AlertModal } from "@/components/ui/AlertModal";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 import { API_BASE } from "@/lib/config";
 
@@ -180,6 +181,15 @@ export default function DashboardPage() {
   // 错误弹窗控制 - 避免重复弹窗
   const [shownErrorTasks, setShownErrorTasks] = useState<Set<string>>(new Set());
 
+  // 确认弹窗状态
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState({
+    title: "",
+    message: "",
+    type: "question" as "warning" | "info" | "success" | "error" | "question",
+    onConfirm: () => {},
+  });
+
   const getToken = useCallback(() => localStorage.getItem("token"), []);
 
   const tasksRef = useRef(tasks);
@@ -208,6 +218,19 @@ export default function DashboardPage() {
     (title: string, message: string, type: "warning" | "info" | "success" | "error" = "warning") => {
       setAlertConfig({ title, message, type });
       setShowAlert(true);
+    },
+    []
+  );
+
+  const showConfirmModal = useCallback(
+    (
+      title: string,
+      message: string,
+      onConfirm: () => void,
+      type: "warning" | "info" | "success" | "error" | "question" = "question"
+    ) => {
+      setConfirmConfig({ title, message, type, onConfirm });
+      setShowConfirm(true);
     },
     []
   );
@@ -1128,9 +1151,16 @@ export default function DashboardPage() {
         fetchReminders();
         
         if (!data.has_report) {
-          if (confirm(`${reminderSymbol} 尚无AI分析报告，无法获取买卖价格。是否立即分析？`)) {
-            handleAnalyzeSingle(reminderSymbol);
-          }
+          const symbolToAnalyze = reminderSymbol;
+          showConfirmModal(
+            "尚无分析报告",
+            `${symbolToAnalyze} 尚无AI分析报告，无法获取买卖价格。是否立即分析？`,
+            () => {
+              setShowConfirm(false);
+              handleAnalyzeSingle(symbolToAnalyze);
+            },
+            "question"
+          );
         }
       }
     } catch (error) {
@@ -1189,11 +1219,18 @@ export default function DashboardPage() {
         fetchReminders();
         
         if (data.symbols_without_report?.length > 0) {
-          if (confirm(`以下证券尚无AI分析报告：${data.symbols_without_report.join(", ")}，是否批量分析？`)) {
-            for (const symbol of data.symbols_without_report) {
-              handleAnalyzeSingle(symbol);
-            }
-          }
+          const symbolsToAnalyze = [...data.symbols_without_report];
+          showConfirmModal(
+            "部分证券尚无分析报告",
+            `以下证券尚无AI分析报告：\n${symbolsToAnalyze.join("、")}\n\n是否批量分析？`,
+            () => {
+              setShowConfirm(false);
+              for (const symbol of symbolsToAnalyze) {
+                handleAnalyzeSingle(symbol);
+              }
+            },
+            "question"
+          );
         }
       }
     } catch (error) {
@@ -2323,6 +2360,18 @@ export default function DashboardPage() {
         title={alertConfig.title}
         message={alertConfig.message}
         type={alertConfig.type}
+      />
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        onConfirm={confirmConfig.onConfirm}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        type={confirmConfig.type}
+        confirmText="立即分析"
+        cancelText="稍后再说"
       />
     </main>
   );

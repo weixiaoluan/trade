@@ -347,54 +347,24 @@ def db_add_to_watchlist(username: str, symbol: str, name: str = None,
 
 def db_remove_from_watchlist(username: str, symbol: str) -> bool:
     """从自选中移除，同时删除关联的报告、提醒、任务数据"""
-    symbol_upper = symbol.upper().strip()  # 统一转大写并去除空格
-    # 提取纯数字代码（去除 .SH .SZ 等后缀）
-    pure_code = symbol_upper.replace('.SH', '').replace('.SZ', '').replace('.SS', '')
-    
+    symbol = symbol.upper()  # 统一转大写
     with get_db() as conn:
         cursor = conn.cursor()
-        
-        # 删除自选（匹配大小写变体）
-        cursor.execute('DELETE FROM watchlist WHERE username = ? AND UPPER(symbol) = ?', (username, symbol_upper))
+        # 删除自选（同时匹配大小写变体）
+        cursor.execute('DELETE FROM watchlist WHERE username = ? AND UPPER(symbol) = ?', (username, symbol))
         deleted = cursor.rowcount > 0
         
         # 无论是否删除成功，都尝试清理关联数据（处理历史遗留数据）
         # 删除关联的报告（匹配多种格式：纯代码、带后缀的代码）
-        cursor.execute('''
-            DELETE FROM reports WHERE username = ? AND (
-                UPPER(symbol) = ? OR 
-                UPPER(symbol) = ? OR
-                UPPER(symbol) LIKE ? OR 
-                UPPER(symbol) LIKE ?
-            )
-        ''', (username, symbol_upper, pure_code, f"{pure_code}.%", f"%.{pure_code}"))
-        reports_deleted = cursor.rowcount
-        
-        # 删除关联的提醒（匹配多种格式）
-        cursor.execute('''
-            DELETE FROM reminders WHERE username = ? AND (
-                UPPER(symbol) = ? OR 
-                UPPER(symbol) = ? OR
-                UPPER(symbol) LIKE ? OR 
-                UPPER(symbol) LIKE ?
-            )
-        ''', (username, symbol_upper, pure_code, f"{pure_code}.%", f"%.{pure_code}"))
-        reminders_deleted = cursor.rowcount
-        
-        # 删除关联的分析任务（匹配多种格式）
-        cursor.execute('''
-            DELETE FROM analysis_tasks WHERE username = ? AND (
-                UPPER(symbol) = ? OR 
-                UPPER(symbol) = ? OR
-                UPPER(symbol) LIKE ? OR 
-                UPPER(symbol) LIKE ?
-            )
-        ''', (username, symbol_upper, pure_code, f"{pure_code}.%", f"%.{pure_code}"))
-        tasks_deleted = cursor.rowcount
-        
+        cursor.execute('DELETE FROM reports WHERE username = ? AND (UPPER(symbol) = ? OR UPPER(symbol) LIKE ? OR UPPER(symbol) LIKE ?)', 
+                      (username, symbol, f"{symbol}.%", f"%.{symbol}"))
+        # 删除关联的提醒
+        cursor.execute('DELETE FROM reminders WHERE username = ? AND (UPPER(symbol) = ? OR UPPER(symbol) LIKE ? OR UPPER(symbol) LIKE ?)', 
+                      (username, symbol, f"{symbol}.%", f"%.{symbol}"))
+        # 删除关联的分析任务
+        cursor.execute('DELETE FROM analysis_tasks WHERE username = ? AND (UPPER(symbol) = ? OR UPPER(symbol) LIKE ? OR UPPER(symbol) LIKE ?)', 
+                      (username, symbol, f"{symbol}.%", f"%.{symbol}"))
         conn.commit()
-        
-        print(f"[DB] 删除自选 {symbol}: watchlist={deleted}, reports={reports_deleted}, reminders={reminders_deleted}, tasks={tasks_deleted}")
         
         return deleted
 
