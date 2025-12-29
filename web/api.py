@@ -1000,6 +1000,9 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
     """
     后台执行完整的多 Agent 分析（复用原有分析逻辑）
     """
+    # 保存原始 symbol 用于更新任务状态（数据库中存储的是原始代码）
+    original_symbol = ticker
+    
     try:
         # 检查是否是场外基金（不支持技术分析）
         pure_code = ticker.replace('.SZ', '').replace('.SS', '').replace('.SH', '')
@@ -1014,7 +1017,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
                     raise Exception(f"{ticker} 是场外基金，暂不支持技术分析。请添加对应的ETF代码进行分析。")
         
         # === 第一阶段：数据获取 ===
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'status': 'running',
             'progress': 5,
             'current_step': 'AI Agents正在集结'
@@ -1022,7 +1025,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         await asyncio.sleep(0.2)
         
         # 自动识别并标准化 ticker
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'progress': 10,
             'current_step': '正在获取实时行情数据'
         })
@@ -1040,7 +1043,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
             raise Exception(f"无法获取 {ticker} 的行情数据")
         
         # 基本面分析
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'progress': 25,
             'current_step': '基本面分析师正在评估价值'
         })
@@ -1049,7 +1052,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         stock_info_dict = json.loads(stock_info)
         
         # === 第二阶段：量化分析 ===
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'progress': 35,
             'current_step': '技术面分析师正在计算指标'
         })
@@ -1060,7 +1063,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         if indicators_dict.get("status") == "error" or not indicators_dict.get("indicators"):
             raise Exception(f"无法计算 {ticker} 的技术指标")
         
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'progress': 45,
             'current_step': '量化引擎正在生成信号'
         })
@@ -1071,7 +1074,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         if trend_dict.get("status") == "error":
             raise Exception(f"无法分析 {ticker} 的趋势")
         
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'progress': 55,
             'current_step': '数据审计员正在验证来源'
         })
@@ -1080,13 +1083,13 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         levels_dict = json.loads(levels)
         
         # === 第三阶段：AI分析 ===
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'progress': 65,
             'current_step': '风险管理专家正在评估风险'
         })
         await asyncio.sleep(0.3)
         
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'progress': 75,
             'current_step': '首席投资官正在生成报告'
         })
@@ -1142,7 +1145,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         
         ai_summary = f"量化评分 {score_text} 分，当前处于{regime_cn}，{vol_cn}环境。多头信号 {bullish_signals} 个、空头信号 {bearish_signals} 个，综合建议：{reco_cn}。"
         
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'progress': 90,
             'current_step': '质量控制专员正在审核'
         })
@@ -1171,7 +1174,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         save_user_report(username, ticker, report_data)
         
         # 更新任务状态为完成
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'status': 'completed',
             'progress': 100,
             'current_step': '分析完成',
@@ -1180,7 +1183,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         
     except Exception as e:
         print(f"后台分析失败 [{ticker}]: {e}")
-        update_analysis_task(username, ticker, {
+        update_analysis_task(username, original_symbol, {
             'status': 'failed',
             'current_step': '分析失败',
             'error': str(e)
