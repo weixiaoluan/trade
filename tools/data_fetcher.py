@@ -11,6 +11,48 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 import json
 import requests
+import time
+from functools import wraps
+
+
+def retry_on_network_error(max_retries: int = 3, delay: float = 1.0, backoff: float = 2.0):
+    """
+    网络请求重试装饰器
+    
+    Args:
+        max_retries: 最大重试次数
+        delay: 初始延迟时间（秒）
+        backoff: 延迟时间的倍增因子
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            current_delay = delay
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except (requests.exceptions.Timeout, 
+                        requests.exceptions.ConnectionError,
+                        requests.exceptions.ReadTimeout) as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        print(f"[Retry] {func.__name__} 第{attempt + 1}次失败，{current_delay:.1f}秒后重试: {str(e)[:100]}")
+                        time.sleep(current_delay)
+                        current_delay *= backoff
+                    else:
+                        print(f"[Retry] {func.__name__} 重试{max_retries}次后仍失败")
+                except Exception as e:
+                    # 非网络错误直接抛出
+                    raise e
+            
+            # 所有重试都失败，抛出最后一个异常
+            if last_exception:
+                raise last_exception
+            return None
+        return wrapper
+    return decorator
 
 
 def get_cn_fund_data(fund_code: str, period: str = "1y") -> str:
@@ -998,14 +1040,30 @@ def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
     stock_name = f"股票 {code}"
     ohlcv_data = []
     
+    # 带重试的请求函数
+    def fetch_with_retry(url, params=None, max_retries=3):
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                resp = requests.get(url, headers=headers, params=params, timeout=15, proxies=proxies)
+                if resp.status_code == 200:
+                    return resp.json()
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2
+                    print(f"[A股数据] 请求失败，{wait_time}秒后重试({attempt + 1}/{max_retries}): {str(e)[:50]}")
+                    time.sleep(wait_time)
+        if last_error:
+            print(f"[A股数据] 重试{max_retries}次后仍失败: {code}")
+        return None
+    
     try:
         # 获取股票名称
         info_url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f57,f58"
-        info_resp = requests.get(info_url, headers=headers, timeout=10, proxies=proxies)
-        if info_resp.status_code == 200:
-            info_data = info_resp.json().get("data", {})
-            if info_data:
-                stock_name = info_data.get("f58", stock_name)
+        info_data = fetch_with_retry(info_url)
+        if info_data and info_data.get("data"):
+            stock_name = info_data["data"].get("f58", stock_name)
         
         # 获取历史K线数据
         kline_url = f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
@@ -1019,10 +1077,10 @@ def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
             "lmt": limit
         }
         
-        kline_resp = requests.get(kline_url, headers=headers, params=params, timeout=15, proxies=proxies)
+        kline_result = fetch_with_retry(kline_url, params)
         
-        if kline_resp.status_code == 200:
-            kline_data = kline_resp.json().get("data", {})
+        if kline_result:
+            kline_data = kline_result.get("data", {})
             if kline_data:
                 stock_name = kline_data.get("name", stock_name)
                 klines = kline_data.get("klines", [])
@@ -1110,6 +1168,22 @@ def get_cn_a_stock_info(ticker: str) -> str:
     }
     proxies = {"http": None, "https": None}
     
+    # 带重试的请求函数
+    def fetch_with_retry(url, params=None, max_retries=3):
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                resp = requests.get(url, headers=headers, params=params, timeout=15, proxies=proxies)
+                if resp.status_code == 200:
+                    return resp.json()
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2
+                    print(f"[A股信息] 请求失败，{wait_time}秒后重试({attempt + 1}/{max_retries}): {str(e)[:50]}")
+                    time.sleep(wait_time)
+        return None
+    
     # 提取纯数字代码
     code = ticker.replace('.SH', '').replace('.SZ', '').replace('.sh', '').replace('.sz', '')
     
@@ -1144,10 +1218,10 @@ def get_cn_a_stock_info(ticker: str) -> str:
             "secid": secid,
             "fields": "f43,f44,f45,f46,f47,f48,f57,f58,f60,f116,f117,f162,f167,f169,f170"
         }
-        response = requests.get(quote_url, headers=headers, params=quote_params, timeout=10, proxies=proxies)
+        result = fetch_with_retry(quote_url, quote_params)
         
-        if response.status_code == 200:
-            data = response.json().get("data", {})
+        if result:
+            data = result.get("data", {})
             if data:
                 stock_name = data.get("f58", stock_name)
                 # 价格数据（东财返回的是整数，需要除以1000或100）
@@ -1193,9 +1267,9 @@ def get_cn_a_stock_info(ticker: str) -> str:
             "lmt": "252"
         }
         try:
-            kline_resp = requests.get(kline_url, headers=headers, params=kline_params, timeout=10, proxies=proxies)
-            if kline_resp.status_code == 200:
-                kline_data = kline_resp.json().get("data", {})
+            kline_result = fetch_with_retry(kline_url, kline_params)
+            if kline_result:
+                kline_data = kline_result.get("data", {})
                 if kline_data:
                     klines = kline_data.get("klines", [])
                     if klines:
