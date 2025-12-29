@@ -1168,6 +1168,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         
         ai_summary = f"量化评分 {score_text} 分，当前处于{regime_cn}，{vol_cn}环境。多头信号 {bullish_signals} 个、空头信号 {bearish_signals} 个，综合建议：{reco_cn}。"
         
+        print(f"[后台分析] {original_symbol} 更新进度到90%...")
         update_analysis_task(username, original_symbol, {
             'progress': 90,
             'current_step': '质量控制专员正在审核'
@@ -1178,9 +1179,10 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         report = normalize_report_timestamp(report, completed_at)
         
         # 构建完整报告数据（与原分析格式一致）
+        # 注意：ticker 使用原始代码，保持与前端一致
         report_data = {
             'status': 'completed',
-            'ticker': ticker,
+            'ticker': original_symbol,  # 使用原始代码，不带后缀
             'report': report,
             'predictions': predictions,
             'quant_analysis': quant_analysis,
@@ -1193,16 +1195,19 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
             'levels': levels_dict
         }
         
-        # 保存报告到数据库
-        save_user_report(username, ticker, report_data)
+        # 保存报告到数据库（使用原始代码）
+        print(f"[后台分析] {original_symbol} 保存报告到数据库...")
+        save_user_report(username, original_symbol, report_data)
         
         # 更新任务状态为完成
+        print(f"[后台分析] {original_symbol} 更新任务状态为完成...")
         update_analysis_task(username, original_symbol, {
             'status': 'completed',
             'progress': 100,
             'current_step': '分析完成',
             'result': json.dumps(report_data, ensure_ascii=False)
         })
+        print(f"[后台分析] {original_symbol} 分析完成！")
         
     except Exception as e:
         import traceback
