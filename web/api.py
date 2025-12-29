@@ -894,10 +894,24 @@ async def start_background_analysis(
     # 使用线程启动后台任务，完全脱离当前请求
     import threading
     def run_in_thread():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(run_background_analysis_full(username, symbol, task_id))
-        loop.close()
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(run_background_analysis_full(username, symbol, task_id))
+            loop.close()
+        except Exception as e:
+            print(f"[后台分析线程异常] {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
+            # 更新任务状态为失败
+            try:
+                update_analysis_task(username, symbol, {
+                    'status': 'failed',
+                    'current_step': '分析失败',
+                    'error': str(e)
+                })
+            except:
+                pass
     
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
@@ -1002,6 +1016,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
     """
     # 保存原始 symbol 用于更新任务状态（数据库中存储的是原始代码）
     original_symbol = ticker
+    print(f"[后台分析开始] 用户: {username}, 代码: {ticker}, 任务ID: {task_id}")
     
     try:
         # 检查是否是场外基金（不支持技术分析）
