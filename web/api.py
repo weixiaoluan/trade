@@ -1110,14 +1110,22 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         })
         
         # 调用 AI 生成报告和预测（与原分析相同）
-        report, predictions = await generate_ai_report_with_predictions(
-            ticker, 
-            stock_data_dict, 
-            stock_info_dict, 
-            indicators_dict, 
-            trend_dict, 
-            levels_dict
-        )
+        print(f"[后台分析] {ticker} 开始调用AI生成报告...")
+        try:
+            report, predictions = await generate_ai_report_with_predictions(
+                ticker, 
+                stock_data_dict, 
+                stock_info_dict, 
+                indicators_dict, 
+                trend_dict, 
+                levels_dict
+            )
+            print(f"[后台分析] {ticker} AI报告生成完成")
+        except Exception as ai_error:
+            print(f"[后台分析] {ticker} AI报告生成失败: {ai_error}")
+            import traceback
+            traceback.print_exc()
+            raise Exception(f"AI报告生成失败: {ai_error}")
         
         # 提取量化分析数据
         quant_analysis = trend_dict.get("quant_analysis", {})
@@ -1197,7 +1205,9 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         })
         
     except Exception as e:
-        print(f"后台分析失败 [{ticker}]: {e}")
+        import traceback
+        print(f"[后台分析失败] {original_symbol}: {e}")
+        traceback.print_exc()
         update_analysis_task(username, original_symbol, {
             'status': 'failed',
             'current_step': '分析失败',
