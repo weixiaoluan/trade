@@ -190,12 +190,13 @@ export default function DashboardPage() {
   // 用户设置相关
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [userSettings, setUserSettings] = useState<{
-    pushplus_token: string;
-    pushplus_configured: boolean;
-    pushplus_remaining: { remaining: number; total: number } | null;
+    wechat_openid: string;
+    wechat_configured: boolean;
+    wechat_gh_id: string;
+    wechat_account: string;
   } | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
-  const [pushplusToken, setPushplusToken] = useState("");
+  const [wechatOpenId, setWechatOpenId] = useState("");
   const [testPushLoading, setTestPushLoading] = useState(false);
 
   // 错误弹窗控制 - 避免重复弹窗
@@ -464,7 +465,7 @@ export default function DashboardPage() {
       if (response.ok) {
         const data = await response.json();
         setUserSettings(data.settings);
-        setPushplusToken(data.settings?.pushplus_token || "");
+        setWechatOpenId(data.settings?.wechat_openid || "");
       }
     } catch (error) {
       console.error("获取用户设置失败:", error);
@@ -475,52 +476,52 @@ export default function DashboardPage() {
   const handleSaveSettings = useCallback(async () => {
     setSettingsLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/user/settings?pushplus_token=${encodeURIComponent(pushplusToken)}`, {
+      const response = await fetch(`${API_BASE}/api/user/settings?wechat_openid=${encodeURIComponent(wechatOpenId)}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       
       if (response.ok) {
-        showAlertModal("保存成功", "PushPlus Token 已保存", "success");
+        showAlertModal("保存成功", "微信 OpenID 已保存，您将收到价格提醒推送", "success");
         fetchUserSettings();
       } else {
         const data = await response.json();
-        showAlertModal("保存失败", data.detail || "请检查 Token 是否正确", "error");
+        showAlertModal("保存失败", data.detail || "请检查 OpenID 是否正确", "error");
       }
     } catch (error) {
       showAlertModal("保存失败", "网络错误，请稍后重试", "error");
     } finally {
       setSettingsLoading(false);
     }
-  }, [getToken, pushplusToken, showAlertModal, fetchUserSettings]);
+  }, [getToken, wechatOpenId, showAlertModal, fetchUserSettings]);
 
   // 测试推送
   const handleTestPush = useCallback(async () => {
-    if (!pushplusToken.trim()) {
-      showAlertModal("请输入 Token", "请先输入 PushPlus Token 再测试", "warning");
+    if (!wechatOpenId.trim()) {
+      showAlertModal("请输入 OpenID", "请先输入您的微信 OpenID 再测试", "warning");
       return;
     }
     
     setTestPushLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/user/test-push?token=${encodeURIComponent(pushplusToken)}`, {
+      const response = await fetch(`${API_BASE}/api/user/test-push?openid=${encodeURIComponent(wechatOpenId)}&push_type=wechat`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       
       const data = await response.json();
       if (response.ok) {
-        showAlertModal("测试成功", "测试消息已发送，请查看微信", "success");
-        fetchUserSettings(); // 刷新剩余次数
+        showAlertModal("测试成功", "测试消息已发送，请查看微信公众号消息", "success");
+        fetchUserSettings();
       } else {
-        showAlertModal("测试失败", data.detail || "推送失败，请检查配置", "error");
+        showAlertModal("测试失败", data.detail || "推送失败，请检查 OpenID 是否正确", "error");
       }
     } catch (error) {
       showAlertModal("测试失败", "网络错误，请稍后重试", "error");
     } finally {
       setTestPushLoading(false);
     }
-  }, [getToken, pushplusToken, showAlertModal, fetchUserSettings]);
+  }, [getToken, wechatOpenId, showAlertModal, fetchUserSettings]);
 
   const hasActiveTasks = useMemo(() => {
     return Object.values(tasks).some((t) => t.status === "running" || t.status === "pending");
@@ -1161,24 +1162,15 @@ export default function DashboardPage() {
       return;
     }
     
-    // 检查是否配置了 PushPlus Token
-    if (!userSettings?.pushplus_configured) {
+    // 检查是否配置了微信公众号 OpenID
+    if (!userSettings?.wechat_configured) {
       showAlertModal(
         "请先配置推送",
-        "您还未配置微信推送，请先在设置中绑定 PushPlus Token 才能使用提醒功能。",
+        "您还未配置微信推送，请先在设置中绑定微信 OpenID 才能使用提醒功能。",
         "warning"
       );
       setShowSettingsModal(true);
       return;
-    }
-    
-    // 检查剩余推送次数
-    if (userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining >= 0 && userSettings.pushplus_remaining.remaining < 10) {
-      showAlertModal(
-        "推送额度不足",
-        `您本月剩余推送次数仅 ${userSettings.pushplus_remaining.remaining} 次，请合理设置提醒频率。`,
-        "warning"
-      );
     }
     
     setReminderSymbol(symbol);
@@ -1372,13 +1364,6 @@ export default function DashboardPage() {
 
           {user && (
             <div className="flex items-center gap-2">
-              {/* 推送额度提醒 */}
-              {userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining >= 0 && userSettings.pushplus_remaining.remaining < 10 && (
-                <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-xs text-amber-400">剩余{userSettings.pushplus_remaining.remaining}次</span>
-                </div>
-              )}
               {/* 设置按钮 */}
               <button
                 onClick={() => setShowSettingsModal(true)}
@@ -1386,7 +1371,7 @@ export default function DashboardPage() {
                 title="设置"
               >
                 <Settings className="w-5 h-5 text-slate-400" />
-                {!userSettings?.pushplus_configured && (
+                {!userSettings?.wechat_configured && (
                   <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full"></span>
                 )}
               </button>
@@ -2325,14 +2310,14 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              {/* PushPlus 说明 */}
+              {/* 微信公众号说明 */}
               <div className="mb-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
                 <div className="flex items-start gap-2">
                   <MessageSquare className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-sm font-medium text-indigo-400 mb-1">微信推送服务</h4>
+                    <h4 className="text-sm font-medium text-indigo-400 mb-1">微信公众号推送</h4>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      本系统使用 PushPlus 实现微信推送。免费版每月 200 次推送额度，足够日常使用。
+                      本系统使用微信测试公众号实现消息推送，每天可推送 10 万条消息，完全免费。
                     </p>
                   </div>
                 </div>
@@ -2344,70 +2329,55 @@ export default function DashboardPage() {
                 <ol className="text-xs text-slate-400 space-y-2">
                   <li className="flex items-start gap-2">
                     <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">1</span>
-                    <span>访问 PushPlus 官网注册账号</span>
+                    <span>微信扫描下方二维码关注测试公众号</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">2</span>
-                    <span>微信扫码关注公众号并绑定</span>
+                    <span>关注后会自动显示您的 OpenID</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">3</span>
-                    <span>在个人中心复制 Token 填入下方</span>
+                    <span>复制 OpenID 填入下方输入框并保存</span>
                   </li>
                 </ol>
-                <a
-                  href="https://www.pushplus.plus"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 flex items-center justify-center gap-1.5 py-2 bg-indigo-600/20 text-indigo-400 rounded-lg text-sm hover:bg-indigo-600/30 transition-all"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  前往 PushPlus 官网
-                </a>
+                {/* 公众号二维码 */}
+                <div className="mt-3 flex flex-col items-center">
+                  <div className="p-2 bg-white rounded-lg">
+                    <img 
+                      src="https://mp.weixin.qq.com/cgi-bin/showqrcode?ticket=gQFP8DwAAAAAAAAAAS5odHRwOi8vd2VpeGluLnFxLmNvbS9xLzAyTnBCRjFPX2ZlbDExMDAwME0wN1oAAgRYz29nAwQAAAAA" 
+                      alt="微信公众号二维码" 
+                      className="w-32 h-32"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        target.nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                    <p className="hidden text-xs text-slate-500 text-center mt-2">二维码加载失败，请手动搜索公众号</p>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">扫码关注「AI智能投研」公众号</p>
+                </div>
               </div>
 
-              {/* Token 输入 */}
+              {/* OpenID 输入 */}
               <div className="mb-4">
-                <label className="text-xs sm:text-sm text-slate-400 mb-2 block">PushPlus Token</label>
+                <label className="text-xs sm:text-sm text-slate-400 mb-2 block">微信 OpenID</label>
                 <input
                   type="text"
-                  value={pushplusToken}
-                  onChange={(e) => setPushplusToken(e.target.value)}
-                  placeholder="请输入您的 PushPlus Token"
+                  value={wechatOpenId}
+                  onChange={(e) => setWechatOpenId(e.target.value)}
+                  placeholder="请输入您的微信 OpenID（关注公众号后获取）"
                   className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-mono"
                 />
+                <p className="text-[10px] text-slate-500 mt-1">OpenID 格式类似：oZqdM3GW6B6F4g-Ggvq3s2dT6Kjg</p>
               </div>
 
               {/* 状态显示 */}
-              {userSettings?.pushplus_configured && (
+              {userSettings?.wechat_configured && (
                 <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Check className="w-4 h-4 text-emerald-400" />
-                      <span className="text-sm text-emerald-400">已配置</span>
-                    </div>
-                    {userSettings.pushplus_remaining && userSettings.pushplus_remaining.remaining >= 0 && (
-                      <div className="text-xs text-slate-400">
-                        本月剩余: <span className={userSettings.pushplus_remaining.remaining < 10 ? "text-amber-400 font-medium" : "text-emerald-400"}>
-                          {userSettings.pushplus_remaining.remaining}
-                        </span> / {userSettings.pushplus_remaining.total} 次
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* 低额度警告 */}
-              {userSettings?.pushplus_remaining && userSettings.pushplus_remaining.remaining >= 0 && userSettings.pushplus_remaining.remaining < 10 && (
-                <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-sm font-medium text-amber-400">推送额度不足</h4>
-                      <p className="text-xs text-amber-400/70 mt-0.5">
-                        本月剩余推送次数较少，建议减少提醒频率或等待下月额度刷新。
-                      </p>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-sm text-emerald-400">已配置微信推送</span>
                   </div>
                 </div>
               )}
@@ -2416,7 +2386,7 @@ export default function DashboardPage() {
               <div className="flex gap-3">
                 <button
                   onClick={handleTestPush}
-                  disabled={testPushLoading || !pushplusToken.trim()}
+                  disabled={testPushLoading || !wechatOpenId.trim()}
                   className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm sm:text-base disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {testPushLoading ? (
@@ -2428,7 +2398,7 @@ export default function DashboardPage() {
                 </button>
                 <button
                   onClick={handleSaveSettings}
-                  disabled={settingsLoading || !pushplusToken.trim()}
+                  disabled={settingsLoading || !wechatOpenId.trim()}
                   className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base flex items-center justify-center gap-2"
                 >
                   {settingsLoading ? (
