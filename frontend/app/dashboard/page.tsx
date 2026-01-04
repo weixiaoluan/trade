@@ -2193,7 +2193,7 @@ export default function DashboardPage() {
                         {Array.from({ length: 24 }, (_, h) => 
                           ["00", "30"].map(m => {
                             const time = `${h.toString().padStart(2, "0")}:${m}`;
-                            return <option key={time} value={time}>{time}</option>;
+                            return <option key={time} value={time} className="bg-slate-800">{time}</option>;
                           })
                         ).flat()}
                       </select>
