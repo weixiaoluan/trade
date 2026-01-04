@@ -3198,7 +3198,7 @@ async def wechat_message(request: Request):
             print(f"[WeChat] 事件类型: {event}")
             if event.lower() == "subscribe":
                 # 用户关注事件
-                reply_content = f"🎉 欢迎关注 AI智能投研！\n\n您的 OpenID 是：\n{from_user}\n\n请复制上方 OpenID 到网站设置中完成绑定，即可接收投资提醒推送。"
+                reply_content = f"🎉 欢迎关注 AI智能投资提醒！\n\n您的 OpenID 是：\n{from_user}\n\n请复制上方 OpenID 到网站设置中完成绑定，即可接收投资提醒推送。"
             else:
                 reply_content = f"您的 OpenID 是：\n{from_user}"
         elif msg_type == "text":

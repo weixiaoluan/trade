@@ -2349,7 +2349,7 @@ export default function DashboardPage() {
                       className="w-32 h-32"
                     />
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">扫码关注「aiautotrade」公众号</p>
+                  <p className="text-xs text-slate-500 mt-2">扫码关注「AI智能投资提醒」公众号</p>
                 </div>
               </div>
 
