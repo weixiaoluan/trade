@@ -1182,6 +1182,57 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         
         save_user_report(username, original_symbol, report_data)
         
+        # 从报告中提取AI建议价格并更新到自选列表
+        try:
+            from web.database import db_update_watchlist_ai_prices
+            
+            # 从levels中提取支撑位和阻力位作为建议买入/卖出价
+            ai_buy_price = None
+            ai_sell_price = None
+            
+            key_levels = levels_dict.get('key_levels', {})
+            if isinstance(key_levels, list):
+                # 列表格式
+                support_prices = [l.get('price') for l in key_levels if l.get('type') == 'support' and l.get('price')]
+                resistance_prices = [l.get('price') for l in key_levels if l.get('type') == 'resistance' and l.get('price')]
+                if support_prices:
+                    ai_buy_price = support_prices[0]
+                if resistance_prices:
+                    ai_sell_price = resistance_prices[0]
+            elif isinstance(key_levels, dict):
+                # 字典格式
+                ai_buy_price = key_levels.get('nearest_support')
+                ai_sell_price = key_levels.get('nearest_resistance')
+            
+            # 如果key_levels没有，尝试从support_levels/resistance_levels获取
+            if not ai_buy_price:
+                support_levels = levels_dict.get('support_levels', [])
+                if support_levels:
+                    if isinstance(support_levels[0], dict):
+                        ai_buy_price = support_levels[0].get('price')
+                    elif isinstance(support_levels[0], (int, float)):
+                        ai_buy_price = support_levels[0]
+            
+            if not ai_sell_price:
+                resistance_levels = levels_dict.get('resistance_levels', [])
+                if resistance_levels:
+                    if isinstance(resistance_levels[0], dict):
+                        ai_sell_price = resistance_levels[0].get('price')
+                    elif isinstance(resistance_levels[0], (int, float)):
+                        ai_sell_price = resistance_levels[0]
+            
+            # 确保价格是数值类型
+            if isinstance(ai_buy_price, str):
+                ai_buy_price = None
+            if isinstance(ai_sell_price, str):
+                ai_sell_price = None
+            
+            if ai_buy_price or ai_sell_price:
+                db_update_watchlist_ai_prices(username, original_symbol, ai_buy_price, ai_sell_price)
+                print(f"[AI价格] 已更新 {original_symbol} 的建议价格: 买入={ai_buy_price}, 卖出={ai_sell_price}")
+        except Exception as e:
+            print(f"[AI价格] 更新建议价格失败: {e}")
+        
         total_time = time.time() - start_time
         print(f"[分析完成] {original_symbol} 总耗时 {total_time:.1f}s")
         

@@ -8,7 +8,7 @@ Price Alert Scheduler + AI Analysis Scheduler
 import asyncio
 import json
 import logging
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta
 from typing import Dict, List, Optional
 from pathlib import Path
 import threading
@@ -30,6 +30,34 @@ from web.auth import (
 )
 from tools.data_fetcher import get_stock_info
 from config import APIConfig
+
+
+# ============================================
+# 交易时间判断
+# ============================================
+
+def is_trading_time() -> bool:
+    """判断当前是否为交易时间（A股: 9:30-11:30, 13:00-15:00）"""
+    now = datetime.now()
+    current_time = now.time()
+    
+    # 周末不交易
+    if now.weekday() >= 5:
+        return False
+    
+    # 上午交易时段: 9:30 - 11:30
+    morning_start = dt_time(9, 30)
+    morning_end = dt_time(11, 30)
+    
+    # 下午交易时段: 13:00 - 15:00
+    afternoon_start = dt_time(13, 0)
+    afternoon_end = dt_time(15, 0)
+    
+    if (morning_start <= current_time <= morning_end) or \
+       (afternoon_start <= current_time <= afternoon_end):
+        return True
+    
+    return False
 
 
 # ============================================
@@ -380,23 +408,129 @@ def run_scheduled_checks():
         logger.error(f"执行定时检查失败: {e}")
 
 
+# ============================================
+# 自选列表AI建议价格实时监控
+# ============================================
+
+def check_watchlist_price_alerts():
+    """检查自选列表中的AI建议价格触发情况（交易时间内运行）"""
+    if not is_trading_time():
+        return
+    
+    logger.info("开始检查自选列表AI建议价格...")
+    
+    try:
+        from web.database import db_get_all_watchlist_with_ai_prices, db_update_watchlist_last_alert
+        from web.api import send_price_alert_notification
+        
+        # 获取所有设置了AI建议价格的自选项
+        watchlist_items = db_get_all_watchlist_with_ai_prices()
+        
+        if not watchlist_items:
+            return
+        
+        logger.info(f"共有 {len(watchlist_items)} 个自选项需要监控")
+        
+        for item in watchlist_items:
+            username = item.get('username')
+            symbol = item.get('symbol')
+            name = item.get('name', symbol)
+            ai_buy_price = item.get('ai_buy_price')
+            ai_sell_price = item.get('ai_sell_price')
+            last_alert_at = item.get('last_alert_at')
+            wechat_openid = item.get('wechat_openid')
+            pushplus_token = item.get('pushplus_token')
+            
+            # 检查是否有推送配置
+            if not wechat_openid and not pushplus_token:
+                continue
+            
+            # 检查是否在冷却期内（同一标的30分钟内不重复提醒）
+            if last_alert_at:
+                try:
+                    last_time = datetime.fromisoformat(last_alert_at)
+                    if datetime.now() - last_time < timedelta(minutes=30):
+                        continue
+                except:
+                    pass
+            
+            # 获取实时价格
+            current_price = get_real_time_price(symbol)
+            if current_price is None:
+                continue
+            
+            triggered = False
+            alert_type = None
+            target_price = None
+            
+            # 检查买入信号（当前价格 <= AI建议买入价）
+            if ai_buy_price and current_price <= ai_buy_price:
+                triggered = True
+                alert_type = 'buy'
+                target_price = ai_buy_price
+                logger.info(f"[自选监控] {symbol} 触发买入: 当前价 {current_price} <= AI建议买入价 {ai_buy_price}")
+            
+            # 检查卖出信号（当前价格 >= AI建议卖出价）
+            elif ai_sell_price and current_price >= ai_sell_price:
+                triggered = True
+                alert_type = 'sell'
+                target_price = ai_sell_price
+                logger.info(f"[自选监控] {symbol} 触发卖出: 当前价 {current_price} >= AI建议卖出价 {ai_sell_price}")
+            
+            # 发送提醒
+            if triggered:
+                # 获取AI分析摘要
+                ai_summary = ""
+                try:
+                    targets = get_ai_price_targets(username, symbol)
+                    ai_summary = targets.get('ai_summary', '')
+                except:
+                    pass
+                
+                # 发送推送
+                result = send_price_alert_notification(
+                    username=username,
+                    symbol=symbol,
+                    name=name,
+                    alert_type=alert_type,
+                    current_price=current_price,
+                    target_price=target_price,
+                    ai_summary=ai_summary
+                )
+                
+                if result:
+                    # 更新最后提醒时间
+                    db_update_watchlist_last_alert(username, symbol)
+                    logger.info(f"[自选监控] {username} - {symbol} 推送成功")
+                else:
+                    logger.warning(f"[自选监控] {username} - {symbol} 推送失败")
+    
+    except Exception as e:
+        logger.error(f"检查自选列表价格失败: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def start_scheduler():
     """启动调度器"""
     logger.info("启动定时任务调度器...")
     
-    # 每分钟检查一次
+    # 每分钟检查一次定时提醒
     schedule.every(1).minutes.do(run_scheduled_checks)
+    
+    # 每30秒检查一次自选列表AI建议价格（交易时间内）
+    schedule.every(30).seconds.do(check_watchlist_price_alerts)
     
     # 在后台线程运行
     def run_schedule():
         while True:
             schedule.run_pending()
-            time.sleep(30)
+            time.sleep(10)
     
     scheduler_thread = threading.Thread(target=run_schedule, daemon=True)
     scheduler_thread.start()
     
-    logger.info("定时任务调度器已启动")
+    logger.info("定时任务调度器已启动（包含自选列表实时监控）")
 
 
 # ============================================

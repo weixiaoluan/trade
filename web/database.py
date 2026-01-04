@@ -176,6 +176,23 @@ def migrate_database():
             print("迁移: 添加 starred 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN starred INTEGER DEFAULT 0")
         
+        # 检查 watchlist 表是否有 AI 建议价格字段
+        if 'ai_buy_price' not in watchlist_columns:
+            print("迁移: 添加 ai_buy_price 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_buy_price REAL")
+        
+        if 'ai_sell_price' not in watchlist_columns:
+            print("迁移: 添加 ai_sell_price 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_sell_price REAL")
+        
+        if 'ai_price_updated_at' not in watchlist_columns:
+            print("迁移: 添加 ai_price_updated_at 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_price_updated_at TEXT")
+        
+        if 'last_alert_at' not in watchlist_columns:
+            print("迁移: 添加 last_alert_at 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN last_alert_at TEXT")
+        
         # 检查 users 表是否有 pushplus_token 字段
         cursor.execute("PRAGMA table_info(users)")
         user_columns = [col[1] for col in cursor.fetchall()]
@@ -327,7 +344,8 @@ def db_get_user_watchlist(username: str) -> List[Dict]:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT symbol, name, type, position, cost_price, added_at, 
-                   COALESCE(starred, 0) as starred
+                   COALESCE(starred, 0) as starred,
+                   ai_buy_price, ai_sell_price, ai_price_updated_at, last_alert_at
             FROM watchlist WHERE username = ? 
             ORDER BY starred DESC, added_at DESC
         ''', (username,))
@@ -393,6 +411,48 @@ def db_update_watchlist_item(username: str, symbol: str, **kwargs) -> bool:
             UPDATE watchlist SET {", ".join(updates)}
             WHERE username = ? AND symbol = ?
         ''', values)
+        return cursor.rowcount > 0
+
+
+def db_update_watchlist_ai_prices(username: str, symbol: str, 
+                                   ai_buy_price: float = None, 
+                                   ai_sell_price: float = None) -> bool:
+    """更新自选项的AI建议买入/卖出价格"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE watchlist 
+            SET ai_buy_price = ?, ai_sell_price = ?, ai_price_updated_at = ?
+            WHERE username = ? AND UPPER(symbol) = UPPER(?)
+        ''', (ai_buy_price, ai_sell_price, datetime.now().isoformat(), username, symbol))
+        return cursor.rowcount > 0
+
+
+def db_get_all_watchlist_with_ai_prices() -> List[Dict]:
+    """获取所有设置了AI建议价格的自选项（用于价格监控）"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT w.username, w.symbol, w.name, w.type, 
+                   w.ai_buy_price, w.ai_sell_price, w.last_alert_at,
+                   u.wechat_openid, u.pushplus_token
+            FROM watchlist w
+            JOIN users u ON w.username = u.username
+            WHERE (w.ai_buy_price IS NOT NULL OR w.ai_sell_price IS NOT NULL)
+              AND u.status = 'approved'
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_update_watchlist_last_alert(username: str, symbol: str) -> bool:
+    """更新自选项的最后提醒时间"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE watchlist 
+            SET last_alert_at = ?
+            WHERE username = ? AND UPPER(symbol) = UPPER(?)
+        ''', (datetime.now().isoformat(), username, symbol))
         return cursor.rowcount > 0
 
 
