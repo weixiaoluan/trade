@@ -2344,18 +2344,12 @@ export default function DashboardPage() {
                 <div className="mt-3 flex flex-col items-center">
                   <div className="p-2 bg-white rounded-lg">
                     <img 
-                      src="https://mp.weixin.qq.com/cgi-bin/showqrcode?ticket=gQFP8DwAAAAAAAAAAS5odHRwOi8vd2VpeGluLnFxLmNvbS9xLzAyTnBCRjFPX2ZlbDExMDAwME0wN1oAAgRYz29nAwQAAAAA" 
+                      src="/wechat-qrcode.png" 
                       alt="微信公众号二维码" 
                       className="w-32 h-32"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        target.nextElementSibling?.classList.remove('hidden');
-                      }}
                     />
-                    <p className="hidden text-xs text-slate-500 text-center mt-2">二维码加载失败，请手动搜索公众号</p>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">扫码关注「AI智能投研」公众号</p>
+                  <p className="text-xs text-slate-500 mt-2">扫码关注「aiautotrade」公众号</p>
                 </div>
               </div>
 
