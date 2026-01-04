@@ -3152,6 +3152,7 @@ async def wechat_verify(
 ):
     """微信服务器验证接口"""
     import hashlib
+    from fastapi.responses import PlainTextResponse
     
     # 将token、timestamp、nonce三个参数进行字典序排序
     tmp_list = [WECHAT_TOKEN, timestamp, nonce]
@@ -3161,11 +3162,16 @@ async def wechat_verify(
     # 进行sha1加密
     tmp_str = hashlib.sha1(tmp_str.encode()).hexdigest()
     
+    print(f"[WeChat] 验证请求: signature={signature}, timestamp={timestamp}, nonce={nonce}")
+    print(f"[WeChat] 计算签名: {tmp_str}, Token: {WECHAT_TOKEN}")
+    
     # 验证签名
     if tmp_str == signature:
-        return int(echostr)
+        print(f"[WeChat] 验证成功，返回 echostr: {echostr}")
+        return PlainTextResponse(content=echostr)
     else:
-        return "验证失败"
+        print(f"[WeChat] 验证失败")
+        return PlainTextResponse(content="验证失败")
 
 
 @app.post("/api/wechat/callback")
