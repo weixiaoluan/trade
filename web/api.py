@@ -8,6 +8,7 @@ FastAPI 后端 API 服务
 import asyncio
 import json
 import uuid
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any, List
