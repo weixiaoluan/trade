@@ -41,6 +41,10 @@ from web.auth import (
     get_symbol_reminders, batch_add_reminders,
     get_all_users, update_user_status, update_user_role, is_admin, is_approved
 )
+from web.database import (
+    get_db, db_get_user_by_username, db_get_user_reminders, db_get_user_reports,
+    db_update_user_info, db_delete_user
+)
 
 
 # ============================================
