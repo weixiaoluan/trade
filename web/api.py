@@ -51,6 +51,7 @@ class AnalysisRequest(BaseModel):
     """分析请求"""
     ticker: str
     analysis_type: str = "full"  # full, quick, technical, fundamental
+    holding_period: str = "swing"  # short(短线1-5天), swing(波段1-4周), long(中长线1月以上)
 
 
 class AnalysisResponse(BaseModel):
@@ -888,6 +889,7 @@ async def start_background_analysis(
     task_id = str(uuid.uuid4())
     username = user['username']
     symbol = request.ticker.upper()
+    holding_period = request.holding_period  # short, swing, long
     
     # 创建任务记录
     create_analysis_task(username, symbol, task_id)
@@ -898,7 +900,7 @@ async def start_background_analysis(
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(run_background_analysis_full(username, symbol, task_id))
+            loop.run_until_complete(run_background_analysis_full(username, symbol, task_id, holding_period))
             loop.close()
         except Exception as e:
             print(f"[后台分析线程异常] {symbol}: {e}")
@@ -921,13 +923,20 @@ async def start_background_analysis(
         "status": "success",
         "task_id": task_id,
         "symbol": symbol,
+        "holding_period": holding_period,
         "message": "分析任务已启动，您可以关闭页面，稍后查看报告"
     }
 
 
+class BatchAnalysisRequest(BaseModel):
+    """批量分析请求"""
+    symbols: List[str]
+    holding_period: str = "swing"  # short, swing, long
+
+
 @app.post("/api/analyze/batch")
 async def start_batch_analysis(
-    symbols: List[str],
+    request: BatchAnalysisRequest,
     authorization: str = Header(None)
 ):
     """批量启动后台分析任务（真正并行执行）"""
@@ -941,6 +950,8 @@ async def start_batch_analysis(
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     username = user['username']
+    symbols = request.symbols
+    holding_period = request.holding_period
     tasks = []
     
     for symbol in symbols:
@@ -958,13 +969,13 @@ async def start_batch_analysis(
     # 使用独立线程并行启动所有分析任务
     import threading
     
-    def create_analysis_runner(uname: str, sym: str, tid: str):
+    def create_analysis_runner(uname: str, sym: str, tid: str, hp: str):
         """创建分析任务运行器"""
         def run():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(run_background_analysis_full(uname, sym, tid))
+                loop.run_until_complete(run_background_analysis_full(uname, sym, tid, hp))
             except Exception as e:
                 print(f"分析任务异常 [{sym}]: {e}")
             finally:
@@ -974,7 +985,7 @@ async def start_batch_analysis(
     # 先创建所有线程
     threads = []
     for task_info in tasks:
-        runner = create_analysis_runner(username, task_info["symbol"], task_info["task_id"])
+        runner = create_analysis_runner(username, task_info["symbol"], task_info["task_id"], holding_period)
         t = threading.Thread(target=runner, daemon=True)
         threads.append(t)
     
@@ -982,11 +993,12 @@ async def start_batch_analysis(
     for t in threads:
         t.start()
     
-    print(f"已并行启动 {len(threads)} 个分析任务")
+    print(f"已并行启动 {len(threads)} 个分析任务，持有周期: {holding_period}")
     
     return {
         "status": "success",
         "tasks": tasks,
+        "holding_period": holding_period,
         "message": f"已启动 {len(tasks)} 个分析任务并行执行，您可以关闭页面，稍后查看报告"
     }
 
@@ -1011,9 +1023,15 @@ async def get_analysis_tasks_status(authorization: str = Header(None)):
     }
 
 
-async def run_background_analysis_full(username: str, ticker: str, task_id: str):
+async def run_background_analysis_full(username: str, ticker: str, task_id: str, holding_period: str = "swing"):
     """
     后台执行完整的多 Agent 分析（异步并行优化版）
+    
+    Args:
+        username: 用户名
+        ticker: 证券代码
+        task_id: 任务ID
+        holding_period: 持有周期 - short(短线1-5天), swing(波段1-4周), long(中长线1月以上)
     
     进度分配（基于实际耗时）：
     - 0-5%: 初始化
@@ -1026,9 +1044,17 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
     import time
     start_time = time.time()
     
+    # 持有周期映射
+    holding_period_map = {
+        'short': '短线（1-5天）',
+        'swing': '波段（1-4周）',
+        'long': '中长线（1月以上）'
+    }
+    holding_period_cn = holding_period_map.get(holding_period, '波段（1-4周）')
+    
     # 保存原始 symbol 用于更新任务状态
     original_symbol = ticker
-    print(f"[分析开始] {ticker} 任务ID: {task_id}")
+    print(f"[分析开始] {ticker} 任务ID: {task_id}, 持有周期: {holding_period_cn}")
     
     try:
         # === 初始化 ===
@@ -1109,13 +1135,14 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         # === 阶段4：AI报告生成（30-95%）===
         update_analysis_task(username, original_symbol, {
             'progress': 30,
-            'current_step': 'AI正在生成分析报告（约需1-2分钟）'
+            'current_step': f'AI正在生成{holding_period_cn}分析报告（约需1-2分钟）'
         })
         
         try:
             report, predictions = await generate_ai_report_with_predictions(
                 ticker, stock_data_dict, stock_info_dict, 
                 indicators_dict, trend_dict, levels_dict,
+                holding_period=holding_period,
                 # 传入进度回调
                 progress_callback=lambda p, s: update_analysis_task(username, original_symbol, {
                     'progress': 30 + int(p * 0.65),  # 30-95%
@@ -1949,19 +1976,30 @@ async def generate_ai_report_with_predictions(
     indicators: dict,
     trend: dict,
     levels: dict,
+    holding_period: str = "swing",
     progress_callback=None
 ) -> tuple:
     """
     调用 AI 多Agent分析生成报告和预测
     返回: (report, predictions)
     
-    progress_callback: 可选的进度回调函数 callback(progress: float, step: str)
-                      progress 范围 0-100
+    Args:
+        holding_period: 持有周期 - short(短线), swing(波段), long(中长线)
+        progress_callback: 可选的进度回调函数 callback(progress: float, step: str)
+                          progress 范围 0-100
     """
     from openai import OpenAI
     import httpx
     import os
     import re
+    
+    # 持有周期映射
+    holding_period_map = {
+        'short': '短线（1-5天）',
+        'swing': '波段（1-4周）',
+        'long': '中长线（1月以上）'
+    }
+    holding_period_cn = holding_period_map.get(holding_period, '波段（1-4周）')
     
     # 进度更新辅助函数
     def update_progress(progress: float, step: str):
@@ -1971,7 +2009,7 @@ async def generate_ai_report_with_predictions(
             except:
                 pass
     
-    update_progress(5, 'AI预测模型准备中')
+    update_progress(5, f'AI{holding_period_cn}预测模型准备中')
     
     # 强制禁用系统代理
     os.environ['NO_PROXY'] = '*'
@@ -2096,12 +2134,12 @@ async def generate_ai_report_with_predictions(
         
         return predictions_local
     
-    update_progress(15, 'AI预测和报告并行生成中')
+    update_progress(15, f'AI{holding_period_cn}预测和报告并行生成中')
     
     # 并行运行预测和报告生成
     predictions_task = asyncio.create_task(call_predictions())
     report_task = asyncio.create_task(
-        generate_ai_report(ticker, stock_data, stock_info, indicators, trend, levels)
+        generate_ai_report(ticker, stock_data, stock_info, indicators, trend, levels, holding_period)
     )
     
     # 等待预测完成（通常较快）
@@ -2121,14 +2159,26 @@ async def generate_ai_report(
     stock_info: dict,
     indicators: dict,
     trend: dict,
-    levels: dict
+    levels: dict,
+    holding_period: str = "swing"
 ) -> str:
     """
     调用 DeepSeek-R1 生成分析报告
+    
+    Args:
+        holding_period: 持有周期 - short(短线), swing(波段), long(中长线)
     """
     from openai import OpenAI
     import httpx
     import os
+    
+    # 持有周期映射
+    holding_period_map = {
+        'short': '短线（1-5天）',
+        'swing': '波段（1-4周）',
+        'long': '中长线（1月以上）'
+    }
+    holding_period_cn = holding_period_map.get(holding_period, '波段（1-4周）')
     
     # 强制禁用系统代理
     os.environ['NO_PROXY'] = '*'
@@ -2234,8 +2284,44 @@ async def generate_ai_report(
     report_date = current_datetime.strftime("%Y年%m月%d日")
     report_time = current_datetime.strftime("%H:%M:%S")
     
+    # 根据持有周期设置不同的分析重点
+    if holding_period == 'short':
+        period_focus = """
+**短线交易分析重点（1-5天）**：
+- 重点关注日内和日线级别的技术信号
+- 关注分时图、5分钟、15分钟、60分钟K线形态
+- 重点分析MACD、KDJ、RSI等短期指标的金叉死叉信号
+- 关注成交量的突变和主力资金的短期动向
+- 建议买入价应接近当日支撑位，建议卖出价应接近短期阻力位
+- 止损幅度控制在2-3%以内"""
+        price_guidance = "短线建议买入价应在当前价格下方1-3%的支撑位附近，建议卖出价应在当前价格上方2-5%的阻力位附近"
+    elif holding_period == 'long':
+        period_focus = """
+**中长线投资分析重点（1月以上）**：
+- 重点关注周线、月线级别的趋势方向
+- 关注均线系统的长期排列（MA60、MA120、MA250）
+- 重点分析基本面、估值水平、行业前景
+- 关注机构持仓变化和长期资金流向
+- 建议买入价应在重要支撑位或估值低位，建议卖出价应在长期阻力位或估值高位
+- 止损幅度可放宽到8-15%"""
+        price_guidance = "中长线建议买入价应在当前价格下方5-15%的重要支撑位，建议卖出价应在当前价格上方10-30%的长期目标位"
+    else:  # swing
+        period_focus = """
+**波段操作分析重点（1-4周）**：
+- 重点关注日线和周线级别的波段机会
+- 关注均线系统的中期排列（MA5、MA10、MA20、MA60）
+- 重点分析MACD、布林带等中期趋势指标
+- 关注量价配合和主力资金的中期动向
+- 建议买入价应在波段低点附近，建议卖出价应在波段高点附近
+- 止损幅度控制在5-8%"""
+        price_guidance = "波段建议买入价应在当前价格下方3-8%的支撑位，建议卖出价应在当前价格上方5-15%的阻力位"
+    
     prompt = f"""
-**重要提示**: 当前日期是 {report_date}，当前时间是 {report_time}。请在报告中使用此日期作为报告生成时间，不要使用其他日期。
+**重要提示**: 
+1. 当前日期是 {report_date}，当前时间是 {report_time}。请在报告中使用此日期作为报告生成时间。
+2. 本次分析的持有周期是：**{holding_period_cn}**，请根据此持有周期给出相应的建议买入价和卖出价。
+
+{period_focus}
 
 请根据以下数据生成专业详细的证券/基金分析报告：
 
@@ -2290,7 +2376,7 @@ async def generate_ai_report(
 
 ---
 
-请生成一份**专业、详细、实用**的投资分析报告，必须包含以下完整章节：
+请生成一份针对**{holding_period_cn}**的专业投资分析报告，必须包含以下完整章节：
 
 ## 一、标的概况
 用 Markdown 表格展示核心指标（代码、名称、价格、涨跌、市值等）

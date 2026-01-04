@@ -61,6 +61,7 @@ interface WatchlistItem {
   ai_sell_price?: number;
   ai_price_updated_at?: string;
   last_alert_at?: string;
+  holding_period?: string;
 }
 
 interface TaskStatus {
@@ -170,6 +171,7 @@ export default function DashboardPage() {
   const [aiAnalysisTime, setAiAnalysisTime] = useState<string>("09:30");
   const [aiAnalysisWeekday, setAiAnalysisWeekday] = useState<number>(1);
   const [aiAnalysisDayOfMonth, setAiAnalysisDayOfMonth] = useState<number>(1);
+  const [reminderHoldingPeriod, setReminderHoldingPeriod] = useState<string>("short");
 
   const [currentPage, setCurrentPage] = useState(1);
   // 移动端默认10条，桌面端默认50条
@@ -214,6 +216,12 @@ export default function DashboardPage() {
     type: "question" as "warning" | "info" | "success" | "error" | "question",
     onConfirm: () => {},
   });
+
+  // 持有周期选择弹窗状态
+  const [showHoldingPeriodModal, setShowHoldingPeriodModal] = useState(false);
+  const [holdingPeriod, setHoldingPeriod] = useState<string>("short");
+  const [pendingAnalysisSymbols, setPendingAnalysisSymbols] = useState<string[]>([]);
+  const [isBatchAnalysis, setIsBatchAnalysis] = useState(false);
 
   const getToken = useCallback(() => localStorage.getItem("token"), []);
 
@@ -976,6 +984,15 @@ export default function DashboardPage() {
       return;
     }
 
+    // 弹窗选择持有周期
+    setPendingAnalysisSymbols([symbol]);
+    setIsBatchAnalysis(false);
+    setHoldingPeriod("short");
+    setShowHoldingPeriodModal(true);
+  }, [canUseFeatures, showPendingAlert]);
+
+  // 实际执行单个分析
+  const executeAnalyzeSingle = useCallback(async (symbol: string, period: string) => {
     // 重置该标的的错误状态
     setShownErrorTasks(prev => {
       const next = new Set(prev);
@@ -1004,7 +1021,7 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
         },
-        body: JSON.stringify({ ticker: symbol }),
+        body: JSON.stringify({ ticker: symbol, holding_period: period }),
       });
 
       if (!response.ok) {
@@ -1051,7 +1068,7 @@ export default function DashboardPage() {
       });
       showAlertModal("分析失败", error instanceof Error ? error.message : "网络错误，请稍后重试", "error");
     }
-  }, [canUseFeatures, fetchTasks, getErrorMessageFromResponse, getToken, showAlertModal, showPendingAlert]);
+  }, [fetchTasks, getErrorMessageFromResponse, getToken, showAlertModal]);
 
   const handleBatchAnalyze = useCallback(async () => {
     if (selectedItems.size === 0) return;
@@ -1061,10 +1078,18 @@ export default function DashboardPage() {
       return;
     }
     
+    // 弹窗选择持有周期
+    setPendingAnalysisSymbols(Array.from(selectedItems));
+    setIsBatchAnalysis(true);
+    setHoldingPeriod("short");
+    setShowHoldingPeriodModal(true);
+  }, [canUseFeatures, selectedItems, showPendingAlert]);
+
+  // 实际执行批量分析
+  const executeBatchAnalyze = useCallback(async (symbols: string[], period: string) => {
     // 重置错误状态
     setShownErrorTasks(new Set());
     
-    const symbols = Array.from(selectedItems);
     const prevTasks: Record<string, TaskStatus | undefined> = {};
     for (const sym of symbols) {
       prevTasks[sym] = tasksRef.current[sym];
@@ -1093,7 +1118,7 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
         },
-        body: JSON.stringify(Array.from(selectedItems)),
+        body: JSON.stringify({ symbols, holding_period: period }),
       });
 
       if (!response.ok) {
@@ -1150,7 +1175,18 @@ export default function DashboardPage() {
       });
       showAlertModal("批量分析失败", error instanceof Error ? error.message : "网络错误，请稍后重试", "error");
     }
-  }, [canUseFeatures, fetchTasks, getErrorMessageFromResponse, getToken, selectedItems, showAlertModal, showPendingAlert]);
+  }, [fetchTasks, getErrorMessageFromResponse, getToken, showAlertModal]);
+
+  // 确认持有周期后执行分析
+  const handleConfirmHoldingPeriod = useCallback(() => {
+    setShowHoldingPeriodModal(false);
+    if (isBatchAnalysis) {
+      executeBatchAnalyze(pendingAnalysisSymbols, holdingPeriod);
+    } else if (pendingAnalysisSymbols.length === 1) {
+      executeAnalyzeSingle(pendingAnalysisSymbols[0], holdingPeriod);
+    }
+    setPendingAnalysisSymbols([]);
+  }, [isBatchAnalysis, pendingAnalysisSymbols, holdingPeriod, executeBatchAnalyze, executeAnalyzeSingle]);
 
   const handleViewReport = useCallback((symbol: string) => {
     if (!canUseFeatures()) {
@@ -1192,6 +1228,7 @@ export default function DashboardPage() {
     setAiAnalysisTime("09:30");
     setAiAnalysisWeekday(1);
     setAiAnalysisDayOfMonth(1);
+    setReminderHoldingPeriod("short");
     setShowReminderModal(true);
   }, [canUseFeatures, showPendingAlert, userSettings, showAlertModal]);
 
@@ -1213,6 +1250,8 @@ export default function DashboardPage() {
         ai_analysis_time: aiAnalysisTime,
         ai_analysis_weekday: aiAnalysisFrequency === "weekly" ? aiAnalysisWeekday : undefined,
         ai_analysis_day_of_month: aiAnalysisFrequency === "monthly" ? aiAnalysisDayOfMonth : undefined,
+        // 持有周期
+        holding_period: reminderHoldingPeriod,
       };
 
       const response = await fetch(`${API_BASE}/api/reminders`, {
@@ -2241,6 +2280,30 @@ export default function DashboardPage() {
                         ).flat()}
                       </select>
                     </div>
+
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1.5 block">持有周期</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { v: "short", l: "短线", desc: "1-5天" },
+                          { v: "swing", l: "波段", desc: "1-4周" },
+                          { v: "long", l: "中长线", desc: "1月以上" }
+                        ].map(({ v, l, desc }) => (
+                          <button
+                            key={v}
+                            onClick={() => setReminderHoldingPeriod(v)}
+                            className={`py-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center ${
+                              reminderHoldingPeriod === v 
+                                ? "bg-indigo-600 text-white" 
+                                : "bg-white/[0.05] text-slate-300 hover:bg-white/[0.08]"
+                            }`}
+                          >
+                            <span>{l}</span>
+                            <span className={`text-[10px] ${reminderHoldingPeriod === v ? "text-indigo-200" : "text-slate-500"}`}>{desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div>
@@ -2444,6 +2507,88 @@ export default function DashboardPage() {
                     <Check className="w-4 h-4" />
                   )}
                   保存设置
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 持有周期选择弹窗 */}
+      <AnimatePresence>
+        {showHoldingPeriodModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
+            onClick={() => setShowHoldingPeriodModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 safe-area-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-indigo-400" />
+                  选择持有周期
+                </h3>
+                <button onClick={() => setShowHoldingPeriodModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <p className="text-sm text-slate-400 mb-4">
+                {isBatchAnalysis 
+                  ? `即将分析 ${pendingAnalysisSymbols.length} 个标的，请选择持有周期：`
+                  : `即将分析 ${pendingAnalysisSymbols[0]}，请选择持有周期：`
+                }
+              </p>
+
+              <div className="space-y-3 mb-6">
+                {[
+                  { v: "short", l: "短线", desc: "1-5天", detail: "适合快进快出，关注日内波动和短期技术指标" },
+                  { v: "swing", l: "波段", desc: "1-4周", detail: "适合波段操作，关注周线趋势和中期支撑阻力" },
+                  { v: "long", l: "中长线", desc: "1月以上", detail: "适合价值投资，关注基本面和长期趋势" }
+                ].map(({ v, l, desc, detail }) => (
+                  <button
+                    key={v}
+                    onClick={() => setHoldingPeriod(v)}
+                    className={`w-full p-4 rounded-xl text-left transition-all ${
+                      holdingPeriod === v 
+                        ? "bg-indigo-600/20 border-2 border-indigo-500" 
+                        : "bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.05]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`font-medium ${holdingPeriod === v ? "text-indigo-400" : "text-slate-200"}`}>{l}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        holdingPeriod === v 
+                          ? "bg-indigo-500/30 text-indigo-300" 
+                          : "bg-white/[0.05] text-slate-400"
+                      }`}>{desc}</span>
+                    </div>
+                    <p className={`text-xs ${holdingPeriod === v ? "text-indigo-300/70" : "text-slate-500"}`}>{detail}</p>
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowHoldingPeriodModal(false)}
+                  className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm sm:text-base"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleConfirmHoldingPeriod}
+                  className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl text-sm sm:text-base flex items-center justify-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  开始分析
                 </button>
               </div>
             </motion.div>

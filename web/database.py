@@ -193,6 +193,11 @@ def migrate_database():
             print("迁移: 添加 last_alert_at 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN last_alert_at TEXT")
         
+        # 检查 watchlist 表是否有持有周期字段
+        if 'holding_period' not in watchlist_columns:
+            print("迁移: 添加 holding_period 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN holding_period TEXT DEFAULT 'swing'")
+        
         # 检查 users 表是否有 pushplus_token 字段
         cursor.execute("PRAGMA table_info(users)")
         user_columns = [col[1] for col in cursor.fetchall()]
@@ -225,6 +230,11 @@ def migrate_database():
         if 'ai_analysis_day_of_month' not in reminder_columns:
             print("迁移: 添加 AI 分析日期字段到 reminders 表")
             cursor.execute("ALTER TABLE reminders ADD COLUMN ai_analysis_day_of_month INTEGER")
+        
+        # 检查 reminders 表是否有持有周期字段
+        if 'holding_period' not in reminder_columns:
+            print("迁移: 添加 holding_period 字段到 reminders 表")
+            cursor.execute("ALTER TABLE reminders ADD COLUMN holding_period TEXT DEFAULT 'swing'")
         
         conn.commit()
         print("数据库迁移完成")
@@ -345,7 +355,8 @@ def db_get_user_watchlist(username: str) -> List[Dict]:
         cursor.execute('''
             SELECT symbol, name, type, position, cost_price, added_at, 
                    COALESCE(starred, 0) as starred,
-                   ai_buy_price, ai_sell_price, ai_price_updated_at, last_alert_at
+                   ai_buy_price, ai_sell_price, ai_price_updated_at, last_alert_at,
+                   COALESCE(holding_period, 'swing') as holding_period
             FROM watchlist WHERE username = ? 
             ORDER BY starred DESC, added_at DESC
         ''', (username,))
