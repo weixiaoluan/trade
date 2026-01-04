@@ -1193,24 +1193,45 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
             
             # 尝试从报告中解析建议价格表格
             if report:
-                # 匹配 "建议买入价" 行，提取价格
-                buy_match = re.search(r'\*\*建议买入价\*\*\s*\|\s*¥?([\d.]+)', report)
-                if buy_match:
-                    try:
-                        ai_buy_price = float(buy_match.group(1))
-                    except:
-                        pass
+                print(f"[AI价格] 开始从报告中提取建议价格...")
                 
-                # 匹配 "建议卖出价" 行，提取价格
-                sell_match = re.search(r'\*\*建议卖出价\*\*\s*\|\s*¥?([\d.]+)', report)
-                if sell_match:
-                    try:
-                        ai_sell_price = float(sell_match.group(1))
-                    except:
-                        pass
+                # 匹配多种格式的建议买入价
+                buy_patterns = [
+                    r'\*\*建议买入价\*\*\s*\|\s*¥?([\d.]+)',
+                    r'建议买入价[：:]\s*¥?([\d.]+)',
+                    r'建议买入[：:]\s*¥?([\d.]+)',
+                    r'买入价[：:]\s*¥?([\d.]+)',
+                ]
+                for pattern in buy_patterns:
+                    buy_match = re.search(pattern, report)
+                    if buy_match:
+                        try:
+                            ai_buy_price = float(buy_match.group(1))
+                            print(f"[AI价格] 从报告中提取到买入价: {ai_buy_price}")
+                            break
+                        except:
+                            pass
+                
+                # 匹配多种格式的建议卖出价
+                sell_patterns = [
+                    r'\*\*建议卖出价\*\*\s*\|\s*¥?([\d.]+)',
+                    r'建议卖出价[：:]\s*¥?([\d.]+)',
+                    r'建议卖出[：:]\s*¥?([\d.]+)',
+                    r'卖出价[：:]\s*¥?([\d.]+)',
+                ]
+                for pattern in sell_patterns:
+                    sell_match = re.search(pattern, report)
+                    if sell_match:
+                        try:
+                            ai_sell_price = float(sell_match.group(1))
+                            print(f"[AI价格] 从报告中提取到卖出价: {ai_sell_price}")
+                            break
+                        except:
+                            pass
             
             # 如果AI报告中没有提取到，则从技术分析的支撑位/阻力位获取
             if not ai_buy_price or not ai_sell_price:
+                print(f"[AI价格] 从技术分析中获取支撑位/阻力位...")
                 key_levels = levels_dict.get('key_levels', {})
                 if isinstance(key_levels, list):
                     # 列表格式
@@ -1218,14 +1239,20 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
                     resistance_prices = [l.get('price') for l in key_levels if l.get('type') == 'resistance' and l.get('price')]
                     if not ai_buy_price and support_prices:
                         ai_buy_price = support_prices[0]
+                        print(f"[AI价格] 从key_levels列表获取买入价(支撑位): {ai_buy_price}")
                     if not ai_sell_price and resistance_prices:
                         ai_sell_price = resistance_prices[0]
+                        print(f"[AI价格] 从key_levels列表获取卖出价(阻力位): {ai_sell_price}")
                 elif isinstance(key_levels, dict):
                     # 字典格式
                     if not ai_buy_price:
                         ai_buy_price = key_levels.get('nearest_support')
+                        if ai_buy_price:
+                            print(f"[AI价格] 从key_levels字典获取买入价(支撑位): {ai_buy_price}")
                     if not ai_sell_price:
                         ai_sell_price = key_levels.get('nearest_resistance')
+                        if ai_sell_price:
+                            print(f"[AI价格] 从key_levels字典获取卖出价(阻力位): {ai_sell_price}")
                 
                 # 如果key_levels没有，尝试从support_levels/resistance_levels获取
                 if not ai_buy_price:
@@ -1235,6 +1262,8 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
                             ai_buy_price = support_levels[0].get('price')
                         elif isinstance(support_levels[0], (int, float)):
                             ai_buy_price = support_levels[0]
+                        if ai_buy_price:
+                            print(f"[AI价格] 从support_levels获取买入价: {ai_buy_price}")
                 
                 if not ai_sell_price:
                     resistance_levels = levels_dict.get('resistance_levels', [])
@@ -1243,6 +1272,8 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
                             ai_sell_price = resistance_levels[0].get('price')
                         elif isinstance(resistance_levels[0], (int, float)):
                             ai_sell_price = resistance_levels[0]
+                        if ai_sell_price:
+                            print(f"[AI价格] 从resistance_levels获取卖出价: {ai_sell_price}")
             
             # 确保价格是数值类型
             if isinstance(ai_buy_price, str):

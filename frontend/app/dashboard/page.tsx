@@ -388,11 +388,15 @@ export default function DashboardPage() {
               }
             }
           }
-          // 检查是否有新完成的任务
-          if (task.status === "completed" && 
-              prevTask && 
-              (prevTask.status === "running" || prevTask.status === "pending")) {
-            hasNewCompleted = true;
+          // 检查是否有新完成的任务（两种情况都触发刷新）
+          // 1. 从 running/pending 变成 completed
+          // 2. 任务状态为 completed 且 progress 为 100，但之前的 progress 不是 100
+          if (task.status === "completed") {
+            if (prevTask && (prevTask.status === "running" || prevTask.status === "pending")) {
+              hasNewCompleted = true;
+            } else if (prevTask && prevTask.progress !== 100 && task.progress === 100) {
+              hasNewCompleted = true;
+            }
           }
         });
         
