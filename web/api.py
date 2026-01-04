@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, UploadFile, File, Form, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, UploadFile, File, Form, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -3175,13 +3175,13 @@ async def wechat_verify(
 
 
 @app.post("/api/wechat/callback")
-async def wechat_message(request):
+async def wechat_message(request: Request):
     """微信消息接收接口 - 自动回复用户OpenID"""
-    import hashlib
     import xml.etree.ElementTree as ET
     from fastapi.responses import Response
     
     body = await request.body()
+    print(f"[WeChat] 收到消息: {body[:500]}")
     
     try:
         # 解析XML消息
@@ -3190,9 +3190,12 @@ async def wechat_message(request):
         from_user = root.find("FromUserName").text  # 用户的OpenID
         to_user = root.find("ToUserName").text  # 公众号原始ID
         
+        print(f"[WeChat] 消息类型: {msg_type}, 用户OpenID: {from_user}")
+        
         # 构建回复消息
         if msg_type == "event":
             event = root.find("Event").text
+            print(f"[WeChat] 事件类型: {event}")
             if event.lower() == "subscribe":
                 # 用户关注事件
                 reply_content = f"🎉 欢迎关注 AI智能投研！\n\n您的 OpenID 是：\n{from_user}\n\n请复制上方 OpenID 到网站设置中完成绑定，即可接收投资提醒推送。"
@@ -3214,10 +3217,13 @@ async def wechat_message(request):
 <Content><![CDATA[{reply_content}]]></Content>
 </xml>"""
         
+        print(f"[WeChat] 回复消息: {reply_xml[:200]}")
         return Response(content=reply_xml, media_type="application/xml")
         
     except Exception as e:
         print(f"[WeChat] 消息处理异常: {e}")
+        import traceback
+        traceback.print_exc()
         return Response(content="success", media_type="text/plain")
 
 
