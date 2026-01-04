@@ -37,41 +37,51 @@ from config import APIConfig
 # ============================================
 
 def send_sms_alert(phone: str, symbol: str, alert_type: str, 
-                   current_price: float, target_price: float, name: str = "") -> bool:
+                   current_price: float, target_price: float, name: str = "",
+                   username: str = "", ai_summary: str = "") -> bool:
     """
-    发送短信提醒
-    注意：这里需要集成实际的短信服务商 API
-    常用服务商：阿里云短信、腾讯云短信、云片等
+    发送价格提醒通知
+    使用微信公众号模板消息推送
     """
     try:
-        # TODO: 集成实际的短信服务
-        # 示例：使用阿里云短信
-        # from aliyunsdkcore.client import AcsClient
-        # from aliyunsdkdysmsapi.request.v20170525.SendSmsRequest import SendSmsRequest
+        from web.api import send_price_alert_notification
         
         action = "买入" if alert_type == "buy" else "卖出"
-        message = f"【AI智能投研】{name or symbol} 已触发{action}价格提醒！当前价格：{current_price}，目标{action}价：{target_price}"
         
-        logger.info(f"发送短信到 {phone}: {message}")
+        # 如果没有 AI 分析内容，生成默认内容
+        if not ai_summary:
+            if alert_type == "buy":
+                ai_summary = f"根据AI智能分析，{name or symbol}当前价格已触及设定的买入价位。技术指标显示短期存在反弹机会，建议关注成交量变化，把握买入时机。请结合自身风险承受能力，谨慎决策。"
+            else:
+                ai_summary = f"根据AI智能分析，{name or symbol}当前价格已触及设定的卖出价位。技术指标显示短期可能面临回调压力，建议适时获利了结，注意控制风险。请结合自身风险承受能力，谨慎决策。"
         
-        # 实际发送短信的代码
-        # client = AcsClient(ACCESS_KEY_ID, ACCESS_KEY_SECRET, 'cn-hangzhou')
-        # request = SendSmsRequest()
-        # request.set_PhoneNumbers(phone)
-        # request.set_SignName("AI智能投研")
-        # request.set_TemplateCode("SMS_XXXXX")
-        # request.set_TemplateParam(json.dumps({
-        #     "symbol": symbol,
-        #     "name": name,
-        #     "action": action,
-        #     "current_price": str(current_price),
-        #     "target_price": str(target_price)
-        # }))
-        # response = client.do_action_with_exception(request)
+        logger.info(f"发送价格提醒: {username} - {name or symbol} - {action} - 当前价格: {current_price}, 目标价: {target_price}")
         
-        return True
+        # 调用微信推送
+        if username:
+            result = send_price_alert_notification(
+                username=username,
+                symbol=symbol,
+                name=name or symbol,
+                alert_type=alert_type,
+                current_price=current_price,
+                target_price=target_price,
+                ai_summary=ai_summary
+            )
+            if result:
+                logger.info(f"价格提醒推送成功: {username} - {symbol}")
+                return True
+            else:
+                logger.warning(f"价格提醒推送失败: {username} - {symbol}")
+                return False
+        else:
+            logger.warning(f"未提供用户名，无法发送推送")
+            return False
+        
     except Exception as e:
-        logger.error(f"发送短信失败: {e}")
+        logger.error(f"发送价格提醒失败: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -92,7 +102,7 @@ def get_real_time_price(symbol: str) -> Optional[float]:
 
 
 def get_ai_price_targets(username: str, symbol: str) -> Dict:
-    """从AI报告中获取买入卖出目标价"""
+    """从AI报告中获取买入卖出目标价和AI分析摘要"""
     try:
         report = get_user_report(username, symbol)
         if not report:
@@ -117,15 +127,31 @@ def get_ai_price_targets(username: str, symbol: str) -> Dict:
             sell_price = resistances[0] if isinstance(resistances[0], (int, float)) else None
         
         # 也可以从 AI 摘要中解析
-        ai_summary = report_data.get('ai_summary', {})
-        if 'buy_price' in ai_summary:
-            buy_price = ai_summary['buy_price']
-        if 'sell_price' in ai_summary:
-            sell_price = ai_summary['sell_price']
+        ai_summary_data = report_data.get('ai_summary', {})
+        if 'buy_price' in ai_summary_data:
+            buy_price = ai_summary_data['buy_price']
+        if 'sell_price' in ai_summary_data:
+            sell_price = ai_summary_data['sell_price']
+        
+        # 获取 AI 分析摘要文本
+        ai_summary_text = ""
+        if isinstance(ai_summary_data, dict):
+            ai_summary_text = ai_summary_data.get('summary', '') or ai_summary_data.get('analysis', '')
+        elif isinstance(ai_summary_data, str):
+            ai_summary_text = ai_summary_data
+        
+        # 如果没有摘要，尝试从其他字段获取
+        if not ai_summary_text:
+            ai_analysis = report_data.get('ai_analysis', {})
+            if isinstance(ai_analysis, dict):
+                ai_summary_text = ai_analysis.get('summary', '') or ai_analysis.get('recommendation', '')
+            elif isinstance(ai_analysis, str):
+                ai_summary_text = ai_analysis
         
         return {
             'buy_price': buy_price,
-            'sell_price': sell_price
+            'sell_price': sell_price,
+            'ai_summary': ai_summary_text
         }
     except Exception as e:
         logger.error(f"获取 {symbol} 目标价失败: {e}")
@@ -147,6 +173,7 @@ def check_price_alert(username: str, phone: str, reminder: Dict) -> bool:
     targets = get_ai_price_targets(username, symbol)
     buy_price = targets.get('buy_price')
     sell_price = targets.get('sell_price')
+    ai_summary = targets.get('ai_summary', '')
     
     triggered = False
     name = reminder.get('name', symbol)
@@ -154,14 +181,14 @@ def check_price_alert(username: str, phone: str, reminder: Dict) -> bool:
     # 检查买入信号
     if reminder_type in ['buy', 'both'] and buy_price:
         if current_price <= buy_price:
-            send_sms_alert(phone, symbol, 'buy', current_price, buy_price, name)
+            send_sms_alert(phone, symbol, 'buy', current_price, buy_price, name, username, ai_summary)
             triggered = True
             logger.info(f"{symbol} 触发买入提醒: 当前价 {current_price} <= 目标价 {buy_price}")
     
     # 检查卖出信号
     if reminder_type in ['sell', 'both'] and sell_price:
         if current_price >= sell_price:
-            send_sms_alert(phone, symbol, 'sell', current_price, sell_price, name)
+            send_sms_alert(phone, symbol, 'sell', current_price, sell_price, name, username, ai_summary)
             triggered = True
             logger.info(f"{symbol} 触发卖出提醒: 当前价 {current_price} >= 目标价 {sell_price}")
     
