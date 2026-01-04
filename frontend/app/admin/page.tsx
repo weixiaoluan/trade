@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Bot, Shield, Users, Check, X, ArrowLeft, 
-  Crown, Clock, UserCheck, UserX 
+  Crown, Clock, UserCheck, UserX, Eye
 } from "lucide-react";
 
 import { API_BASE } from "@/lib/config";
@@ -301,6 +301,13 @@ export default function AdminPage() {
                     <td className="px-6 py-4 text-right">
                       {user.role !== "admin" && (
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => router.push(`/admin/user/${encodeURIComponent(user.username)}`)}
+                            className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-all"
+                            title="查看详情"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
                           {user.status !== "approved" && (
                             <button
                               onClick={() => handleApprove(user.username)}

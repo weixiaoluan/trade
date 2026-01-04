@@ -437,6 +437,8 @@ def check_watchlist_price_alerts():
             name = item.get('name', symbol)
             ai_buy_price = item.get('ai_buy_price')
             ai_sell_price = item.get('ai_sell_price')
+            ai_buy_quantity = item.get('ai_buy_quantity')
+            ai_sell_quantity = item.get('ai_sell_quantity')
             last_alert_at = item.get('last_alert_at')
             wechat_openid = item.get('wechat_openid')
             pushplus_token = item.get('pushplus_token')
@@ -487,7 +489,7 @@ def check_watchlist_price_alerts():
                 except:
                     pass
                 
-                # 发送推送
+                # 发送推送（包含建议价格和数量）
                 result = send_price_alert_notification(
                     username=username,
                     symbol=symbol,
@@ -495,7 +497,11 @@ def check_watchlist_price_alerts():
                     alert_type=alert_type,
                     current_price=current_price,
                     target_price=target_price,
-                    ai_summary=ai_summary
+                    ai_summary=ai_summary,
+                    ai_buy_price=ai_buy_price,
+                    ai_sell_price=ai_sell_price,
+                    ai_buy_quantity=ai_buy_quantity,
+                    ai_sell_quantity=ai_sell_quantity
                 )
                 
                 if result:

@@ -351,7 +351,129 @@ async def admin_reject_user(username: str, authorization: str = Header(None)):
     if success:
         return {"status": "success", "message": f"用户 {username} 已拒绝"}
     else:
+        raise HTTPException(status_code=404, detail="用户不存在"}
+
+
+@app.get("/api/admin/users/{username}/detail")
+async def admin_get_user_detail(username: str, authorization: str = Header(None)):
+    """获取用户详情（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限访问")
+    
+    # 获取用户基本信息
+    target_user = db_get_user_by_username(username)
+    if not target_user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 获取用户自选列表
+    watchlist = get_user_watchlist(username)
+    
+    # 获取用户提醒
+    reminders = db_get_user_reminders(username)
+    
+    # 获取用户报告
+    reports = db_get_user_reports(username)
+    reports_summary = [{
+        'id': r['id'],
+        'symbol': r['symbol'],
+        'name': r.get('name', ''),
+        'created_at': r['created_at']
+    } for r in reports]
+    
+    return {
+        "status": "success",
+        "user": {
+            "username": target_user['username'],
+            "phone": target_user['phone'],
+            "role": target_user.get('role', 'user'),
+            "status": target_user.get('status', 'pending'),
+            "wechat_openid": target_user.get('wechat_openid', ''),
+            "created_at": target_user['created_at']
+        },
+        "watchlist": watchlist,
+        "reminders": reminders,
+        "reports": reports_summary
+    }
+
+
+class AdminUpdateUserRequest(BaseModel):
+    """管理员更新用户请求"""
+    new_username: str = None
+    phone: str = None
+    wechat_openid: str = None
+
+
+@app.put("/api/admin/users/{username}")
+async def admin_update_user(username: str, request: AdminUpdateUserRequest, authorization: str = Header(None)):
+    """更新用户信息（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限访问")
+    
+    target_user = db_get_user_by_username(username)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 更新用户信息
+    if request.new_username or request.phone:
+        db_update_user_info(username, request.new_username, request.phone)
+    
+    # 更新微信OpenID
+    if request.wechat_openid is not None:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            actual_username = request.new_username if request.new_username else username
+            cursor.execute('UPDATE users SET wechat_openid = ? WHERE username = ?', 
+                          (request.wechat_openid, actual_username))
+    
+    return {"status": "success", "message": "用户信息已更新"}
+
+
+@app.delete("/api/admin/users/{username}")
+async def admin_delete_user(username: str, authorization: str = Header(None)):
+    """删除用户（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限访问")
+    
+    target_user = db_get_user_by_username(username)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 不能删除管理员
+    if target_user.get('role') == 'admin':
+        raise HTTPException(status_code=400, detail="不能删除管理员账户")
+    
+    success = db_delete_user(username)
+    if success:
+        return {"status": "success", "message": f"用户 {username} 已删除"}
+    else:
+        raise HTTPException(status_code=500, detail="删除失败")
 
 
 # ============================================
@@ -606,6 +728,69 @@ async def toggle_watchlist_star(
         "status": "success",
         "symbol": symbol.upper(),
         "starred": bool(new_starred)
+    }
+
+
+class UpdateWatchlistItemRequest(BaseModel):
+    """更新自选项请求"""
+    position: float = None
+    cost_price: float = None
+    holding_period: str = None
+
+
+@app.put("/api/watchlist/{symbol}")
+async def update_watchlist_item(
+    symbol: str,
+    request: UpdateWatchlistItemRequest,
+    authorization: str = Header(None)
+):
+    """更新自选项（持仓数量、成本价、持有周期）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import get_db
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # 检查是否存在
+        cursor.execute(
+            "SELECT * FROM watchlist WHERE username = ? AND UPPER(symbol) = ?",
+            (user['username'], symbol.upper())
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="未找到该标的")
+        
+        # 构建更新语句
+        updates = []
+        values = []
+        if request.position is not None:
+            updates.append("position = ?")
+            values.append(request.position)
+        if request.cost_price is not None:
+            updates.append("cost_price = ?")
+            values.append(request.cost_price)
+        if request.holding_period is not None:
+            updates.append("holding_period = ?")
+            values.append(request.holding_period)
+        
+        if updates:
+            values.extend([user['username'], symbol.upper()])
+            cursor.execute(
+                f"UPDATE watchlist SET {', '.join(updates)} WHERE username = ? AND UPPER(symbol) = ?",
+                values
+            )
+            conn.commit()
+    
+    return {
+        "status": "success",
+        "symbol": symbol.upper(),
+        "message": "更新成功"
     }
 
 
@@ -891,6 +1076,17 @@ async def start_background_analysis(
     symbol = request.ticker.upper()
     holding_period = request.holding_period  # short, swing, long
     
+    # 获取用户的持仓信息
+    watchlist = get_user_watchlist(username)
+    position_info = None
+    for item in watchlist:
+        if item['symbol'].upper() == symbol:
+            position_info = {
+                'position': item.get('position'),
+                'cost_price': item.get('cost_price')
+            }
+            break
+    
     # 创建任务记录
     create_analysis_task(username, symbol, task_id)
     
@@ -900,7 +1096,9 @@ async def start_background_analysis(
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(run_background_analysis_full(username, symbol, task_id, holding_period))
+            loop.run_until_complete(run_background_analysis_full(
+                username, symbol, task_id, holding_period, position_info
+            ))
             loop.close()
         except Exception as e:
             print(f"[后台分析线程异常] {symbol}: {e}")
@@ -954,6 +1152,15 @@ async def start_batch_analysis(
     holding_period = request.holding_period
     tasks = []
     
+    # 获取用户的持仓信息
+    watchlist = get_user_watchlist(username)
+    position_map = {}
+    for item in watchlist:
+        position_map[item['symbol'].upper()] = {
+            'position': item.get('position'),
+            'cost_price': item.get('cost_price')
+        }
+    
     for symbol in symbols:
         symbol = symbol.upper()
         task_id = str(uuid.uuid4())
@@ -963,19 +1170,20 @@ async def start_batch_analysis(
         
         tasks.append({
             "task_id": task_id,
-            "symbol": symbol
+            "symbol": symbol,
+            "position_info": position_map.get(symbol)
         })
     
     # 使用独立线程并行启动所有分析任务
     import threading
     
-    def create_analysis_runner(uname: str, sym: str, tid: str, hp: str):
+    def create_analysis_runner(uname: str, sym: str, tid: str, hp: str, pos_info: dict):
         """创建分析任务运行器"""
         def run():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(run_background_analysis_full(uname, sym, tid, hp))
+                loop.run_until_complete(run_background_analysis_full(uname, sym, tid, hp, pos_info))
             except Exception as e:
                 print(f"分析任务异常 [{sym}]: {e}")
             finally:
@@ -985,7 +1193,10 @@ async def start_batch_analysis(
     # 先创建所有线程
     threads = []
     for task_info in tasks:
-        runner = create_analysis_runner(username, task_info["symbol"], task_info["task_id"], holding_period)
+        runner = create_analysis_runner(
+            username, task_info["symbol"], task_info["task_id"], 
+            holding_period, task_info.get("position_info")
+        )
         t = threading.Thread(target=runner, daemon=True)
         threads.append(t)
     
@@ -997,7 +1208,7 @@ async def start_batch_analysis(
     
     return {
         "status": "success",
-        "tasks": tasks,
+        "tasks": [{"task_id": t["task_id"], "symbol": t["symbol"]} for t in tasks],
         "holding_period": holding_period,
         "message": f"已启动 {len(tasks)} 个分析任务并行执行，您可以关闭页面，稍后查看报告"
     }
@@ -1023,7 +1234,7 @@ async def get_analysis_tasks_status(authorization: str = Header(None)):
     }
 
 
-async def run_background_analysis_full(username: str, ticker: str, task_id: str, holding_period: str = "swing"):
+async def run_background_analysis_full(username: str, ticker: str, task_id: str, holding_period: str = "swing", position_info: dict = None):
     """
     后台执行完整的多 Agent 分析（异步并行优化版）
     
@@ -1032,6 +1243,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         ticker: 证券代码
         task_id: 任务ID
         holding_period: 持有周期 - short(短线1-5天), swing(波段1-4周), long(中长线1月以上)
+        position_info: 持仓信息 - {'position': 持仓数量, 'cost_price': 成本价}
     
     进度分配（基于实际耗时）：
     - 0-5%: 初始化
@@ -1052,9 +1264,13 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
     }
     holding_period_cn = holding_period_map.get(holding_period, '波段（1-4周）')
     
+    # 持仓信息
+    user_position = position_info.get('position') if position_info else None
+    user_cost_price = position_info.get('cost_price') if position_info else None
+    
     # 保存原始 symbol 用于更新任务状态
     original_symbol = ticker
-    print(f"[分析开始] {ticker} 任务ID: {task_id}, 持有周期: {holding_period_cn}")
+    print(f"[分析开始] {ticker} 任务ID: {task_id}, 持有周期: {holding_period_cn}, 持仓: {user_position}, 成本: {user_cost_price}")
     
     try:
         # === 初始化 ===
@@ -1143,6 +1359,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 ticker, stock_data_dict, stock_info_dict, 
                 indicators_dict, trend_dict, levels_dict,
                 holding_period=holding_period,
+                position_info={'position': user_position, 'cost_price': user_cost_price},
                 # 传入进度回调
                 progress_callback=lambda p, s: update_analysis_task(username, original_symbol, {
                     'progress': 30 + int(p * 0.65),  # 30-95%
@@ -1214,13 +1431,15 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             from web.database import db_update_watchlist_ai_prices
             import re
             
-            # 优先从AI报告文本中提取建议买入/卖出价格
+            # 优先从AI报告文本中提取建议买入/卖出价格和数量
             ai_buy_price = None
             ai_sell_price = None
+            ai_buy_quantity = None
+            ai_sell_quantity = None
             
             # 尝试从报告中解析建议价格表格
             if report:
-                print(f"[AI价格] 开始从报告中提取建议价格...")
+                print(f"[AI价格] 开始从报告中提取建议价格和数量...")
                 
                 # 匹配多种格式的建议买入价
                 buy_patterns = [
@@ -1252,6 +1471,38 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                         try:
                             ai_sell_price = float(sell_match.group(1))
                             print(f"[AI价格] 从报告中提取到卖出价: {ai_sell_price}")
+                            break
+                        except:
+                            pass
+                
+                # 提取建议买入数量
+                buy_qty_patterns = [
+                    r'\*\*建议买入价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'建议买入.*?(\d{2,})\s*(?:股|份)',
+                    r'买入数量[：:]\s*(\d+)',
+                ]
+                for pattern in buy_qty_patterns:
+                    qty_match = re.search(pattern, report)
+                    if qty_match:
+                        try:
+                            ai_buy_quantity = int(qty_match.group(1).replace(',', ''))
+                            print(f"[AI价格] 从报告中提取到买入数量: {ai_buy_quantity}")
+                            break
+                        except:
+                            pass
+                
+                # 提取建议卖出数量
+                sell_qty_patterns = [
+                    r'\*\*建议卖出价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'建议卖出.*?(\d{2,})\s*(?:股|份)',
+                    r'卖出数量[：:]\s*(\d+)',
+                ]
+                for pattern in sell_qty_patterns:
+                    qty_match = re.search(pattern, report)
+                    if qty_match:
+                        try:
+                            ai_sell_quantity = int(qty_match.group(1).replace(',', ''))
+                            print(f"[AI价格] 从报告中提取到卖出数量: {ai_sell_quantity}")
                             break
                         except:
                             pass
@@ -1309,12 +1560,14 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 ai_sell_price = None
             
             if ai_buy_price or ai_sell_price:
-                db_update_watchlist_ai_prices(username, original_symbol, ai_buy_price, ai_sell_price)
-                print(f"[AI价格] 已更新 {original_symbol} 的建议价格: 买入={ai_buy_price}, 卖出={ai_sell_price}")
+                db_update_watchlist_ai_prices(username, original_symbol, ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity)
+                print(f"[AI价格] 已更新 {original_symbol} 的建议价格: 买入={ai_buy_price}, 卖出={ai_sell_price}, 买入数量={ai_buy_quantity}, 卖出数量={ai_sell_quantity}")
                 
                 # 将AI建议价格添加到report_data中，便于前端获取
                 report_data['ai_buy_price'] = ai_buy_price
                 report_data['ai_sell_price'] = ai_sell_price
+                report_data['ai_buy_quantity'] = ai_buy_quantity
+                report_data['ai_sell_quantity'] = ai_sell_quantity
         except Exception as e:
             print(f"[AI价格] 更新建议价格失败: {e}")
         
@@ -1977,6 +2230,7 @@ async def generate_ai_report_with_predictions(
     trend: dict,
     levels: dict,
     holding_period: str = "swing",
+    position_info: dict = None,
     progress_callback=None
 ) -> tuple:
     """
@@ -1985,6 +2239,7 @@ async def generate_ai_report_with_predictions(
     
     Args:
         holding_period: 持有周期 - short(短线), swing(波段), long(中长线)
+        position_info: 持仓信息 - {'position': 持仓数量, 'cost_price': 成本价}
         progress_callback: 可选的进度回调函数 callback(progress: float, step: str)
                           progress 范围 0-100
     """
@@ -2000,6 +2255,10 @@ async def generate_ai_report_with_predictions(
         'long': '中长线（1月以上）'
     }
     holding_period_cn = holding_period_map.get(holding_period, '波段（1-4周）')
+    
+    # 持仓信息
+    user_position = position_info.get('position') if position_info else None
+    user_cost_price = position_info.get('cost_price') if position_info else None
     
     # 进度更新辅助函数
     def update_progress(progress: float, step: str):
@@ -2320,6 +2579,7 @@ async def generate_ai_report(
 **重要提示**: 
 1. 当前日期是 {report_date}，当前时间是 {report_time}。请在报告中使用此日期作为报告生成时间。
 2. 本次分析的持有周期是：**{holding_period_cn}**，请根据此持有周期给出相应的建议买入价和卖出价。
+3. 用户持仓信息：持仓数量 {user_position if user_position else '未填写'}，成本价 {user_cost_price if user_cost_price else '未填写'}
 
 {period_focus}
 
@@ -2451,17 +2711,20 @@ async def generate_ai_report(
 ## 五、AI建议买卖价格（重要）
 基于以上所有分析，给出明确的操作价格建议：
 
-| 类型 | 价格 | 说明 |
-|------|------|------|
-| **建议买入价** | ¥X.XXX | 基于支撑位和技术分析得出的最佳买入价位 |
-| **建议卖出价** | ¥X.XXX | 基于阻力位和技术分析得出的目标卖出价位 |
-| **止损价** | ¥X.XXX | 跌破此价位建议止损 |
-| **加仓价** | ¥X.XXX | 如果继续下跌，可考虑加仓的价位 |
+| 类型 | 价格 | 数量 | 说明 |
+|------|------|------|------|
+| **建议买入价** | ¥X.XXX | XXX股/份 | 基于支撑位和技术分析得出的最佳买入价位和建议买入数量 |
+| **建议卖出价** | ¥X.XXX | XXX股/份 | 基于阻力位和技术分析得出的目标卖出价位和建议卖出数量 |
+| **止损价** | ¥X.XXX | - | 跌破此价位建议止损 |
+| **加仓价** | ¥X.XXX | XXX股/份 | 如果继续下跌，可考虑加仓的价位和数量 |
 
 **价格说明**：
 - 建议买入价应略高于最近支撑位，给予一定安全边际
 - 建议卖出价应略低于最近阻力位，确保能够成交
 - 请给出具体的数字价格，精确到小数点后3位
+- 如果用户有持仓（持仓数量: {user_position if user_position else '未填写'}，成本价: {user_cost_price if user_cost_price else '未填写'}），请根据持仓情况给出具体的买入/卖出数量建议
+- 如果用户没有持仓，建议买入数量可以根据一般投资者的资金规模给出参考（如1000股起）
+- 建议卖出数量应考虑分批卖出策略，不建议一次性全部卖出
 
 ## 六、多周期价格预测
 用 Markdown 表格展示 8 个时间周期的预测：
@@ -3734,7 +3997,9 @@ def get_pushplus_remaining(token: str) -> dict:
 
 def send_price_alert_notification(username: str, symbol: str, name: str, 
                                    alert_type: str, current_price: float, 
-                                   target_price: float, ai_summary: str = "") -> bool:
+                                   target_price: float, ai_summary: str = "",
+                                   ai_buy_price: float = None, ai_sell_price: float = None,
+                                   ai_buy_quantity: int = None, ai_sell_quantity: int = None) -> bool:
     """发送价格提醒通知（带 AI 分析）
     优先使用微信公众号模板消息推送
     """
@@ -3759,6 +4024,19 @@ def send_price_alert_notification(username: str, symbol: str, name: str,
     now = datetime.now()
     trigger_time = now.strftime("%Y年%m月%d日 %H时%M分%S秒")
     time_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 构建AI建议价格信息
+    ai_price_info = ""
+    if ai_buy_price or ai_sell_price:
+        ai_price_info = "\n\n【AI建议价格】"
+        if ai_buy_price:
+            ai_price_info += f"\n建议买入价：¥{ai_buy_price:.3f}"
+            if ai_buy_quantity:
+                ai_price_info += f"（建议买入{ai_buy_quantity}股/份）"
+        if ai_sell_price:
+            ai_price_info += f"\n建议卖出价：¥{ai_sell_price:.3f}"
+            if ai_sell_quantity:
+                ai_price_info += f"（建议卖出{ai_sell_quantity}股/份）"
     
     # 确保 AI 分析内容至少 50 字
     if ai_summary and len(ai_summary) < 50:
@@ -3787,7 +4065,7 @@ def send_price_alert_notification(username: str, symbol: str, name: str,
 名称：{name}
 当前价格：¥{current_price:.3f}
 
-已经触发AI分析的{action}价格 ¥{target_price:.3f}，请尽快{action}。
+已经触发AI分析的{action}价格 ¥{target_price:.3f}，请尽快{action}。{ai_price_info}
 
 AI分析{action}原因：
 {ai_summary}"""

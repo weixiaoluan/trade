@@ -198,6 +198,15 @@ def migrate_database():
             print("迁移: 添加 holding_period 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN holding_period TEXT DEFAULT 'swing'")
         
+        # 检查 watchlist 表是否有 AI 建议数量字段
+        if 'ai_buy_quantity' not in watchlist_columns:
+            print("迁移: 添加 ai_buy_quantity 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_buy_quantity INTEGER")
+        
+        if 'ai_sell_quantity' not in watchlist_columns:
+            print("迁移: 添加 ai_sell_quantity 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_sell_quantity INTEGER")
+        
         # 检查 users 表是否有 pushplus_token 字段
         cursor.execute("PRAGMA table_info(users)")
         user_columns = [col[1] for col in cursor.fetchall()]
@@ -356,7 +365,8 @@ def db_get_user_watchlist(username: str) -> List[Dict]:
             SELECT symbol, name, type, position, cost_price, added_at, 
                    COALESCE(starred, 0) as starred,
                    ai_buy_price, ai_sell_price, ai_price_updated_at, last_alert_at,
-                   COALESCE(holding_period, 'swing') as holding_period
+                   COALESCE(holding_period, 'swing') as holding_period,
+                   ai_buy_quantity, ai_sell_quantity
             FROM watchlist WHERE username = ? 
             ORDER BY starred DESC, added_at DESC
         ''', (username,))
@@ -427,15 +437,20 @@ def db_update_watchlist_item(username: str, symbol: str, **kwargs) -> bool:
 
 def db_update_watchlist_ai_prices(username: str, symbol: str, 
                                    ai_buy_price: float = None, 
-                                   ai_sell_price: float = None) -> bool:
-    """更新自选项的AI建议买入/卖出价格"""
+                                   ai_sell_price: float = None,
+                                   ai_buy_quantity: int = None,
+                                   ai_sell_quantity: int = None) -> bool:
+    """更新自选项的AI建议买入/卖出价格和数量"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
             UPDATE watchlist 
-            SET ai_buy_price = ?, ai_sell_price = ?, ai_price_updated_at = ?
+            SET ai_buy_price = ?, ai_sell_price = ?, 
+                ai_buy_quantity = ?, ai_sell_quantity = ?,
+                ai_price_updated_at = ?
             WHERE username = ? AND UPPER(symbol) = UPPER(?)
-        ''', (ai_buy_price, ai_sell_price, datetime.now().isoformat(), username, symbol))
+        ''', (ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity, 
+              datetime.now().isoformat(), username, symbol))
         return cursor.rowcount > 0
 
 
@@ -446,6 +461,7 @@ def db_get_all_watchlist_with_ai_prices() -> List[Dict]:
         cursor.execute('''
             SELECT w.username, w.symbol, w.name, w.type, 
                    w.ai_buy_price, w.ai_sell_price, w.last_alert_at,
+                   w.ai_buy_quantity, w.ai_sell_quantity,
                    u.wechat_openid, u.pushplus_token
             FROM watchlist w
             JOIN users u ON w.username = u.username
@@ -720,6 +736,55 @@ def db_delete_reminder(username: str, reminder_id: str) -> bool:
         # 直接按 reminder_id 删除（reminder_id 是唯一的）
         cursor.execute('DELETE FROM reminders WHERE reminder_id = ?', (reminder_id,))
         return cursor.rowcount > 0
+
+
+def db_delete_user(username: str) -> bool:
+    """删除用户及其所有数据"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # 删除用户的所有关联数据
+        cursor.execute('DELETE FROM watchlist WHERE username = ?', (username,))
+        cursor.execute('DELETE FROM reports WHERE username = ?', (username,))
+        cursor.execute('DELETE FROM reminders WHERE username = ?', (username,))
+        cursor.execute('DELETE FROM analysis_tasks WHERE username = ?', (username,))
+        cursor.execute('DELETE FROM sessions WHERE username = ?', (username,))
+        # 删除用户
+        cursor.execute('DELETE FROM users WHERE username = ?', (username,))
+        return cursor.rowcount > 0
+
+
+def db_update_user_info(username: str, new_username: str = None, phone: str = None) -> bool:
+    """更新用户信息"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        updates = []
+        values = []
+        
+        if new_username and new_username != username:
+            updates.append("username = ?")
+            values.append(new_username)
+        if phone:
+            updates.append("phone = ?")
+            values.append(phone)
+        
+        if not updates:
+            return False
+        
+        values.append(username)
+        cursor.execute(f'''
+            UPDATE users SET {", ".join(updates)}
+            WHERE username = ?
+        ''', values)
+        
+        # 如果用户名变更，需要更新所有关联表
+        if new_username and new_username != username:
+            cursor.execute('UPDATE watchlist SET username = ? WHERE username = ?', (new_username, username))
+            cursor.execute('UPDATE reports SET username = ? WHERE username = ?', (new_username, username))
+            cursor.execute('UPDATE reminders SET username = ? WHERE username = ?', (new_username, username))
+            cursor.execute('UPDATE analysis_tasks SET username = ? WHERE username = ?', (new_username, username))
+            cursor.execute('UPDATE sessions SET username = ? WHERE username = ?', (new_username, username))
+        
+        return True
 
 
 def db_get_symbol_reminders(username: str, symbol: str) -> List[Dict]:

@@ -35,6 +35,7 @@ import {
   MessageSquare,
   ExternalLink,
   AlertTriangle,
+  Edit3,
 } from "lucide-react";
 import { UserHeader } from "@/components/ui/UserHeader";
 import { AlertModal } from "@/components/ui/AlertModal";
@@ -59,6 +60,8 @@ interface WatchlistItem {
   starred?: number;
   ai_buy_price?: number;
   ai_sell_price?: number;
+  ai_buy_quantity?: number;
+  ai_sell_quantity?: number;
   ai_price_updated_at?: string;
   last_alert_at?: string;
   holding_period?: string;
@@ -222,6 +225,13 @@ export default function DashboardPage() {
   const [holdingPeriod, setHoldingPeriod] = useState<string>("short");
   const [pendingAnalysisSymbols, setPendingAnalysisSymbols] = useState<string[]>([]);
   const [isBatchAnalysis, setIsBatchAnalysis] = useState(false);
+
+  // 编辑持仓弹窗状态
+  const [showEditPositionModal, setShowEditPositionModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<WatchlistItem | null>(null);
+  const [editPosition, setEditPosition] = useState<string>("");
+  const [editCostPrice, setEditCostPrice] = useState<string>("");
+  const [editHoldingPeriod, setEditHoldingPeriod] = useState<string>("swing");
 
   const getToken = useCallback(() => localStorage.getItem("token"), []);
 
@@ -1375,6 +1385,58 @@ export default function DashboardPage() {
     }
   };
 
+  const getHoldingPeriodLabel = (period?: string) => {
+    switch (period) {
+      case "short": return "短线";
+      case "swing": return "波段";
+      case "long": return "中长线";
+      default: return "波段";
+    }
+  };
+
+  // 打开编辑持仓弹窗
+  const openEditPositionModal = useCallback((item: WatchlistItem) => {
+    setEditingItem(item);
+    setEditPosition(item.position?.toString() || "");
+    setEditCostPrice(item.cost_price?.toString() || "");
+    setEditHoldingPeriod(item.holding_period || "swing");
+    setShowEditPositionModal(true);
+  }, []);
+
+  // 保存编辑的持仓信息
+  const handleSavePosition = useCallback(async () => {
+    if (!editingItem) return;
+    
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/watchlist/${encodeURIComponent(editingItem.symbol)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          position: editPosition ? parseFloat(editPosition) : null,
+          cost_price: editCostPrice ? parseFloat(editCostPrice) : null,
+          holding_period: editHoldingPeriod,
+        }),
+      });
+
+      if (response.ok) {
+        setShowEditPositionModal(false);
+        fetchWatchlist();
+        showAlertModal("保存成功", "持仓信息已更新", "success");
+      } else {
+        const data = await response.json();
+        showAlertModal("保存失败", data.detail || "请稍后重试", "error");
+      }
+    } catch (error) {
+      showAlertModal("保存失败", "网络错误，请稍后重试", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [editingItem, editPosition, editCostPrice, editHoldingPeriod, getToken, fetchWatchlist, showAlertModal]);
+
   // 只有在没有缓存用户信息时才显示加载动画
   // 有缓存时直接显示页面，后台静默验证
   if (!authChecked && !user) {
@@ -1535,6 +1597,7 @@ export default function DashboardPage() {
             </div>
             <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400 text-right">持仓</div>
             <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400 text-right">成本价</div>
+            <div className="w-14 flex-shrink-0 text-sm font-medium text-slate-400">周期</div>
             <div className="w-20 flex-shrink-0 text-sm font-medium text-emerald-400/70 text-right">建议买入</div>
             <div className="w-20 flex-shrink-0 text-sm font-medium text-rose-400/70 text-right">建议卖出</div>
             <div className="w-20 flex-shrink-0 text-sm font-medium text-slate-400">状态</div>
@@ -1798,6 +1861,17 @@ export default function DashboardPage() {
                         <span className="font-mono text-sm text-slate-200">{item.cost_price ? `¥${item.cost_price.toFixed(2)}` : "-"}</span>
                       </div>
 
+                      {/* 持有周期 */}
+                      <div className="w-14 flex-shrink-0">
+                        <span className={`px-1.5 py-0.5 text-xs rounded ${
+                          item.holding_period === 'short' ? 'bg-amber-500/10 text-amber-400' :
+                          item.holding_period === 'long' ? 'bg-violet-500/10 text-violet-400' :
+                          'bg-indigo-500/10 text-indigo-400'
+                        }`}>
+                          {getHoldingPeriodLabel(item.holding_period)}
+                        </span>
+                      </div>
+
                       {/* AI建议买入价 */}
                       <div className="w-20 flex-shrink-0 text-right">
                         <span className={`font-mono text-sm ${item.ai_buy_price ? "text-emerald-400" : "text-slate-500"}`}>
@@ -1878,6 +1952,14 @@ export default function DashboardPage() {
                               {getReminderCount(item.symbol)}
                             </span>
                           )}
+                        </button>
+
+                        <button
+                          onClick={() => openEditPositionModal(item)}
+                          className="p-2 rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-indigo-600/20"
+                          title="编辑持仓"
+                        >
+                          <Edit3 className="w-4 h-4" />
                         </button>
 
                         <button
@@ -2589,6 +2671,103 @@ export default function DashboardPage() {
                 >
                   <Play className="w-4 h-4" />
                   开始分析
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 编辑持仓弹窗 */}
+      <AnimatePresence>
+        {showEditPositionModal && editingItem && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
+            onClick={() => setShowEditPositionModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 safe-area-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+                  <Edit3 className="w-5 h-5 text-indigo-400" />
+                  编辑持仓 - {editingItem.symbol}
+                </h3>
+                <button onClick={() => setShowEditPositionModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1.5 block">持仓数量</label>
+                  <input
+                    type="number"
+                    value={editPosition}
+                    onChange={(e) => setEditPosition(e.target.value)}
+                    placeholder="如：1000"
+                    className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 mb-1.5 block">成本价</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editCostPrice}
+                    onChange={(e) => setEditCostPrice(e.target.value)}
+                    placeholder="如：10.50"
+                    className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 mb-1.5 block">持有周期</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { v: "short", l: "短线", desc: "1-5天" },
+                      { v: "swing", l: "波段", desc: "1-4周" },
+                      { v: "long", l: "中长线", desc: "1月以上" }
+                    ].map(({ v, l, desc }) => (
+                      <button
+                        key={v}
+                        onClick={() => setEditHoldingPeriod(v)}
+                        className={`py-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center ${
+                          editHoldingPeriod === v 
+                            ? "bg-indigo-600 text-white" 
+                            : "bg-white/[0.05] text-slate-300 hover:bg-white/[0.08]"
+                        }`}
+                      >
+                        <span>{l}</span>
+                        <span className={`text-[10px] ${editHoldingPeriod === v ? "text-indigo-200" : "text-slate-500"}`}>{desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowEditPositionModal(false)}
+                  className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm sm:text-base"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSavePosition}
+                  disabled={loading}
+                  className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  保存
                 </button>
               </div>
             </motion.div>
