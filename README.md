@@ -232,6 +232,38 @@ python main.py --analyze 贵州茅台
 ### Q: 报告保存在哪里？
 默认保存在 `reports/` 目录下，文件名格式: `{标的}_{时间戳}.md`
 
+### Q: 如何配置微信公众号推送？
+系统支持两种微信推送方式：
+
+**方式一：微信公众号推送（推荐）**
+基于 [go-wxpush](https://github.com/hezhizheng/go-wxpush) 方案，使用微信测试公众号发送模板消息：
+- 每天 10 万次额度
+- 真正的微信原生弹窗 + 声音提醒
+
+配置步骤：
+1. 在 `.env` 文件中配置：
+```bash
+WECHAT_APP_ID=wx84255915fd44cc69
+WECHAT_APP_SECRET=your_app_secret  # 从公众号后台获取
+WECHAT_TEMPLATE_ID=your_template_id  # 添加模板后获取
+WECHAT_GH_ID=gh_a1d7563f0a6f
+WECHAT_ACCOUNT=aiautotrade
+```
+
+2. 在微信测试公众号中添加消息模板，格式：
+```
+{{title.DATA}}
+{{content.DATA}}
+{{time.DATA}}
+```
+
+3. 用户关注公众号后，发送任意消息获取 OpenID
+4. 在系统设置中填入 OpenID 即可接收推送
+
+**方式二：PushPlus（备用）**
+- 获取地址: https://www.pushplus.plus/
+- 免费版每月 200 次推送额度
+
 ## ⚠️ 免责声明
 
 本系统生成的分析报告仅供参考，不构成投资建议。投资有风险，入市需谨慎。请在做出任何投资决策前咨询专业的金融顾问。

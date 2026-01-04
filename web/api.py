@@ -3121,21 +3121,143 @@ async def trigger_ai_analysis(username: str, symbol: str):
         update_analysis_task(username, task_id, status='failed', error=str(e))
 
 
+# ============================================
+# 微信公众号推送 (基于 go-wxpush 方案)
+# ============================================
+
+# 微信公众号配置
+WECHAT_APP_ID = os.environ.get("WECHAT_APP_ID", "wx297904a8025f9431")
+WECHAT_APP_SECRET = os.environ.get("WECHAT_APP_SECRET", "")
+WECHAT_TEMPLATE_ID = os.environ.get("WECHAT_TEMPLATE_ID", "")
+WECHAT_GH_ID = os.environ.get("WECHAT_GH_ID", "gh_a1d7563f0a6f")
+WECHAT_ACCOUNT = os.environ.get("WECHAT_ACCOUNT", "aiautotrade")
+
+# access_token 缓存
+_wechat_access_token = None
+_wechat_token_expires_at = 0
+
+
+def get_wechat_access_token() -> str:
+    """获取微信公众号 access_token
+    参考 go-wxpush 实现，使用 client_credential 方式获取
+    """
+    import requests
+    import time
+    global _wechat_access_token, _wechat_token_expires_at
+    
+    # 检查缓存是否有效（提前5分钟刷新）
+    if _wechat_access_token and time.time() < _wechat_token_expires_at - 300:
+        return _wechat_access_token
+    
+    if not WECHAT_APP_ID or not WECHAT_APP_SECRET:
+        print("[WeChat] AppID 或 AppSecret 未配置")
+        return ""
+    
+    try:
+        url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={WECHAT_APP_ID}&secret={WECHAT_APP_SECRET}"
+        response = requests.get(url, timeout=10)
+        result = response.json()
+        
+        if "access_token" in result:
+            _wechat_access_token = result["access_token"]
+            # access_token 有效期为 7200 秒
+            _wechat_token_expires_at = time.time() + result.get("expires_in", 7200)
+            print(f"[WeChat] 获取 access_token 成功")
+            return _wechat_access_token
+        else:
+            print(f"[WeChat] 获取 access_token 失败: {result.get('errmsg', '未知错误')}")
+            return ""
+    except Exception as e:
+        print(f"[WeChat] 获取 access_token 异常: {e}")
+        return ""
+
+
+def send_wechat_template_message(openid: str, title: str, content: str, 
+                                  detail_url: str = "") -> bool:
+    """发送微信公众号模板消息
+    参考 go-wxpush 的模板消息发送逻辑
+    
+    模板格式示例（需要在测试公众号中添加）:
+    {{title.DATA}}
+    {{content.DATA}}
+    {{time.DATA}}
+    """
+    import requests
+    import urllib.parse
+    
+    if not openid:
+        print("[WeChat] OpenID 未配置")
+        return False
+    
+    access_token = get_wechat_access_token()
+    if not access_token:
+        print("[WeChat] 无法获取 access_token")
+        return False
+    
+    if not WECHAT_TEMPLATE_ID:
+        print("[WeChat] 模板ID 未配置")
+        return False
+    
+    try:
+        url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}"
+        
+        # 构建模板消息数据
+        data = {
+            "touser": openid,
+            "template_id": WECHAT_TEMPLATE_ID,
+            "url": detail_url,  # 点击消息跳转的URL（跳转到AI分析报告）
+            "data": {
+                "title": {
+                    "value": title,
+                    "color": "#173177"
+                },
+                "content": {
+                    "value": content,
+                    "color": "#173177"
+                },
+                "time": {
+                    "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "color": "#173177"
+                }
+            }
+        }
+        
+        response = requests.post(url, json=data, timeout=10)
+        result = response.json()
+        
+        if result.get("errcode") == 0:
+            print(f"[WeChat] 模板消息推送成功: {title}")
+            return True
+        else:
+            print(f"[WeChat] 模板消息推送失败: {result.get('errmsg', '未知错误')}")
+            return False
+            
+    except Exception as e:
+        print(f"[WeChat] 模板消息推送异常: {e}")
+        return False
+
+
 def send_sms_notification(phone: str, message: str) -> bool:
     """发送通知（使用微信推送）
-    使用 PushPlus 服务发送微信通知
+    优先使用微信公众号推送，备用 PushPlus
     """
     return send_wechat_notification(message)
 
 
-def send_wechat_notification(message: str, title: str = "AI智能投研提醒", token: str = None) -> bool:
+def send_wechat_notification(message: str, title: str = "AI智能投研提醒", token: str = None, openid: str = None) -> bool:
     """发送微信推送通知
-    使用 PushPlus 服务：https://www.pushplus.plus/
+    优先使用微信公众号模板消息，备用 PushPlus 服务
     """
     import requests
-    import os
     
-    # 优先使用传入的 token，否则使用环境变量
+    # 优先使用微信公众号推送
+    if openid and WECHAT_APP_SECRET:
+        result = send_wechat_template_message(openid, title, message)
+        if result:
+            return True
+        print("[WeChat] 公众号推送失败，尝试 PushPlus 备用方案")
+    
+    # 备用方案：PushPlus
     pushplus_token = token or os.environ.get("PUSHPLUS_TOKEN", "")
     
     if not pushplus_token:
@@ -3155,14 +3277,14 @@ def send_wechat_notification(message: str, title: str = "AI智能投研提醒", 
         result = response.json()
         
         if result.get("code") == 200:
-            print(f"[WeChat] 推送成功: {title}")
+            print(f"[WeChat] PushPlus 推送成功: {title}")
             return True
         else:
-            print(f"[WeChat] 推送失败: {result.get('msg')}")
+            print(f"[WeChat] PushPlus 推送失败: {result.get('msg')}")
             return False
             
     except Exception as e:
-        print(f"[WeChat] 推送异常: {e}")
+        print(f"[WeChat] PushPlus 推送异常: {e}")
         return False
 
 
@@ -3197,62 +3319,128 @@ def get_pushplus_remaining(token: str) -> dict:
 def send_price_alert_notification(username: str, symbol: str, name: str, 
                                    alert_type: str, current_price: float, 
                                    target_price: float, ai_summary: str = "") -> bool:
-    """发送价格提醒通知（带 AI 分析）"""
+    """发送价格提醒通知（带 AI 分析）
+    优先使用微信公众号模板消息推送
+    """
     from web.database import get_db
+    import urllib.parse
     
-    # 获取用户的 PushPlus Token
+    # 获取用户的推送配置
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT pushplus_token FROM users WHERE username = ?", (username,))
+        cursor.execute("SELECT pushplus_token, wechat_openid FROM users WHERE username = ?", (username,))
         row = cursor.fetchone()
         user_token = row['pushplus_token'] if row else None
+        user_openid = row['wechat_openid'] if row else None
     
+    if not user_token and not user_openid:
+        print(f"[Alert] 用户 {username} 未配置推送方式")
+        return False
+    
+    # 构建消息内容
+    action = "买入" if alert_type == "buy" else "卖出"
+    action_emoji = "📈" if alert_type == "buy" else "📉"
+    now = datetime.now()
+    trigger_time = now.strftime("%Y年%m月%d日 %H时%M分%S秒")
+    time_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 确保 AI 分析内容至少 50 字
+    if ai_summary and len(ai_summary) < 50:
+        # 补充默认分析内容
+        if alert_type == "buy":
+            ai_summary = ai_summary + "。综合技术面和基本面分析，当前价位具有较好的投资价值，建议关注后续走势变化。"
+        else:
+            ai_summary = ai_summary + "。综合技术面和基本面分析，当前价位已达到预期目标，建议适时获利了结，注意控制风险。"
+    
+    # 如果没有 AI 分析，生成默认内容
+    if not ai_summary:
+        if alert_type == "buy":
+            ai_summary = f"根据AI智能分析，{name}当前价格已触及设定的买入价位。技术指标显示短期存在反弹机会，建议关注成交量变化，把握买入时机。"
+        else:
+            ai_summary = f"根据AI智能分析，{name}当前价格已触及设定的卖出价位。技术指标显示短期可能面临回调压力，建议适时获利了结，注意控制风险。"
+    
+    # 优先使用微信公众号推送
+    if user_openid and WECHAT_APP_SECRET:
+        # 标题
+        title = f"{action_emoji} {action}提醒"
+        
+        # 构建完整的消息内容
+        content = f"""{action}提醒
+触发时间：{trigger_time}
+股票代码：{symbol}
+名称：{name}
+当前价格：¥{current_price:.3f}
+
+已经触发AI分析的{action}价格 ¥{target_price:.3f}，请尽快{action}。
+
+AI分析{action}原因：
+{ai_summary}"""
+        
+        # 自动检测前端 URL
+        frontend_url = os.environ.get("FRONTEND_URL", "").strip()
+        if not frontend_url:
+            # 尝试从请求头或配置中获取实际域名
+            # 默认使用常见的部署地址
+            frontend_url = "http://localhost:3000"
+            # 检查是否有配置的公网域名
+            public_domain = os.environ.get("PUBLIC_DOMAIN", "").strip()
+            if public_domain:
+                frontend_url = f"https://{public_domain}" if not public_domain.startswith("http") else public_domain
+        
+        # 构建详情页 URL（使用结构化参数，便于前端解析）
+        detail_url = f"{frontend_url}/notify?" + urllib.parse.urlencode({
+            'title': title,
+            'type': alert_type,
+            'symbol': symbol,
+            'name': name,
+            'price': f"{current_price:.3f}",
+            'target': f"{target_price:.3f}",
+            'time': time_str,
+            'ai': ai_summary
+        })
+        
+        result = send_wechat_template_message(user_openid, title, content, detail_url)
+        if result:
+            return True
+        print(f"[Alert] 微信公众号推送失败，尝试 PushPlus 备用方案")
+    
+    # 备用方案：PushPlus（支持富文本）
     if not user_token:
         print(f"[Alert] 用户 {username} 未配置 PushPlus Token")
         return False
     
-    # 构建富文本消息
-    action = "买入" if alert_type == "buy" else "卖出"
     action_color = "#10B981" if alert_type == "buy" else "#F43F5E"
     
+    # 构建富文本消息
     message = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 20px; border-radius: 12px 12px 0 0;">
-            <h2 style="margin: 0; font-size: 18px;">🔔 {action}价格提醒</h2>
+            <h2 style="margin: 0; font-size: 18px;">{action_emoji} {action}提醒</h2>
         </div>
         
         <div style="background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div>
-                    <div style="font-size: 20px; font-weight: bold; color: #1e293b;">{name}</div>
-                    <div style="font-size: 14px; color: #64748b;">{symbol}</div>
-                </div>
-                <div style="text-align: right;">
-                    <div style="font-size: 24px; font-weight: bold; color: {action_color};">¥{current_price:.3f}</div>
-                    <div style="font-size: 12px; color: #64748b;">当前价格</div>
-                </div>
-            </div>
-            
             <div style="background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                    <span style="color: #64748b;">触发类型</span>
-                    <span style="color: {action_color}; font-weight: bold;">{action}提醒</span>
+                <div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">触发时间：{trigger_time}</div>
+                <div style="margin-bottom: 10px;">
+                    <div style="font-size: 14px; color: #64748b;">股票代码：{symbol}</div>
+                    <div style="font-size: 18px; font-weight: bold; color: #1e293b;">名称：{name}</div>
                 </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span style="color: #64748b;">目标价格</span>
-                    <span style="font-weight: bold;">¥{target_price:.3f}</span>
+                <div style="font-size: 16px; color: {action_color}; font-weight: bold;">当前价格：¥{current_price:.3f}</div>
+            </div>
+            
+            <div style="background: #fef3c7; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                <div style="font-size: 14px; color: #92400e;">
+                    已经触发AI分析的{action}价格 <strong>¥{target_price:.3f}</strong>，请尽快{action}。
                 </div>
             </div>
             
-            {f'''
             <div style="background: #eff6ff; border-left: 4px solid #6366f1; padding: 12px; border-radius: 0 8px 8px 0; margin-bottom: 15px;">
-                <div style="font-size: 12px; color: #6366f1; font-weight: bold; margin-bottom: 5px;">🤖 AI 分析摘要</div>
+                <div style="font-size: 12px; color: #6366f1; font-weight: bold; margin-bottom: 5px;">AI分析{action}原因：</div>
                 <div style="font-size: 13px; color: #334155; line-height: 1.5;">{ai_summary}</div>
             </div>
-            ''' if ai_summary else ''}
             
             <div style="font-size: 11px; color: #94a3b8; text-align: center;">
-                {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} · AI智能投研
+                {now.strftime("%Y-%m-%d %H:%M:%S")} · AI智能投研
             </div>
         </div>
     </div>
@@ -3280,19 +3468,28 @@ async def get_user_settings(authorization: str = Header(None)):
     from web.database import get_db
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT pushplus_token FROM users WHERE username = ?", (user['username'],))
+        cursor.execute("SELECT pushplus_token, wechat_openid FROM users WHERE username = ?", (user['username'],))
         row = cursor.fetchone()
         pushplus_token = row['pushplus_token'] if row else None
+        wechat_openid = row['wechat_openid'] if row else None
     
     # 获取剩余推送次数
     remaining_info = get_pushplus_remaining(pushplus_token) if pushplus_token else None
+    
+    # 检查微信公众号配置状态
+    wechat_configured = bool(wechat_openid and WECHAT_APP_SECRET and WECHAT_TEMPLATE_ID)
     
     return {
         "status": "success",
         "settings": {
             "pushplus_token": pushplus_token or "",
             "pushplus_configured": bool(pushplus_token),
-            "pushplus_remaining": remaining_info
+            "pushplus_remaining": remaining_info,
+            # 微信公众号推送配置
+            "wechat_openid": wechat_openid or "",
+            "wechat_configured": wechat_configured,
+            "wechat_gh_id": WECHAT_GH_ID,
+            "wechat_account": WECHAT_ACCOUNT
         }
     }
 
@@ -3300,6 +3497,7 @@ async def get_user_settings(authorization: str = Header(None)):
 @app.post("/api/user/settings")
 async def update_user_settings(
     pushplus_token: str = Query(default=""),
+    wechat_openid: str = Query(default=""),
     authorization: str = Header(None)
 ):
     """更新用户设置"""
@@ -3318,11 +3516,17 @@ async def update_user_settings(
     if pushplus_token and len(pushplus_token) < 10:
         raise HTTPException(status_code=400, detail="PushPlus Token 格式不正确")
     
+    # 验证 OpenID 格式（微信 OpenID 通常以 o 开头，长度约 28 位）
+    if wechat_openid and (len(wechat_openid) < 20 or not wechat_openid.startswith('o')):
+        raise HTTPException(status_code=400, detail="微信 OpenID 格式不正确")
+    
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE users SET pushplus_token = ? WHERE username = ?",
-            (pushplus_token if pushplus_token else None, user['username'])
+            "UPDATE users SET pushplus_token = ?, wechat_openid = ? WHERE username = ?",
+            (pushplus_token if pushplus_token else None, 
+             wechat_openid if wechat_openid else None,
+             user['username'])
         )
         conn.commit()
     
@@ -3335,9 +3539,13 @@ async def update_user_settings(
 @app.post("/api/user/test-push")
 async def test_user_push(
     token: str = Query(default=""),
+    openid: str = Query(default=""),
+    push_type: str = Query(default="auto"),  # auto, wechat, pushplus
     authorization: str = Header(None)
 ):
-    """测试用户的推送配置 - 使用正式模板"""
+    """测试用户的推送配置 - 使用正式模板
+    push_type: auto=自动选择, wechat=微信公众号, pushplus=PushPlus
+    """
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -3347,81 +3555,127 @@ async def test_user_push(
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    # 优先使用传入的 token，否则使用已保存的
-    pushplus_token = token
-    if not pushplus_token:
-        from web.database import get_db
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT pushplus_token FROM users WHERE username = ?", (user['username'],))
-            row = cursor.fetchone()
-            pushplus_token = row['pushplus_token'] if row else None
+    # 获取已保存的配置
+    from web.database import get_db
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT pushplus_token, wechat_openid FROM users WHERE username = ?", (user['username'],))
+        row = cursor.fetchone()
+        saved_token = row['pushplus_token'] if row else None
+        saved_openid = row['wechat_openid'] if row else None
     
-    if not pushplus_token:
-        raise HTTPException(status_code=400, detail="请先输入或配置 PushPlus Token")
+    # 优先使用传入的参数，否则使用已保存的
+    pushplus_token = token or saved_token
+    wechat_openid = openid or saved_openid
     
-    # 使用正式模板发送测试消息
+    # 测试消息内容
     test_symbol = "000001"
     test_name = "测试标的"
     test_price = 10.888
     test_target = 10.500
     action = "买入"
-    action_color = "#10B981"
     
-    test_message = f"""
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 20px; border-radius: 12px 12px 0 0;">
-            <h2 style="margin: 0; font-size: 18px;">🔔 {action}价格提醒 [测试]</h2>
-        </div>
+    # 根据 push_type 选择推送方式
+    result = False
+    used_method = ""
+    
+    if push_type == "wechat" or (push_type == "auto" and wechat_openid and WECHAT_APP_SECRET):
+        # 微信公众号推送
+        if not wechat_openid:
+            raise HTTPException(status_code=400, detail="请先配置微信 OpenID")
+        if not WECHAT_APP_SECRET:
+            raise HTTPException(status_code=400, detail="服务端未配置微信公众号 AppSecret")
+        if not WECHAT_TEMPLATE_ID:
+            raise HTTPException(status_code=400, detail="服务端未配置微信模板ID")
         
-        <div style="background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div>
-                    <div style="font-size: 20px; font-weight: bold; color: #1e293b;">{test_name}</div>
-                    <div style="font-size: 14px; color: #64748b;">{test_symbol}</div>
-                </div>
-                <div style="text-align: right;">
-                    <div style="font-size: 24px; font-weight: bold; color: {action_color};">¥{test_price:.3f}</div>
-                    <div style="font-size: 12px; color: #64748b;">当前价格</div>
-                </div>
+        title = f"🔔 {action}价格提醒 [测试]"
+        content = f"""📈 {test_name} ({test_symbol})
+当前价格: ¥{test_price:.3f}
+目标{action}价: ¥{test_target:.3f}
+触发类型: {action}提醒
+
+✅ 推送配置成功！
+这是一条测试消息，用于验证您的微信公众号推送配置是否正常工作。"""
+        
+        result = send_wechat_template_message(wechat_openid, title, content)
+        used_method = "微信公众号"
+    
+    elif push_type == "pushplus" or push_type == "auto":
+        # PushPlus 推送
+        if not pushplus_token:
+            raise HTTPException(status_code=400, detail="请先输入或配置 PushPlus Token")
+        
+        action_color = "#10B981"
+        test_message = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 20px; border-radius: 12px 12px 0 0;">
+                <h2 style="margin: 0; font-size: 18px;">🔔 {action}价格提醒 [测试]</h2>
             </div>
             
-            <div style="background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                    <span style="color: #64748b;">触发类型</span>
-                    <span style="color: {action_color}; font-weight: bold;">{action}提醒</span>
+            <div style="background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div>
+                        <div style="font-size: 20px; font-weight: bold; color: #1e293b;">{test_name}</div>
+                        <div style="font-size: 14px; color: #64748b;">{test_symbol}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 24px; font-weight: bold; color: {action_color};">¥{test_price:.3f}</div>
+                        <div style="font-size: 12px; color: #64748b;">当前价格</div>
+                    </div>
                 </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span style="color: #64748b;">目标价格</span>
-                    <span style="font-weight: bold;">¥{test_target:.3f}</span>
+                
+                <div style="background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span style="color: #64748b;">触发类型</span>
+                        <span style="color: {action_color}; font-weight: bold;">{action}提醒</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #64748b;">目标价格</span>
+                        <span style="font-weight: bold;">¥{test_target:.3f}</span>
+                    </div>
                 </div>
-            </div>
-            
-            <div style="background: #eff6ff; border-left: 4px solid #6366f1; padding: 12px; border-radius: 0 8px 8px 0; margin-bottom: 15px;">
-                <div style="font-size: 12px; color: #6366f1; font-weight: bold; margin-bottom: 5px;">🤖 AI 分析摘要</div>
-                <div style="font-size: 13px; color: #334155; line-height: 1.5;">这是一条测试消息，用于验证您的推送配置是否正常工作。正式提醒将包含 AI 智能分析的投资建议摘要。</div>
-            </div>
-            
-            <div style="background: #fef3c7; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                <div style="font-size: 12px; color: #d97706; font-weight: bold;">✅ 推送配置成功</div>
-                <div style="font-size: 13px; color: #92400e; margin-top: 5px;">
-                    恭喜！您的微信推送已配置成功。PushPlus 免费版每月有 200 次推送额度。
+                
+                <div style="background: #eff6ff; border-left: 4px solid #6366f1; padding: 12px; border-radius: 0 8px 8px 0; margin-bottom: 15px;">
+                    <div style="font-size: 12px; color: #6366f1; font-weight: bold; margin-bottom: 5px;">🤖 AI 分析摘要</div>
+                    <div style="font-size: 13px; color: #334155; line-height: 1.5;">这是一条测试消息，用于验证您的推送配置是否正常工作。正式提醒将包含 AI 智能分析的投资建议摘要。</div>
                 </div>
-            </div>
-            
-            <div style="font-size: 11px; color: #94a3b8; text-align: center;">
-                {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} · AI智能投研
+                
+                <div style="background: #fef3c7; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                    <div style="font-size: 12px; color: #d97706; font-weight: bold;">✅ 推送配置成功</div>
+                    <div style="font-size: 13px; color: #92400e; margin-top: 5px;">
+                        恭喜！您的微信推送已配置成功。PushPlus 免费版每月有 200 次推送额度。
+                    </div>
+                </div>
+                
+                <div style="font-size: 11px; color: #94a3b8; text-align: center;">
+                    {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} · AI智能投研
+                </div>
             </div>
         </div>
-    </div>
-    """
-    
-    result = send_wechat_notification(test_message, f"【{action}提醒】{test_name} ¥{test_price:.3f} [测试]", pushplus_token)
+        """
+        
+        result = send_wechat_notification(test_message, f"【{action}提醒】{test_name} ¥{test_price:.3f} [测试]", pushplus_token)
+        used_method = "PushPlus"
     
     if result:
-        return {"status": "success", "message": "测试推送已发送，请检查微信"}
+        return {"status": "success", "message": f"测试推送已发送（{used_method}），请检查微信"}
     else:
-        raise HTTPException(status_code=500, detail="推送失败，请检查 Token 是否正确")
+        raise HTTPException(status_code=500, detail=f"推送失败（{used_method}），请检查配置是否正确")
+
+
+@app.get("/api/wechat/config")
+async def get_wechat_config():
+    """获取微信公众号配置信息（用于前端展示关注引导）"""
+    return {
+        "status": "success",
+        "config": {
+            "gh_id": WECHAT_GH_ID,  # 公众号原始ID
+            "account": WECHAT_ACCOUNT,  # 公众号微信号
+            "app_id": WECHAT_APP_ID,  # AppID（用于生成关注链接）
+            "configured": bool(WECHAT_APP_SECRET and WECHAT_TEMPLATE_ID),  # 服务端是否已配置
+            "description": "关注公众号后，发送任意消息获取您的 OpenID"
+        }
+    }
 
 
 # ============================================

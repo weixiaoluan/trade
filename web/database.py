@@ -184,6 +184,11 @@ def migrate_database():
             print("迁移: 添加 pushplus_token 字段到 users 表")
             cursor.execute("ALTER TABLE users ADD COLUMN pushplus_token TEXT")
         
+        # 检查 users 表是否有 wechat_openid 字段 (微信公众号推送)
+        if 'wechat_openid' not in user_columns:
+            print("迁移: 添加 wechat_openid 字段到 users 表")
+            cursor.execute("ALTER TABLE users ADD COLUMN wechat_openid TEXT")
+        
         # 检查 reminders 表是否有 AI 分析相关字段
         cursor.execute("PRAGMA table_info(reminders)")
         reminder_columns = [col[1] for col in cursor.fetchall()]
