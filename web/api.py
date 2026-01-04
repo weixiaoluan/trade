@@ -1185,41 +1185,64 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         # 从报告中提取AI建议价格并更新到自选列表
         try:
             from web.database import db_update_watchlist_ai_prices
+            import re
             
-            # 从levels中提取支撑位和阻力位作为建议买入/卖出价
+            # 优先从AI报告文本中提取建议买入/卖出价格
             ai_buy_price = None
             ai_sell_price = None
             
-            key_levels = levels_dict.get('key_levels', {})
-            if isinstance(key_levels, list):
-                # 列表格式
-                support_prices = [l.get('price') for l in key_levels if l.get('type') == 'support' and l.get('price')]
-                resistance_prices = [l.get('price') for l in key_levels if l.get('type') == 'resistance' and l.get('price')]
-                if support_prices:
-                    ai_buy_price = support_prices[0]
-                if resistance_prices:
-                    ai_sell_price = resistance_prices[0]
-            elif isinstance(key_levels, dict):
-                # 字典格式
-                ai_buy_price = key_levels.get('nearest_support')
-                ai_sell_price = key_levels.get('nearest_resistance')
+            # 尝试从报告中解析建议价格表格
+            if report:
+                # 匹配 "建议买入价" 行，提取价格
+                buy_match = re.search(r'\*\*建议买入价\*\*\s*\|\s*¥?([\d.]+)', report)
+                if buy_match:
+                    try:
+                        ai_buy_price = float(buy_match.group(1))
+                    except:
+                        pass
+                
+                # 匹配 "建议卖出价" 行，提取价格
+                sell_match = re.search(r'\*\*建议卖出价\*\*\s*\|\s*¥?([\d.]+)', report)
+                if sell_match:
+                    try:
+                        ai_sell_price = float(sell_match.group(1))
+                    except:
+                        pass
             
-            # 如果key_levels没有，尝试从support_levels/resistance_levels获取
-            if not ai_buy_price:
-                support_levels = levels_dict.get('support_levels', [])
-                if support_levels:
-                    if isinstance(support_levels[0], dict):
-                        ai_buy_price = support_levels[0].get('price')
-                    elif isinstance(support_levels[0], (int, float)):
-                        ai_buy_price = support_levels[0]
-            
-            if not ai_sell_price:
-                resistance_levels = levels_dict.get('resistance_levels', [])
-                if resistance_levels:
-                    if isinstance(resistance_levels[0], dict):
-                        ai_sell_price = resistance_levels[0].get('price')
-                    elif isinstance(resistance_levels[0], (int, float)):
-                        ai_sell_price = resistance_levels[0]
+            # 如果AI报告中没有提取到，则从技术分析的支撑位/阻力位获取
+            if not ai_buy_price or not ai_sell_price:
+                key_levels = levels_dict.get('key_levels', {})
+                if isinstance(key_levels, list):
+                    # 列表格式
+                    support_prices = [l.get('price') for l in key_levels if l.get('type') == 'support' and l.get('price')]
+                    resistance_prices = [l.get('price') for l in key_levels if l.get('type') == 'resistance' and l.get('price')]
+                    if not ai_buy_price and support_prices:
+                        ai_buy_price = support_prices[0]
+                    if not ai_sell_price and resistance_prices:
+                        ai_sell_price = resistance_prices[0]
+                elif isinstance(key_levels, dict):
+                    # 字典格式
+                    if not ai_buy_price:
+                        ai_buy_price = key_levels.get('nearest_support')
+                    if not ai_sell_price:
+                        ai_sell_price = key_levels.get('nearest_resistance')
+                
+                # 如果key_levels没有，尝试从support_levels/resistance_levels获取
+                if not ai_buy_price:
+                    support_levels = levels_dict.get('support_levels', [])
+                    if support_levels:
+                        if isinstance(support_levels[0], dict):
+                            ai_buy_price = support_levels[0].get('price')
+                        elif isinstance(support_levels[0], (int, float)):
+                            ai_buy_price = support_levels[0]
+                
+                if not ai_sell_price:
+                    resistance_levels = levels_dict.get('resistance_levels', [])
+                    if resistance_levels:
+                        if isinstance(resistance_levels[0], dict):
+                            ai_sell_price = resistance_levels[0].get('price')
+                        elif isinstance(resistance_levels[0], (int, float)):
+                            ai_sell_price = resistance_levels[0]
             
             # 确保价格是数值类型
             if isinstance(ai_buy_price, str):
@@ -1230,6 +1253,10 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
             if ai_buy_price or ai_sell_price:
                 db_update_watchlist_ai_prices(username, original_symbol, ai_buy_price, ai_sell_price)
                 print(f"[AI价格] 已更新 {original_symbol} 的建议价格: 买入={ai_buy_price}, 卖出={ai_sell_price}")
+                
+                # 将AI建议价格添加到report_data中，便于前端获取
+                report_data['ai_buy_price'] = ai_buy_price
+                report_data['ai_sell_price'] = ai_sell_price
         except Exception as e:
             print(f"[AI价格] 更新建议价格失败: {e}")
         
@@ -2237,7 +2264,35 @@ async def generate_ai_report(
 ## 一、标的概况
 用 Markdown 表格展示核心指标（代码、名称、价格、涨跌、市值等）
 
-## 二、技术面深度分析
+## 二、AI深度研判（重要）
+请基于你的专业知识和对该标的的了解，从以下维度进行深度分析：
+
+### 2.1 消息面分析
+- 分析该标的近期可能存在的重大消息、政策影响、行业动态
+- 如果是股票，分析公司近期的经营动态、业绩预期、管理层变动等
+- 如果是ETF/基金，分析跟踪指数的行业前景、成分股变化等
+- 评估消息面对短期和中期走势的影响
+
+### 2.2 市场情绪分析
+- 根据成交量、换手率、涨跌幅等数据判断当前市场情绪
+- 分析是否存在恐慌性抛售或过度乐观的追涨
+- 评估当前价位的市场认可度
+- 判断主力资金的动向（根据量价关系推断）
+
+### 2.3 多周期技术共振分析
+基于日K、周K、月K等多周期数据进行综合研判：
+- **日线级别**: 短期趋势方向、关键支撑阻力
+- **周线级别**: 中期趋势确认、重要均线位置
+- **月线级别**: 长期趋势判断、历史高低点参考
+- 分析各周期是否形成共振，共振方向是什么
+
+### 2.4 AI综合研判结论
+综合以上分析，给出：
+- 当前最佳操作策略（买入/持有/卖出/观望）
+- 操作的核心逻辑（2-3句话概括）
+- 需要关注的关键变量
+
+## 三、技术面深度分析
 分小节详细分析（基于2年历史数据）：
 
 ### 趋势类指标
@@ -2271,12 +2326,27 @@ async def generate_ai_report(
 | 120日 | {period_returns.get('120日', 'N/A')}% |
 | 250日 | {period_returns.get('250日', 'N/A')}% |
 
-## 三、支撑阻力位分析
+## 四、支撑阻力位分析
 - 列出多个支撑位和阻力位
 - 说明各价位的重要性
 - 给出突破/跌破后的应对策略
 
-## 四、多周期价格预测
+## 五、AI建议买卖价格（重要）
+基于以上所有分析，给出明确的操作价格建议：
+
+| 类型 | 价格 | 说明 |
+|------|------|------|
+| **建议买入价** | ¥X.XXX | 基于支撑位和技术分析得出的最佳买入价位 |
+| **建议卖出价** | ¥X.XXX | 基于阻力位和技术分析得出的目标卖出价位 |
+| **止损价** | ¥X.XXX | 跌破此价位建议止损 |
+| **加仓价** | ¥X.XXX | 如果继续下跌，可考虑加仓的价位 |
+
+**价格说明**：
+- 建议买入价应略高于最近支撑位，给予一定安全边际
+- 建议卖出价应略低于最近阻力位，确保能够成交
+- 请给出具体的数字价格，精确到小数点后3位
+
+## 六、多周期价格预测
 用 Markdown 表格展示 8 个时间周期的预测：
 
 | 周期 | 预测方向 | 目标价位 | 置信度 | 关键观察点 |
@@ -2290,13 +2360,13 @@ async def generate_ai_report(
 | 6个月 | ... | ... | ...% | ... |
 | 1年 | ... | ... | ...% | ... |
 
-## 五、操作建议
+## 七、操作建议
 分三个维度给出具体建议：
 1. **短线交易者** (1-5天): 具体买卖点位、止损位、目标位
 2. **波段操作者** (1-4周): 建仓区间、加仓条件、止盈止损
 3. **中长期投资者** (1月以上): 配置建议、定投策略、持仓比例
 
-## 六、风险提示
+## 八、风险提示
 列出至少 5 个风险因素：
 - 技术面风险
 - 基本面风险
@@ -2304,10 +2374,10 @@ async def generate_ai_report(
 - 流动性风险
 - 其他特定风险
 
-## 七、总结评级
+## 九、总结评级
 给出综合评级（强力买入/买入/持有/减持/卖出）和核心理由
 
-## 八、量化评分与策略说明
+## 十、量化评分与策略说明
 用一小节专门解释本次量化打分逻辑：
 - 列出参与打分的主要指标（MACD、MA系统、RSI、KDJ、布林带、ATR、ADX、OBV、CCI、Williams %R、成交量、52周高低等）
 - 说明哪些指标当前偏多、哪些偏空
@@ -2315,7 +2385,10 @@ async def generate_ai_report(
 - 指出当前更适合的策略模式（例如：趋势跟随、区间交易、观望防守），并给出1-2句简洁总结
 
 ---
-使用标准 Markdown 格式，表格清晰，层次分明。
+**重要要求**：
+1. 请务必给出具体的建议买入价和建议卖出价数字，这是用户最关心的信息
+2. AI深度研判部分要体现你的专业分析能力，不要只是复述数据
+3. 使用标准 Markdown 格式，表格清晰，层次分明
 """
     try:
         import re
@@ -2325,12 +2398,12 @@ async def generate_ai_report(
             return client.chat.completions.create(
                 model=APIConfig.SILICONFLOW_MODEL,
                 messages=[
-                    {"role": "system", "content": "你是一位资深的证券分析师，擅长技术分析和基本面分析。请生成专业、客观的投资分析报告。"},
+                    {"role": "system", "content": "你是一位资深的证券分析师，拥有20年以上的投资研究经验。你擅长技术分析、基本面分析、消息面解读和市场情绪判断。请基于提供的数据和你的专业知识，生成专业、客观、有深度的投资分析报告。你的分析要有独到见解，不要只是简单复述数据。"},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=8000,
-                temperature=0.3,
-                timeout=180
+                max_tokens=10000,
+                temperature=0.4,
+                timeout=240
             )
         
         response = await asyncio.to_thread(sync_call)

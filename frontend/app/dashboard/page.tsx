@@ -417,15 +417,16 @@ export default function DashboardPage() {
         
         setTasks(newTasks);
         
-        // 如果有新完成的任务，立即刷新报告列表
+        // 如果有新完成的任务，立即刷新报告列表和自选列表（获取最新的AI建议价格）
         if (hasNewCompleted) {
           fetchReports();
+          fetchWatchlist();
         }
       }
     } catch (error) {
       console.error("获取任务状态失败:", error);
     }
-  }, [getToken, shownErrorTasks, showAlertModal, fetchReports]);
+  }, [getToken, shownErrorTasks, showAlertModal, fetchReports, fetchWatchlist]);
 
   const fetchQuotes = useCallback(async () => {
     const token = getToken();
