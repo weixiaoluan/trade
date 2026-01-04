@@ -3132,10 +3132,87 @@ WECHAT_APP_SECRET = os.environ.get("WECHAT_APP_SECRET", "")
 WECHAT_TEMPLATE_ID = os.environ.get("WECHAT_TEMPLATE_ID", "")
 WECHAT_GH_ID = os.environ.get("WECHAT_GH_ID", "gh_a1d7563f0a6f")
 WECHAT_ACCOUNT = os.environ.get("WECHAT_ACCOUNT", "aiautotrade")
+WECHAT_TOKEN = os.environ.get("WECHAT_TOKEN", "aiautotrade2024")  # 微信服务器验证Token
 
 # access_token 缓存
 _wechat_access_token = None
 _wechat_token_expires_at = 0
+
+
+# ============================================
+# 微信公众号消息接收接口
+# ============================================
+
+@app.get("/api/wechat/callback")
+async def wechat_verify(
+    signature: str = Query(...),
+    timestamp: str = Query(...),
+    nonce: str = Query(...),
+    echostr: str = Query(...)
+):
+    """微信服务器验证接口"""
+    import hashlib
+    
+    # 将token、timestamp、nonce三个参数进行字典序排序
+    tmp_list = [WECHAT_TOKEN, timestamp, nonce]
+    tmp_list.sort()
+    tmp_str = "".join(tmp_list)
+    
+    # 进行sha1加密
+    tmp_str = hashlib.sha1(tmp_str.encode()).hexdigest()
+    
+    # 验证签名
+    if tmp_str == signature:
+        return int(echostr)
+    else:
+        return "验证失败"
+
+
+@app.post("/api/wechat/callback")
+async def wechat_message(request):
+    """微信消息接收接口 - 自动回复用户OpenID"""
+    import hashlib
+    import xml.etree.ElementTree as ET
+    from fastapi.responses import Response
+    
+    body = await request.body()
+    
+    try:
+        # 解析XML消息
+        root = ET.fromstring(body)
+        msg_type = root.find("MsgType").text
+        from_user = root.find("FromUserName").text  # 用户的OpenID
+        to_user = root.find("ToUserName").text  # 公众号原始ID
+        
+        # 构建回复消息
+        if msg_type == "event":
+            event = root.find("Event").text
+            if event.lower() == "subscribe":
+                # 用户关注事件
+                reply_content = f"🎉 欢迎关注 AI智能投研！\n\n您的 OpenID 是：\n{from_user}\n\n请复制上方 OpenID 到网站设置中完成绑定，即可接收投资提醒推送。"
+            else:
+                reply_content = f"您的 OpenID 是：\n{from_user}"
+        elif msg_type == "text":
+            # 文本消息，回复OpenID
+            reply_content = f"您的 OpenID 是：\n{from_user}\n\n请复制上方 OpenID 到网站设置中完成绑定。"
+        else:
+            reply_content = f"您的 OpenID 是：\n{from_user}"
+        
+        # 构建XML回复
+        import time
+        reply_xml = f"""<xml>
+<ToUserName><![CDATA[{from_user}]]></ToUserName>
+<FromUserName><![CDATA[{to_user}]]></FromUserName>
+<CreateTime>{int(time.time())}</CreateTime>
+<MsgType><![CDATA[text]]></MsgType>
+<Content><![CDATA[{reply_content}]]></Content>
+</xml>"""
+        
+        return Response(content=reply_xml, media_type="application/xml")
+        
+    except Exception as e:
+        print(f"[WeChat] 消息处理异常: {e}")
+        return Response(content="success", media_type="text/plain")
 
 
 def get_wechat_access_token() -> str:

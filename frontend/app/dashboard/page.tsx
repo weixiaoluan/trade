@@ -2333,7 +2333,7 @@ export default function DashboardPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">2</span>
-                    <span>关注后会自动显示您的 OpenID</span>
+                    <span>关注后自动回复您的 OpenID（或发送任意消息获取）</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">3</span>
