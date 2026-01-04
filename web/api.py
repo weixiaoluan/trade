@@ -1013,50 +1013,58 @@ async def get_analysis_tasks_status(authorization: str = Header(None)):
 async def run_background_analysis_full(username: str, ticker: str, task_id: str):
     """
     后台执行完整的多 Agent 分析（异步并行优化版）
+    
+    进度分配（基于实际耗时）：
+    - 0-5%: 初始化
+    - 5-15%: 数据获取（并行：行情+基本面）约2-5秒
+    - 15-25%: 量化分析（并行：指标+支撑阻力）约1-3秒
+    - 25-30%: 趋势分析 约1秒
+    - 30-95%: AI报告生成（最耗时）约30-120秒
+    - 95-100%: 保存报告
     """
-    # 保存原始 symbol 用于更新任务状态（数据库中存储的是原始代码）
+    import time
+    start_time = time.time()
+    
+    # 保存原始 symbol 用于更新任务状态
     original_symbol = ticker
-    print(f"[后台分析开始] 用户: {username}, 代码: {ticker}, 任务ID: {task_id}")
+    print(f"[分析开始] {ticker} 任务ID: {task_id}")
     
     try:
-        # 检查是否是场外基金（不支持技术分析）
+        # === 初始化 ===
+        update_analysis_task(username, original_symbol, {
+            'status': 'running',
+            'progress': 2,
+            'current_step': '初始化分析环境'
+        })
+        
+        # 检查是否是场外基金
         pure_code = ticker.replace('.SZ', '').replace('.SS', '').replace('.SH', '')
         if pure_code.isdigit() and len(pure_code) == 6:
             if pure_code.startswith(('00', '01', '02', '03', '04', '05', '06', '07', '08', '09')) and \
                not pure_code.startswith(('000', '001', '002', '003')):
                 if not pure_code.startswith(('51', '15', '16', '58', '56')):
-                    raise Exception(f"{ticker} 是场外基金，暂不支持技术分析。请添加对应的ETF代码进行分析。")
+                    raise Exception(f"{ticker} 是场外基金，暂不支持技术分析。")
         
-        # === 第一阶段：数据获取（并行） ===
+        # === 阶段1：数据获取（5-15%）===
         update_analysis_task(username, original_symbol, {
-            'status': 'running',
             'progress': 5,
-            'current_step': 'AI Agents正在集结'
-        })
-        
-        # 自动识别并标准化 ticker
-        update_analysis_task(username, original_symbol, {
-            'progress': 10,
-            'current_step': '正在获取实时行情数据'
+            'current_step': '识别证券代码'
         })
         
         search_result = await asyncio.to_thread(search_ticker, ticker)
         search_dict = json.loads(search_result)
-        
         if search_dict.get("status") == "success":
             ticker = search_dict.get("ticker", ticker)
         
-        # 并行获取行情数据和基本面数据
-        print(f"[后台分析] {ticker} 并行获取数据...")
+        update_analysis_task(username, original_symbol, {
+            'progress': 8,
+            'current_step': '获取行情和基本面数据'
+        })
+        
+        # 并行获取数据
         stock_data_task = asyncio.create_task(asyncio.to_thread(get_stock_data, ticker, "2y", "1d"))
         stock_info_task = asyncio.create_task(asyncio.to_thread(get_stock_info, ticker))
         
-        update_analysis_task(username, original_symbol, {
-            'progress': 20,
-            'current_step': '数据获取中（并行执行）'
-        })
-        
-        # 等待数据获取完成
         stock_data, stock_info = await asyncio.gather(stock_data_task, stock_info_task)
         stock_data_dict = json.loads(stock_data)
         stock_info_dict = json.loads(stock_info)
@@ -1064,68 +1072,68 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         if stock_data_dict.get("status") != "success":
             raise Exception(f"无法获取 {ticker} 的行情数据")
         
-        print(f"[后台分析] {ticker} 数据获取完成，开始量化分析...")
+        print(f"[分析] {ticker} 数据获取完成 耗时{time.time()-start_time:.1f}s")
         
-        # === 第二阶段：量化分析（并行） ===
+        # === 阶段2：量化分析（15-25%）===
         update_analysis_task(username, original_symbol, {
-            'progress': 35,
-            'current_step': '量化分析师团队并行工作中'
+            'progress': 15,
+            'current_step': '计算技术指标'
         })
         
-        # 并行执行：技术指标计算、支撑阻力位计算
+        # 并行计算指标和支撑阻力
         indicators_task = asyncio.create_task(asyncio.to_thread(calculate_all_indicators, stock_data))
         levels_task = asyncio.create_task(asyncio.to_thread(get_support_resistance_levels, stock_data))
         
-        # 等待指标计算完成
-        indicators = await indicators_task
+        indicators, levels = await asyncio.gather(indicators_task, levels_task)
         indicators_dict = json.loads(indicators)
+        levels_dict = json.loads(levels)
         
         if indicators_dict.get("status") == "error" or not indicators_dict.get("indicators"):
             raise Exception(f"无法计算 {ticker} 的技术指标")
         
         update_analysis_task(username, original_symbol, {
-            'progress': 50,
-            'current_step': '趋势分析与信号生成'
+            'progress': 22,
+            'current_step': '分析市场趋势'
         })
         
-        # 趋势分析（依赖指标结果）
+        # === 阶段3：趋势分析（25-30%）===
         trend = await asyncio.to_thread(analyze_trend, indicators)
         trend_dict = json.loads(trend)
         
         if trend_dict.get("status") == "error":
             raise Exception(f"无法分析 {ticker} 的趋势")
         
-        # 等待支撑阻力位计算完成
-        levels = await levels_task
-        levels_dict = json.loads(levels)
+        print(f"[分析] {ticker} 量化分析完成 耗时{time.time()-start_time:.1f}s")
         
-        print(f"[后台分析] {ticker} 量化分析完成，开始AI报告生成...")
-        
-        # === 第三阶段：AI分析 ===
+        # === 阶段4：AI报告生成（30-95%）===
         update_analysis_task(username, original_symbol, {
-            'progress': 65,
-            'current_step': 'AI分析师团队生成报告'
+            'progress': 30,
+            'current_step': 'AI正在生成分析报告（约需1-2分钟）'
         })
         
-        # AI报告生成（内部已经是并行的：预测+报告同时生成）
-        print(f"[后台分析] {ticker} 开始调用AI生成报告...")
         try:
             report, predictions = await generate_ai_report_with_predictions(
-                ticker, 
-                stock_data_dict, 
-                stock_info_dict, 
-                indicators_dict, 
-                trend_dict, 
-                levels_dict
+                ticker, stock_data_dict, stock_info_dict, 
+                indicators_dict, trend_dict, levels_dict,
+                # 传入进度回调
+                progress_callback=lambda p, s: update_analysis_task(username, original_symbol, {
+                    'progress': 30 + int(p * 0.65),  # 30-95%
+                    'current_step': s
+                })
             )
-            print(f"[后台分析] {ticker} AI报告生成完成")
         except Exception as ai_error:
-            print(f"[后台分析] {ticker} AI报告生成失败: {ai_error}")
-            import traceback
-            traceback.print_exc()
+            print(f"[分析] {ticker} AI报告生成失败: {ai_error}")
             raise Exception(f"AI报告生成失败: {ai_error}")
         
-        # 提取量化分析数据
+        print(f"[分析] {ticker} AI报告完成 耗时{time.time()-start_time:.1f}s")
+        
+        # === 阶段5：保存报告（95-100%）===
+        update_analysis_task(username, original_symbol, {
+            'progress': 95,
+            'current_step': '保存分析报告'
+        })
+        
+        # 提取量化数据
         quant_analysis = trend_dict.get("quant_analysis", {})
         trend_analysis = trend_dict.get("trend_analysis", trend_dict)
         signal_details = trend_dict.get("signal_details", [])
@@ -1135,14 +1143,9 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         volatility_state = quant_analysis.get("volatility_state", "medium")
         quant_reco = quant_analysis.get("recommendation", "hold")
         
-        # 技术指标摘要
         ind_root = indicators_dict.get("indicators", indicators_dict or {})
-        if isinstance(ind_root, dict):
-            adx_data = ind_root.get("adx", {}) or {}
-            atr_data = ind_root.get("atr", {}) or {}
-        else:
-            adx_data = {}
-            atr_data = {}
+        adx_data = ind_root.get("adx", {}) if isinstance(ind_root, dict) else {}
+        atr_data = ind_root.get("atr", {}) if isinstance(ind_root, dict) else {}
         
         indicator_overview = {
             "adx_value": adx_data.get("adx"),
@@ -1151,36 +1154,19 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
             "atr_pct": atr_data.get("percentage"),
         }
         
-        # 映射表
         reco_map = {"strong_buy": "强力买入", "buy": "建议买入", "hold": "持有观望", "sell": "建议减持", "strong_sell": "强力卖出"}
         regime_map = {"trending": "趋势市", "ranging": "震荡市", "squeeze": "窄幅整理", "unknown": "待判定"}
         vol_map = {"high": "高波动", "medium": "中等波动", "low": "低波动"}
         
         score_text = f"{quant_score:.1f}" if isinstance(quant_score, (int, float)) else "N/A"
-        regime_cn = regime_map.get(market_regime, "待判定")
-        vol_cn = vol_map.get(volatility_state, "波动适中")
-        reco_cn = reco_map.get(quant_reco, "观望")
+        ai_summary = f"量化评分 {score_text} 分，{regime_map.get(market_regime, '待判定')}，{vol_map.get(volatility_state, '中等波动')}。综合建议：{reco_map.get(quant_reco, '观望')}。"
         
-        bullish_signals = trend_analysis.get("bullish_signals", 0) if isinstance(trend_analysis, dict) else 0
-        bearish_signals = trend_analysis.get("bearish_signals", 0) if isinstance(trend_analysis, dict) else 0
-        
-        ai_summary = f"量化评分 {score_text} 分，当前处于{regime_cn}，{vol_cn}环境。多头信号 {bullish_signals} 个、空头信号 {bearish_signals} 个，综合建议：{reco_cn}。"
-        
-        print(f"[后台分析] {original_symbol} 更新进度到90%...")
-        update_analysis_task(username, original_symbol, {
-            'progress': 90,
-            'current_step': '质量控制专员正在审核'
-        })
-        
-        # 规范化报告时间戳
         completed_at = get_beijing_now()
         report = normalize_report_timestamp(report, completed_at)
         
-        # 构建完整报告数据（与原分析格式一致）
-        # 注意：ticker 使用原始代码，保持与前端一致
         report_data = {
             'status': 'completed',
-            'ticker': original_symbol,  # 使用原始代码，不带后缀
+            'ticker': original_symbol,
             'report': report,
             'predictions': predictions,
             'quant_analysis': quant_analysis,
@@ -1193,23 +1179,21 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
             'levels': levels_dict
         }
         
-        # 保存报告到数据库（使用原始代码）
-        print(f"[后台分析] {original_symbol} 保存报告到数据库...")
         save_user_report(username, original_symbol, report_data)
         
-        # 更新任务状态为完成
-        print(f"[后台分析] {original_symbol} 更新任务状态为完成...")
+        total_time = time.time() - start_time
+        print(f"[分析完成] {original_symbol} 总耗时 {total_time:.1f}s")
+        
         update_analysis_task(username, original_symbol, {
             'status': 'completed',
             'progress': 100,
-            'current_step': '分析完成',
+            'current_step': f'分析完成（耗时{total_time:.0f}秒）',
             'result': json.dumps(report_data, ensure_ascii=False)
         })
-        print(f"[后台分析] {original_symbol} 分析完成！")
         
     except Exception as e:
         import traceback
-        print(f"[后台分析失败] {original_symbol}: {e}")
+        print(f"[分析失败] {original_symbol}: {e}")
         traceback.print_exc()
         update_analysis_task(username, original_symbol, {
             'status': 'failed',
@@ -1854,16 +1838,30 @@ async def generate_ai_report_with_predictions(
     stock_info: dict,
     indicators: dict,
     trend: dict,
-    levels: dict
+    levels: dict,
+    progress_callback=None
 ) -> tuple:
     """
     调用 AI 多Agent分析生成报告和预测
     返回: (report, predictions)
+    
+    progress_callback: 可选的进度回调函数 callback(progress: float, step: str)
+                      progress 范围 0-100
     """
     from openai import OpenAI
     import httpx
     import os
     import re
+    
+    # 进度更新辅助函数
+    def update_progress(progress: float, step: str):
+        if progress_callback:
+            try:
+                progress_callback(progress, step)
+            except:
+                pass
+    
+    update_progress(5, 'AI预测模型准备中')
     
     # 强制禁用系统代理
     os.environ['NO_PROXY'] = '*'
@@ -1988,14 +1986,21 @@ async def generate_ai_report_with_predictions(
         
         return predictions_local
     
-    # 并行运行预测和报告生成，以减少整体等待时间
+    update_progress(15, 'AI预测和报告并行生成中')
+    
+    # 并行运行预测和报告生成
     predictions_task = asyncio.create_task(call_predictions())
     report_task = asyncio.create_task(
         generate_ai_report(ticker, stock_data, stock_info, indicators, trend, levels)
     )
     
+    # 等待预测完成（通常较快）
     predictions = await predictions_task
+    update_progress(50, 'AI预测完成，报告生成中')
+    
+    # 等待报告完成（较慢）
     report = await report_task
+    update_progress(95, 'AI报告生成完成')
     
     return report, predictions
 
