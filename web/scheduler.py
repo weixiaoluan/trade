@@ -1,7 +1,7 @@
 """
 ============================================
 定时任务调度器
-Price Alert Scheduler
+Price Alert Scheduler + AI Analysis Scheduler
 ============================================
 """
 
@@ -14,6 +14,7 @@ from pathlib import Path
 import threading
 import schedule
 import time
+import requests
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -224,12 +225,86 @@ def should_run_reminder(reminder: Dict) -> bool:
     return False
 
 
+def should_run_ai_analysis(reminder: Dict) -> bool:
+    """判断是否应该触发AI分析"""
+    if not reminder.get('enabled', True):
+        return False
+    
+    # 获取AI分析设置
+    ai_frequency = reminder.get('ai_analysis_frequency', 'trading_day')
+    ai_time = reminder.get('ai_analysis_time', '09:30')
+    
+    now = datetime.now()
+    
+    # 检查时间
+    try:
+        hour, minute = map(int, ai_time.split(':'))
+        target_time = dt_time(hour, minute)
+        current_time = now.time()
+        
+        # 允许2分钟的时间窗口
+        time_diff = abs(
+            (current_time.hour * 60 + current_time.minute) - 
+            (target_time.hour * 60 + target_time.minute)
+        )
+        if time_diff > 2:
+            return False
+    except:
+        return False
+    
+    # 检查频率
+    if ai_frequency == 'trading_day':
+        return is_trading_day()
+    elif ai_frequency == 'daily':
+        return True
+    elif ai_frequency == 'weekly':
+        target_weekday = reminder.get('ai_analysis_weekday', 1)
+        return now.weekday() == target_weekday
+    elif ai_frequency == 'monthly':
+        target_day = reminder.get('ai_analysis_day_of_month', 1)
+        return now.day == target_day
+    
+    return False
+
+
+def trigger_ai_analysis(username: str, symbol: str) -> bool:
+    """触发AI分析任务"""
+    try:
+        # 获取用户token（从数据库获取）
+        from web.auth import get_user_by_username, generate_token
+        user = get_user_by_username(username)
+        if not user:
+            logger.error(f"用户 {username} 不存在")
+            return False
+        
+        # 生成临时token
+        token = generate_token(username)
+        
+        # 调用后台分析API
+        response = requests.post(
+            "http://localhost:8000/api/analyze/background",
+            json={"ticker": symbol},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            logger.info(f"成功触发 {username} 的 {symbol} AI分析")
+            return True
+        else:
+            logger.error(f"触发AI分析失败: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"触发AI分析异常: {e}")
+        return False
+
+
 # ============================================
 # 调度器主逻辑
 # ============================================
 
 def run_scheduled_checks():
-    """运行所有定时提醒检查"""
+    """运行所有定时提醒检查（包括AI分析触发）"""
     logger.info("开始执行定时提醒检查...")
     
     try:
@@ -237,19 +312,34 @@ def run_scheduled_checks():
         all_reminders = get_reminders()
         
         for username, user_reminders in all_reminders.items():
-            # 获取用户手机号
+            # 获取用户信息
             from web.auth import get_user_by_username
             user = get_user_by_username(username)
             if not user:
                 continue
             
             phone = user.get('phone')
-            if not phone:
-                continue
             
             for reminder in user_reminders:
-                if should_run_reminder(reminder):
-                    logger.info(f"执行提醒: {username} - {reminder.get('symbol')}")
+                symbol = reminder.get('symbol')
+                
+                # 检查是否需要触发AI分析
+                if should_run_ai_analysis(reminder):
+                    # 检查今天是否已经分析过（避免重复触发）
+                    last_analysis = reminder.get('last_analysis_at')
+                    today = datetime.now().date().isoformat()
+                    
+                    if not last_analysis or not last_analysis.startswith(today):
+                        logger.info(f"触发AI分析: {username} - {symbol}")
+                        if trigger_ai_analysis(username, symbol):
+                            # 更新最后分析时间
+                            update_reminder(username, reminder.get('id'), {
+                                'last_analysis_at': datetime.now().isoformat()
+                            })
+                
+                # 检查价格提醒（需要手机号）
+                if phone and should_run_reminder(reminder):
+                    logger.info(f"执行价格提醒: {username} - {symbol}")
                     
                     triggered = check_price_alert(username, phone, reminder)
                     

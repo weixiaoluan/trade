@@ -505,17 +505,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authChecked) {
-      fetchWatchlist();
-      fetchTasks();
-      fetchReports();
-      fetchReminders();
-      fetchUserSettings();
+      // 初始加载 - 并行获取所有数据
+      Promise.all([
+        fetchWatchlist(),
+        fetchTasks(),
+        fetchReports(),
+        fetchReminders(),
+        fetchUserSettings(),
+      ]);
 
-      const intervalMs = hasActiveTasks ? 2000 : 15000;
+      // 根据是否有活跃任务调整轮询频率
+      // 有活跃任务时3秒轮询，无活跃任务时30秒轮询
+      const intervalMs = hasActiveTasks ? 3000 : 30000;
       const interval = setInterval(() => {
         if (document.visibilityState !== "visible") return;
+        // 只轮询任务状态，报告在任务完成时刷新
         fetchTasks();
-        fetchReports();
       }, intervalMs);
 
       return () => clearInterval(interval);
@@ -526,9 +531,11 @@ export default function DashboardPage() {
     if (authChecked && watchlist.length > 0) {
       fetchQuotes();
       
+      // 行情数据15秒刷新一次（非交易时间可以更长）
       const quoteInterval = setInterval(() => {
+        if (document.visibilityState !== "visible") return;
         fetchQuotes();
-      }, 10000);
+      }, 15000);
 
       return () => clearInterval(quoteInterval);
     }
@@ -669,15 +676,41 @@ export default function DashboardPage() {
       return;
     }
 
-    setLoading(true);
+    const symbolToAdd = addSymbol.trim().toUpperCase();
+    const positionVal = addPosition && parseFloat(addPosition) > 0 ? parseFloat(addPosition) : undefined;
+    const costPriceVal = addCostPrice && parseFloat(addCostPrice) > 0 ? parseFloat(addCostPrice) : undefined;
+
+    // 乐观更新：立即添加到列表
+    const optimisticItem: WatchlistItem = {
+      symbol: symbolToAdd,
+      name: symbolToAdd,
+      type: 'stock',
+      added_at: new Date().toISOString(),
+      position: positionVal,
+      cost_price: costPriceVal,
+    };
+    
+    flushSync(() => {
+      setWatchlist(prev => {
+        // 检查是否已存在
+        if (prev.some(item => item.symbol === symbolToAdd)) {
+          return prev;
+        }
+        return [optimisticItem, ...prev];
+      });
+      setAddSymbol("");
+      setAddPosition("");
+      setAddCostPrice("");
+      if (closeAfterAdd) {
+        setShowAddModal(false);
+      }
+    });
+
+    // 后台异步添加
     try {
-      const payload: any = { symbol: addSymbol.trim().toUpperCase() };
-      if (addPosition && parseFloat(addPosition) > 0) {
-        payload.position = parseFloat(addPosition);
-      }
-      if (addCostPrice && parseFloat(addCostPrice) > 0) {
-        payload.cost_price = parseFloat(addCostPrice);
-      }
+      const payload: any = { symbol: symbolToAdd };
+      if (positionVal) payload.position = positionVal;
+      if (costPriceVal) payload.cost_price = costPriceVal;
 
       const response = await fetch(`${API_BASE}/api/watchlist`, {
         method: "POST",
@@ -690,26 +723,19 @@ export default function DashboardPage() {
 
       const data = await response.json();
       if (response.ok && data.status === "success") {
-        setAddSymbol("");
-        setAddPosition("");
-        setAddCostPrice("");
+        // 刷新获取完整数据（包括名称等）
         fetchWatchlist();
-        if (closeAfterAdd) {
-          setShowAddModal(false);
-        } else {
-          // 继续添加模式：显示成功提示
-          alert("添加成功！可以继续添加下一个");
-        }
       } else {
-        alert(data.message || "添加失败");
+        // 添加失败，回滚
+        setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
+        showAlertModal("添加失败", data.message || "添加失败", "error");
       }
     } catch (error) {
-      console.error("添加失败:", error);
-      alert("添加失败，请检查网络连接");
-    } finally {
-      setLoading(false);
+      // 网络错误，回滚
+      setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
+      showAlertModal("添加失败", "网络错误，请检查网络连接", "error");
     }
-  }, [addCostPrice, addPosition, addSymbol, canUseFeatures, fetchWatchlist, getToken, showPendingAlert]);
+  }, [addCostPrice, addPosition, addSymbol, canUseFeatures, fetchWatchlist, getToken, showPendingAlert, showAlertModal]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
