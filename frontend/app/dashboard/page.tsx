@@ -1598,10 +1598,8 @@ export default function DashboardPage() {
             <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400 text-right">持仓</div>
             <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400 text-right">成本价</div>
             <div className="w-14 flex-shrink-0 text-sm font-medium text-slate-400">周期</div>
-            <div className="w-20 flex-shrink-0 text-sm font-medium text-emerald-400/70 text-right">建议买入价</div>
-            <div className="w-16 flex-shrink-0 text-sm font-medium text-emerald-400/70 text-right">买入量</div>
-            <div className="w-20 flex-shrink-0 text-sm font-medium text-rose-400/70 text-right">建议卖出价</div>
-            <div className="w-16 flex-shrink-0 text-sm font-medium text-rose-400/70 text-right">卖出量</div>
+            <div className="w-24 flex-shrink-0 text-sm font-medium text-emerald-400/70 text-right">建议买入价/量</div>
+            <div className="w-24 flex-shrink-0 text-sm font-medium text-rose-400/70 text-right">建议卖出价/量</div>
             <div className="w-20 flex-shrink-0 text-sm font-medium text-slate-400">状态</div>
             <div className="flex-1 text-sm font-medium text-slate-400 text-right">操作</div>
           </div>
@@ -1728,31 +1726,33 @@ export default function DashboardPage() {
                             </div>
                           </div>
                           
-                          {/* AI建议价格和数量 - 移动端 */}
-                          {(item.ai_buy_price || item.ai_sell_price) && (
-                            <div className="flex flex-wrap items-center gap-3 mb-3 pt-2 border-t border-white/[0.05]">
-                              {item.ai_buy_price && (
+                          {/* AI建议价格/数量 - 移动端 */}
+                          {(item.ai_buy_price || item.ai_sell_price || item.ai_buy_quantity || item.ai_sell_quantity) && (
+                            <div className="flex flex-wrap items-start gap-4 mb-3 pt-2 border-t border-white/[0.05]">
+                              {(item.ai_buy_price || item.ai_buy_quantity) && (
                                 <div>
-                                  <div className="text-[10px] text-emerald-400/70 mb-0.5">建议买入价</div>
-                                  <span className="font-mono text-sm font-semibold text-emerald-400">¥{item.ai_buy_price.toFixed(3)}</span>
+                                  <div className="text-[10px] text-emerald-400/70 mb-0.5">建议买入价/量</div>
+                                  <div className="flex flex-col">
+                                    <span className="font-mono text-sm font-semibold text-emerald-400">
+                                      {item.ai_buy_price ? `¥${item.ai_buy_price.toFixed(3)}` : "-"}
+                                    </span>
+                                    <span className="font-mono text-xs text-emerald-400/70">
+                                      {item.ai_buy_quantity ? `${item.ai_buy_quantity.toLocaleString()}股` : "-"}
+                                    </span>
+                                  </div>
                                 </div>
                               )}
-                              {item.ai_buy_quantity && (
+                              {(item.ai_sell_price || item.ai_sell_quantity) && (
                                 <div>
-                                  <div className="text-[10px] text-emerald-400/70 mb-0.5">建议买入量</div>
-                                  <span className="font-mono text-sm font-semibold text-emerald-400">{item.ai_buy_quantity.toLocaleString()}</span>
-                                </div>
-                              )}
-                              {item.ai_sell_price && (
-                                <div>
-                                  <div className="text-[10px] text-rose-400/70 mb-0.5">建议卖出价</div>
-                                  <span className="font-mono text-sm font-semibold text-rose-400">¥{item.ai_sell_price.toFixed(3)}</span>
-                                </div>
-                              )}
-                              {item.ai_sell_quantity && (
-                                <div>
-                                  <div className="text-[10px] text-rose-400/70 mb-0.5">建议卖出量</div>
-                                  <span className="font-mono text-sm font-semibold text-rose-400">{item.ai_sell_quantity.toLocaleString()}</span>
+                                  <div className="text-[10px] text-rose-400/70 mb-0.5">建议卖出价/量</div>
+                                  <div className="flex flex-col">
+                                    <span className="font-mono text-sm font-semibold text-rose-400">
+                                      {item.ai_sell_price ? `¥${item.ai_sell_price.toFixed(3)}` : "-"}
+                                    </span>
+                                    <span className="font-mono text-xs text-rose-400/70">
+                                      {item.ai_sell_quantity ? `${item.ai_sell_quantity.toLocaleString()}股` : "-"}
+                                    </span>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1906,32 +1906,36 @@ export default function DashboardPage() {
                         </span>
                       </div>
 
-                      {/* AI建议买入价 */}
-                      <div className="w-20 flex-shrink-0 text-right">
-                        <span className={`font-mono text-sm ${item.ai_buy_price ? "text-emerald-400" : "text-slate-500"}`}>
-                          {item.ai_buy_price ? `¥${item.ai_buy_price.toFixed(3)}` : "-"}
-                        </span>
+                      {/* AI建议买入价/量 */}
+                      <div className="w-24 flex-shrink-0 text-right">
+                        {item.ai_buy_price || item.ai_buy_quantity ? (
+                          <div className="flex flex-col">
+                            <span className="font-mono text-sm text-emerald-400">
+                              {item.ai_buy_price ? `¥${item.ai_buy_price.toFixed(3)}` : "-"}
+                            </span>
+                            <span className="font-mono text-xs text-emerald-400/70">
+                              {item.ai_buy_quantity ? `${item.ai_buy_quantity.toLocaleString()}股` : "-"}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-500">-</span>
+                        )}
                       </div>
 
-                      {/* AI建议买入量 */}
-                      <div className="w-16 flex-shrink-0 text-right">
-                        <span className={`font-mono text-sm ${item.ai_buy_quantity ? "text-emerald-400" : "text-slate-500"}`}>
-                          {item.ai_buy_quantity ? item.ai_buy_quantity.toLocaleString() : "-"}
-                        </span>
-                      </div>
-
-                      {/* AI建议卖出价 */}
-                      <div className="w-20 flex-shrink-0 text-right">
-                        <span className={`font-mono text-sm ${item.ai_sell_price ? "text-rose-400" : "text-slate-500"}`}>
-                          {item.ai_sell_price ? `¥${item.ai_sell_price.toFixed(3)}` : "-"}
-                        </span>
-                      </div>
-
-                      {/* AI建议卖出量 */}
-                      <div className="w-16 flex-shrink-0 text-right">
-                        <span className={`font-mono text-sm ${item.ai_sell_quantity ? "text-rose-400" : "text-slate-500"}`}>
-                          {item.ai_sell_quantity ? item.ai_sell_quantity.toLocaleString() : "-"}
-                        </span>
+                      {/* AI建议卖出价/量 */}
+                      <div className="w-24 flex-shrink-0 text-right">
+                        {item.ai_sell_price || item.ai_sell_quantity ? (
+                          <div className="flex flex-col">
+                            <span className="font-mono text-sm text-rose-400">
+                              {item.ai_sell_price ? `¥${item.ai_sell_price.toFixed(3)}` : "-"}
+                            </span>
+                            <span className="font-mono text-xs text-rose-400/70">
+                              {item.ai_sell_quantity ? `${item.ai_sell_quantity.toLocaleString()}股` : "-"}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-500">-</span>
+                        )}
                       </div>
 
                       <div className="w-20 flex-shrink-0">
