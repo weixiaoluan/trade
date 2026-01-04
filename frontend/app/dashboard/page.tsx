@@ -112,8 +112,27 @@ interface QuoteData {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [user, setUser] = useState<UserInfo | null>(() => {
+    // 从 localStorage 初始化用户信息，避免等待API
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        try {
+          return JSON.parse(storedUser);
+        } catch {
+          return null;
+        }
+      }
+    }
+    return null;
+  });
+  const [authChecked, setAuthChecked] = useState(() => {
+    // 如果有缓存的用户信息，直接标记为已检查
+    if (typeof window !== 'undefined') {
+      return !!(localStorage.getItem("token") && localStorage.getItem("user"));
+    }
+    return false;
+  });
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [tasks, setTasks] = useState<Record<string, TaskStatus>>({});
@@ -266,29 +285,33 @@ export default function DashboardPage() {
         return;
       }
 
+      // 已经从 localStorage 初始化了用户信息，页面可以立即显示
+      // 后台静默验证 token 有效性
       try {
         const response = await fetch(`${API_BASE}/api/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (!response.ok) {
+          // token 无效，清除并跳转登录
           localStorage.removeItem("token");
           localStorage.removeItem("user");
           router.push("/login");
           return;
         }
 
+        // 更新用户信息（可能有变化）
         const data = await response.json();
         localStorage.setItem("user", JSON.stringify(data.user));
         setUser(data.user);
-        setAuthChecked(true);
       } catch (error) {
-        router.push("/login");
+        // 网络错误时不跳转，使用缓存的用户信息继续
+        console.error("验证token失败:", error);
       }
     };
 
     checkAuth();
-  }, [router]);
+  }, [router, getToken]);
 
   const fetchWatchlist = useCallback(async () => {
     const token = getToken();
@@ -1312,7 +1335,9 @@ export default function DashboardPage() {
     }
   };
 
-  if (!authChecked) {
+  // 只有在没有缓存用户信息时才显示加载动画
+  // 有缓存时直接显示页面，后台静默验证
+  if (!authChecked && !user) {
     return (
       <main className="min-h-screen bg-[#020617] flex items-center justify-center">
         <div className="text-center">
