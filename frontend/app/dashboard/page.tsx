@@ -2363,7 +2363,7 @@ export default function DashboardPage() {
                   placeholder="请输入您的微信 OpenID（关注公众号后获取）"
                   className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-mono"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">OpenID 格式类似：oZqdM3GW6B6F4g-Ggvq3s2dT6Kjg</p>
+                <p className="text-[10px] text-slate-500 mt-1">OpenID 格式类似：oZqdM3GW6B******************</p>
               </div>
 
               {/* 状态显示 */}
