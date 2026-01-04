@@ -3129,10 +3129,76 @@ async def trigger_ai_analysis(username: str, symbol: str):
 # 微信公众号配置
 WECHAT_APP_ID = os.environ.get("WECHAT_APP_ID", "wx297904a8025f9431")
 WECHAT_APP_SECRET = os.environ.get("WECHAT_APP_SECRET", "")
-WECHAT_TEMPLATE_ID = os.environ.get("WECHAT_TEMPLATE_ID", "")
+WECHAT_TEMPLATE_ID = os.environ.get("WECHAT_TEMPLATE_ID", "")  # 通用模板ID（备用）
 WECHAT_GH_ID = os.environ.get("WECHAT_GH_ID", "gh_a1d7563f0a6f")
 WECHAT_ACCOUNT = os.environ.get("WECHAT_ACCOUNT", "aiautotrade")
 WECHAT_TOKEN = os.environ.get("WECHAT_TOKEN", "aiautotrade2024")  # 微信服务器验证Token
+
+# 分类型推送模板ID配置
+# 股票类型模板
+WECHAT_TEMPLATE_STOCK_BUY = "Yq-6n5RR-hV7UA3v7iecTdt38nuVPY7gGf4VXcQvte8"   # 股票买入提醒
+WECHAT_TEMPLATE_STOCK_SELL = "lxBU9pKpciIqbr9EI2u8bCGedgZhkZmU_ZrTiKqeJz8"  # 股票卖出提醒
+# 基金/ETF类型模板
+WECHAT_TEMPLATE_FUND_BUY = "5HOy_cjibt1lUUZUZzZdYSUcaFjyyZVBYnNmVSo_YSQ"    # 基金买入提醒
+WECHAT_TEMPLATE_FUND_SELL = "i34PuhD8B0w11NXr7zx3lh7ZOUsyxG0fxxfBP8EEt8I"   # 基金卖出提醒
+
+
+def get_security_type(symbol: str) -> str:
+    """根据证券代码判断类型
+    返回: 'stock' (股票) 或 'fund' (基金/ETF/LOF)
+    """
+    if not symbol:
+        return 'stock'
+    
+    # 去除后缀
+    pure_code = symbol.replace('.SZ', '').replace('.SS', '').replace('.SH', '').upper()
+    
+    # 美股代码（字母）默认为股票
+    if not pure_code.isdigit():
+        return 'stock'
+    
+    # 6位数字代码判断
+    if len(pure_code) == 6:
+        # ETF: 51xxxx/52xxxx/56xxxx/58xxxx(上证), 159xxx(深证)
+        if pure_code.startswith(('510', '511', '512', '513', '515', '516', '517', '518', '520', '560', '561', '562', '563', '588')) or pure_code.startswith('159'):
+            return 'fund'
+        # LOF: 16xxxx(深证)
+        elif pure_code.startswith('16'):
+            return 'fund'
+        # 股票: 6xxxxx(上证), 000xxx/001xxx/002xxx/003xxx/300xxx/301xxx/688xxx(深证/创业板/科创板)
+        elif pure_code.startswith(('6', '000', '001', '002', '003', '300', '301', '688')):
+            return 'stock'
+        # 其他6位数字默认为场外基金
+        else:
+            return 'fund'
+    
+    return 'stock'
+
+
+def get_template_id_by_type(symbol: str, alert_type: str) -> str:
+    """根据证券代码和操作类型获取对应的模板ID
+    
+    Args:
+        symbol: 证券代码
+        alert_type: 操作类型 'buy' 或 'sell'
+    
+    Returns:
+        对应的模板ID
+    """
+    security_type = get_security_type(symbol)
+    
+    if security_type == 'fund':
+        # 基金/ETF/LOF 类型
+        if alert_type == 'buy':
+            return WECHAT_TEMPLATE_FUND_BUY
+        else:
+            return WECHAT_TEMPLATE_FUND_SELL
+    else:
+        # 股票类型
+        if alert_type == 'buy':
+            return WECHAT_TEMPLATE_STOCK_BUY
+        else:
+            return WECHAT_TEMPLATE_STOCK_SELL
 
 # access_token 缓存
 _wechat_access_token = None
@@ -3263,9 +3329,18 @@ def get_wechat_access_token() -> str:
 
 
 def send_wechat_template_message(openid: str, title: str, content: str, 
-                                  detail_url: str = "") -> bool:
+                                  detail_url: str = "", symbol: str = "", 
+                                  alert_type: str = "") -> bool:
     """发送微信公众号模板消息
     参考 go-wxpush 的模板消息发送逻辑
+    
+    Args:
+        openid: 用户的微信OpenID
+        title: 消息标题
+        content: 消息内容
+        detail_url: 点击消息跳转的URL
+        symbol: 证券代码（用于选择模板）
+        alert_type: 操作类型 'buy' 或 'sell'（用于选择模板）
     
     模板格式示例（需要在测试公众号中添加）:
     {{title.DATA}}
@@ -3284,9 +3359,19 @@ def send_wechat_template_message(openid: str, title: str, content: str,
         print("[WeChat] 无法获取 access_token")
         return False
     
-    if not WECHAT_TEMPLATE_ID:
-        print("[WeChat] 模板ID 未配置")
-        return False
+    # 根据证券类型和操作类型选择模板ID
+    if symbol and alert_type:
+        template_id = get_template_id_by_type(symbol, alert_type)
+        security_type = get_security_type(symbol)
+        type_name = "基金/ETF" if security_type == "fund" else "股票"
+        action_name = "买入" if alert_type == "buy" else "卖出"
+        print(f"[WeChat] 使用{type_name}{action_name}模板: {template_id}")
+    else:
+        # 兼容旧调用方式，使用通用模板
+        template_id = WECHAT_TEMPLATE_ID
+        if not template_id:
+            print("[WeChat] 模板ID 未配置")
+            return False
     
     try:
         url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}"
@@ -3294,7 +3379,7 @@ def send_wechat_template_message(openid: str, title: str, content: str,
         # 构建模板消息数据
         data = {
             "touser": openid,
-            "template_id": WECHAT_TEMPLATE_ID,
+            "template_id": template_id,
             "url": detail_url,  # 点击消息跳转的URL（跳转到AI分析报告）
             "data": {
                 "title": {
@@ -3489,7 +3574,7 @@ AI分析{action}原因：
             'ai': ai_summary
         })
         
-        result = send_wechat_template_message(user_openid, title, content, detail_url)
+        result = send_wechat_template_message(user_openid, title, content, detail_url, symbol, alert_type)
         if result:
             return True
         print(f"[Alert] 微信公众号推送失败，尝试 PushPlus 备用方案")
