@@ -1012,7 +1012,7 @@ async def get_analysis_tasks_status(authorization: str = Header(None)):
 
 async def run_background_analysis_full(username: str, ticker: str, task_id: str):
     """
-    后台执行完整的多 Agent 分析（复用原有分析逻辑）
+    后台执行完整的多 Agent 分析（异步并行优化版）
     """
     # 保存原始 symbol 用于更新任务状态（数据库中存储的是原始代码）
     original_symbol = ticker
@@ -1022,22 +1022,17 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         # 检查是否是场外基金（不支持技术分析）
         pure_code = ticker.replace('.SZ', '').replace('.SS', '').replace('.SH', '')
         if pure_code.isdigit() and len(pure_code) == 6:
-            # 场外基金代码通常以 0、1、2、3、4、5、6、7、8、9 开头
-            # ETF代码：51xxxx(上证), 15xxxx/16xxxx(深证)
-            # 场外基金：00xxxx, 01xxxx, 02xxxx 等
             if pure_code.startswith(('00', '01', '02', '03', '04', '05', '06', '07', '08', '09')) and \
-               not pure_code.startswith(('000', '001', '002', '003')):  # 排除A股
-                # 可能是场外基金
-                if not pure_code.startswith(('51', '15', '16', '58', '56')):  # 排除ETF
+               not pure_code.startswith(('000', '001', '002', '003')):
+                if not pure_code.startswith(('51', '15', '16', '58', '56')):
                     raise Exception(f"{ticker} 是场外基金，暂不支持技术分析。请添加对应的ETF代码进行分析。")
         
-        # === 第一阶段：数据获取 ===
+        # === 第一阶段：数据获取（并行） ===
         update_analysis_task(username, original_symbol, {
             'status': 'running',
             'progress': 5,
             'current_step': 'AI Agents正在集结'
         })
-        await asyncio.sleep(0.2)
         
         # 自动识别并标准化 ticker
         update_analysis_task(username, original_symbol, {
@@ -1051,65 +1046,68 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str)
         if search_dict.get("status") == "success":
             ticker = search_dict.get("ticker", ticker)
         
-        stock_data = await asyncio.to_thread(get_stock_data, ticker, "2y", "1d")
+        # 并行获取行情数据和基本面数据
+        print(f"[后台分析] {ticker} 并行获取数据...")
+        stock_data_task = asyncio.create_task(asyncio.to_thread(get_stock_data, ticker, "2y", "1d"))
+        stock_info_task = asyncio.create_task(asyncio.to_thread(get_stock_info, ticker))
+        
+        update_analysis_task(username, original_symbol, {
+            'progress': 20,
+            'current_step': '数据获取中（并行执行）'
+        })
+        
+        # 等待数据获取完成
+        stock_data, stock_info = await asyncio.gather(stock_data_task, stock_info_task)
         stock_data_dict = json.loads(stock_data)
+        stock_info_dict = json.loads(stock_info)
         
         if stock_data_dict.get("status") != "success":
             raise Exception(f"无法获取 {ticker} 的行情数据")
         
-        # 基本面分析
-        update_analysis_task(username, original_symbol, {
-            'progress': 25,
-            'current_step': '基本面分析师正在评估价值'
-        })
+        print(f"[后台分析] {ticker} 数据获取完成，开始量化分析...")
         
-        stock_info = await asyncio.to_thread(get_stock_info, ticker)
-        stock_info_dict = json.loads(stock_info)
-        
-        # === 第二阶段：量化分析 ===
+        # === 第二阶段：量化分析（并行） ===
         update_analysis_task(username, original_symbol, {
             'progress': 35,
-            'current_step': '技术面分析师正在计算指标'
+            'current_step': '量化分析师团队并行工作中'
         })
         
-        indicators = await asyncio.to_thread(calculate_all_indicators, stock_data)
+        # 并行执行：技术指标计算、支撑阻力位计算
+        indicators_task = asyncio.create_task(asyncio.to_thread(calculate_all_indicators, stock_data))
+        levels_task = asyncio.create_task(asyncio.to_thread(get_support_resistance_levels, stock_data))
+        
+        # 等待指标计算完成
+        indicators = await indicators_task
         indicators_dict = json.loads(indicators)
         
         if indicators_dict.get("status") == "error" or not indicators_dict.get("indicators"):
             raise Exception(f"无法计算 {ticker} 的技术指标")
         
         update_analysis_task(username, original_symbol, {
-            'progress': 45,
-            'current_step': '量化引擎正在生成信号'
+            'progress': 50,
+            'current_step': '趋势分析与信号生成'
         })
         
+        # 趋势分析（依赖指标结果）
         trend = await asyncio.to_thread(analyze_trend, indicators)
         trend_dict = json.loads(trend)
         
         if trend_dict.get("status") == "error":
             raise Exception(f"无法分析 {ticker} 的趋势")
         
-        update_analysis_task(username, original_symbol, {
-            'progress': 55,
-            'current_step': '数据审计员正在验证来源'
-        })
-        
-        levels = await asyncio.to_thread(get_support_resistance_levels, stock_data)
+        # 等待支撑阻力位计算完成
+        levels = await levels_task
         levels_dict = json.loads(levels)
+        
+        print(f"[后台分析] {ticker} 量化分析完成，开始AI报告生成...")
         
         # === 第三阶段：AI分析 ===
         update_analysis_task(username, original_symbol, {
             'progress': 65,
-            'current_step': '风险管理专家正在评估风险'
-        })
-        await asyncio.sleep(0.3)
-        
-        update_analysis_task(username, original_symbol, {
-            'progress': 75,
-            'current_step': '首席投资官正在生成报告'
+            'current_step': 'AI分析师团队生成报告'
         })
         
-        # 调用 AI 生成报告和预测（与原分析相同）
+        # AI报告生成（内部已经是并行的：预测+报告同时生成）
         print(f"[后台分析] {ticker} 开始调用AI生成报告...")
         try:
             report, predictions = await generate_ai_report_with_predictions(
@@ -1963,17 +1961,20 @@ async def generate_ai_report_with_predictions(
         """调用 DeepSeek 生成多周期预测，如失败则使用本地量化规则回退。"""
         predictions_local: list = []
         try:
-            # Agent 1 调用
-            pred_response = client.chat.completions.create(
-                model=APIConfig.SILICONFLOW_MODEL,
-                messages=[
-                    {"role": "system", "content": "你是量化分析师，只输出JSON格式的预测数据，不要输出其他内容。"},
-                    {"role": "user", "content": prediction_prompt}
-                ],
-                max_tokens=1000,
-                temperature=0.2,
-                timeout=180
-            )
+            # Agent 1 调用（使用线程池避免阻塞）
+            def sync_call():
+                return client.chat.completions.create(
+                    model=APIConfig.SILICONFLOW_MODEL,
+                    messages=[
+                        {"role": "system", "content": "你是量化分析师，只输出JSON格式的预测数据，不要输出其他内容。"},
+                        {"role": "user", "content": prediction_prompt}
+                    ],
+                    max_tokens=1000,
+                    temperature=0.2,
+                    timeout=180
+                )
+            
+            pred_response = await asyncio.to_thread(sync_call)
             
             pred_text = pred_response.choices[0].message.content
             # 提取 JSON
@@ -2262,16 +2263,20 @@ async def generate_ai_report(
     try:
         import re
 
-        response = client.chat.completions.create(
-            model=APIConfig.SILICONFLOW_MODEL,
-            messages=[
-                {"role": "system", "content": "你是一位资深的证券分析师，擅长技术分析和基本面分析。请生成专业、客观的投资分析报告。"},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=8000,
-            temperature=0.3,
-            timeout=180
-        )
+        # 使用线程池执行同步API调用，避免阻塞事件循环
+        def sync_call():
+            return client.chat.completions.create(
+                model=APIConfig.SILICONFLOW_MODEL,
+                messages=[
+                    {"role": "system", "content": "你是一位资深的证券分析师，擅长技术分析和基本面分析。请生成专业、客观的投资分析报告。"},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=8000,
+                temperature=0.3,
+                timeout=180
+            )
+        
+        response = await asyncio.to_thread(sync_call)
         report_text = response.choices[0].message.content
 
         # 规范化报告日期和时间为当前北京时间
