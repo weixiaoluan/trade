@@ -3679,15 +3679,34 @@ async def test_user_push(
             raise HTTPException(status_code=400, detail="服务端未配置微信模板ID")
         
         title = f"🔔 {action}价格提醒 [测试]"
+        ai_reason = f"这是一条测试消息，用于验证您的微信公众号推送配置是否正常工作。当前系统运行正常，您可以放心使用AI智能投研的价格提醒功能。"
         content = f"""📈 {test_name} ({test_symbol})
 当前价格: ¥{test_price:.3f}
 目标{action}价: ¥{test_target:.3f}
 触发类型: {action}提醒
 
 ✅ 推送配置成功！
-这是一条测试消息，用于验证您的微信公众号推送配置是否正常工作。"""
+{ai_reason}"""
         
-        result = send_wechat_template_message(wechat_openid, title, content)
+        # 构建详情页 URL
+        import urllib.parse
+        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000").strip()
+        public_domain = os.environ.get("PUBLIC_DOMAIN", "").strip()
+        if public_domain and not frontend_url.startswith("http"):
+            frontend_url = f"http://{public_domain}"
+        
+        detail_url = f"{frontend_url}/notify?" + urllib.parse.urlencode({
+            'title': title,
+            'type': 'buy',
+            'symbol': test_symbol,
+            'name': test_name,
+            'price': f"{test_price:.3f}",
+            'target': f"{test_target:.3f}",
+            'time': datetime.now().strftime("%Y年%m月%d日 %H:%M:%S"),
+            'ai': ai_reason
+        })
+        
+        result = send_wechat_template_message(wechat_openid, title, content, detail_url)
         used_method = "微信公众号"
     
     elif push_type == "pushplus" or push_type == "auto":
