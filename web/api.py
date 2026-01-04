@@ -351,7 +351,7 @@ async def admin_reject_user(username: str, authorization: str = Header(None)):
     if success:
         return {"status": "success", "message": f"用户 {username} 已拒绝"}
     else:
-        raise HTTPException(status_code=404, detail="用户不存在"}
+        raise HTTPException(status_code=404, detail="用户不存在")
 
 
 @app.get("/api/admin/users/{username}/detail")
