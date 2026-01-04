@@ -680,6 +680,13 @@ export default function DashboardPage() {
     const positionVal = addPosition && parseFloat(addPosition) > 0 ? parseFloat(addPosition) : undefined;
     const costPriceVal = addCostPrice && parseFloat(addCostPrice) > 0 ? parseFloat(addCostPrice) : undefined;
 
+    // 检查是否已存在
+    const alreadyExists = watchlist.some(item => item.symbol === symbolToAdd);
+    if (alreadyExists) {
+      showAlertModal("已存在", `${symbolToAdd} 已在自选列表中`, "warning");
+      return;
+    }
+
     // 乐观更新：立即添加到列表
     const optimisticItem: WatchlistItem = {
       symbol: symbolToAdd,
@@ -691,13 +698,7 @@ export default function DashboardPage() {
     };
     
     flushSync(() => {
-      setWatchlist(prev => {
-        // 检查是否已存在
-        if (prev.some(item => item.symbol === symbolToAdd)) {
-          return prev;
-        }
-        return [optimisticItem, ...prev];
-      });
+      setWatchlist(prev => [optimisticItem, ...prev]);
       setAddSymbol("");
       setAddPosition("");
       setAddCostPrice("");
@@ -705,6 +706,11 @@ export default function DashboardPage() {
         setShowAddModal(false);
       }
     });
+
+    // 继续添加模式：立即显示成功提示
+    if (!closeAfterAdd) {
+      showAlertModal("添加成功", `${symbolToAdd} 已添加到自选，可继续添加下一个`, "success");
+    }
 
     // 后台异步添加
     try {
@@ -735,7 +741,7 @@ export default function DashboardPage() {
       setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
       showAlertModal("添加失败", "网络错误，请检查网络连接", "error");
     }
-  }, [addCostPrice, addPosition, addSymbol, canUseFeatures, fetchWatchlist, getToken, showPendingAlert, showAlertModal]);
+  }, [addCostPrice, addPosition, addSymbol, canUseFeatures, fetchWatchlist, getToken, showPendingAlert, showAlertModal, watchlist]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
