@@ -2402,7 +2402,7 @@ async def generate_ai_report_with_predictions(
     # 并行运行预测和报告生成
     predictions_task = asyncio.create_task(call_predictions())
     report_task = asyncio.create_task(
-        generate_ai_report(ticker, stock_data, stock_info, indicators, trend, levels, holding_period)
+        generate_ai_report(ticker, stock_data, stock_info, indicators, trend, levels, holding_period, position_info)
     )
     
     # 等待预测完成（通常较快）
@@ -2423,17 +2423,23 @@ async def generate_ai_report(
     indicators: dict,
     trend: dict,
     levels: dict,
-    holding_period: str = "swing"
+    holding_period: str = "swing",
+    position_info: dict = None
 ) -> str:
     """
     调用 DeepSeek-R1 生成分析报告
     
     Args:
         holding_period: 持有周期 - short(短线), swing(波段), long(中长线)
+        position_info: 持仓信息 - {'position': 持仓数量, 'cost_price': 成本价}
     """
     from openai import OpenAI
     import httpx
     import os
+    
+    # 持仓信息
+    user_position = position_info.get('position') if position_info else None
+    user_cost_price = position_info.get('cost_price') if position_info else None
     
     # 持有周期映射
     holding_period_map = {
@@ -2579,11 +2585,16 @@ async def generate_ai_report(
 - 止损幅度控制在5-8%"""
         price_guidance = "波段建议买入价应在当前价格下方3-8%的支撑位，建议卖出价应在当前价格上方5-15%的阻力位"
     
+    # 构建持仓信息提示（只有持仓和成本价都有值时才显示）
+    position_hint = ""
+    if user_position and user_cost_price:
+        position_hint = f"3. 用户持仓信息：持仓数量 {user_position}，成本价 ¥{user_cost_price}"
+    
     prompt = f"""
 **重要提示**: 
 1. 当前日期是 {report_date}，当前时间是 {report_time}。请在报告中使用此日期作为报告生成时间。
 2. 本次分析的持有周期是：**{holding_period_cn}**，请根据此持有周期给出相应的建议买入价和卖出价。
-3. 用户持仓信息：持仓数量 {user_position if user_position else '未填写'}，成本价 {user_cost_price if user_cost_price else '未填写'}
+{position_hint}
 
 {period_focus}
 
@@ -2726,8 +2737,7 @@ async def generate_ai_report(
 - 建议买入价应略高于最近支撑位，给予一定安全边际
 - 建议卖出价应略低于最近阻力位，确保能够成交
 - 请给出具体的数字价格，精确到小数点后3位
-- 如果用户有持仓（持仓数量: {user_position if user_position else '未填写'}，成本价: {user_cost_price if user_cost_price else '未填写'}），请根据持仓情况给出具体的买入/卖出数量建议
-- 如果用户没有持仓，建议买入数量可以根据一般投资者的资金规模给出参考（如1000股起）
+{f"- 用户当前持仓数量: {user_position}，成本价: ¥{user_cost_price}，请根据持仓情况给出具体的买入/卖出数量建议" if user_position and user_cost_price else "- 用户暂无持仓信息，建议买入数量可以根据一般投资者的资金规模给出参考（如1000股起）"}
 - 建议卖出数量应考虑分批卖出策略，不建议一次性全部卖出
 
 ## 六、多周期价格预测
