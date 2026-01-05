@@ -62,6 +62,7 @@ interface WatchlistItem {
   ai_sell_price?: number;
   ai_buy_quantity?: number;
   ai_sell_quantity?: number;
+  ai_recommendation?: string;
   ai_price_updated_at?: string;
   last_alert_at?: string;
   holding_period?: string;
@@ -1606,6 +1607,7 @@ export default function DashboardPage() {
             <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400 text-right">持仓</div>
             <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400 text-right">成本价</div>
             <div className="w-14 flex-shrink-0 text-sm font-medium text-slate-400">周期</div>
+            <div className="w-16 flex-shrink-0 text-sm font-medium text-indigo-400/70">AI建议</div>
             <div className="w-24 flex-shrink-0 text-sm font-medium text-emerald-400/70 text-right">建议买入价/量</div>
             <div className="w-24 flex-shrink-0 text-sm font-medium text-rose-400/70 text-right">建议卖出价/量</div>
             <div className="w-20 flex-shrink-0 text-sm font-medium text-slate-400">状态</div>
@@ -1736,6 +1738,20 @@ export default function DashboardPage() {
                           
                           {/* AI建议价格/数量 - 移动端（始终显示预留空间） */}
                           <div className="flex flex-wrap items-start gap-4 mb-3 pt-2 border-t border-white/[0.05]">
+                            <div className="min-w-[70px]">
+                              <div className="text-[10px] text-indigo-400/70 mb-0.5">AI建议</div>
+                              {item.ai_recommendation ? (
+                                <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                  item.ai_recommendation.includes('买入') ? 'bg-emerald-500/10 text-emerald-400' :
+                                  item.ai_recommendation.includes('卖出') || item.ai_recommendation.includes('减持') ? 'bg-rose-500/10 text-rose-400' :
+                                  'bg-slate-500/10 text-slate-400'
+                                }`}>
+                                  {item.ai_recommendation}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-500">-</span>
+                              )}
+                            </div>
                             <div className="min-w-[90px]">
                               <div className="text-[10px] text-emerald-400/70 mb-0.5">建议买入价/量</div>
                               <div className="flex flex-col">
@@ -1906,6 +1922,21 @@ export default function DashboardPage() {
                         }`}>
                           {getHoldingPeriodLabel(item.holding_period)}
                         </span>
+                      </div>
+
+                      {/* AI建议 */}
+                      <div className="w-16 flex-shrink-0">
+                        {item.ai_recommendation ? (
+                          <span className={`px-1.5 py-0.5 text-xs rounded ${
+                            item.ai_recommendation.includes('买入') ? 'bg-emerald-500/10 text-emerald-400' :
+                            item.ai_recommendation.includes('卖出') || item.ai_recommendation.includes('减持') ? 'bg-rose-500/10 text-rose-400' :
+                            'bg-slate-500/10 text-slate-400'
+                          }`}>
+                            {item.ai_recommendation}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-500">-</span>
+                        )}
                       </div>
 
                       {/* AI建议买入价/量 */}

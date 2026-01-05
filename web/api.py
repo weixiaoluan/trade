@@ -1588,15 +1588,41 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             if isinstance(ai_sell_price, str):
                 ai_sell_price = None
             
-            if ai_buy_price or ai_sell_price:
-                db_update_watchlist_ai_prices(username, original_symbol, ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity)
-                print(f"[AI价格] 已更新 {original_symbol} 的建议价格: 买入={ai_buy_price}, 卖出={ai_sell_price}, 买入数量={ai_buy_quantity}, 卖出数量={ai_sell_quantity}")
+            # 从报告中提取AI建议（强力买入/买入/持有/减持/卖出）
+            ai_recommendation = None
+            if report:
+                # 匹配总结评级部分的建议
+                reco_patterns = [
+                    r'综合评级[：:]\s*\*?\*?(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)',
+                    r'总结评级[：:]\s*\*?\*?(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)',
+                    r'评级[：:]\s*\*?\*?(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)',
+                    r'建议[：:]\s*\*?\*?(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)',
+                    r'\*\*(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)\*\*',
+                    r'操作策略[：:]\s*\*?\*?(买入|持有|卖出|观望)',
+                ]
+                for pattern in reco_patterns:
+                    reco_match = re.search(pattern, report)
+                    if reco_match:
+                        ai_recommendation = reco_match.group(1)
+                        print(f"[AI建议] 从报告中提取到建议: {ai_recommendation}")
+                        break
+                
+                # 如果没有匹配到，尝试从量化建议获取
+                if not ai_recommendation:
+                    ai_recommendation = reco_map.get(quant_reco, None)
+                    if ai_recommendation:
+                        print(f"[AI建议] 从量化分析获取建议: {ai_recommendation}")
+            
+            if ai_buy_price or ai_sell_price or ai_recommendation:
+                db_update_watchlist_ai_prices(username, original_symbol, ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity, ai_recommendation)
+                print(f"[AI价格] 已更新 {original_symbol}: 建议={ai_recommendation}, 买入价={ai_buy_price}, 卖出价={ai_sell_price}, 买入量={ai_buy_quantity}, 卖出量={ai_sell_quantity}")
                 
                 # 将AI建议价格添加到report_data中，便于前端获取
                 report_data['ai_buy_price'] = ai_buy_price
                 report_data['ai_sell_price'] = ai_sell_price
                 report_data['ai_buy_quantity'] = ai_buy_quantity
                 report_data['ai_sell_quantity'] = ai_sell_quantity
+                report_data['ai_recommendation'] = ai_recommendation
             
             # 更新持有周期到自选列表
             from web.database import db_update_watchlist_item

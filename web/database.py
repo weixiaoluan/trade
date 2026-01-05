@@ -207,6 +207,11 @@ def migrate_database():
             print("迁移: 添加 ai_sell_quantity 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_sell_quantity INTEGER")
         
+        # 检查 watchlist 表是否有 AI 建议字段（买入/卖出/持有等）
+        if 'ai_recommendation' not in watchlist_columns:
+            print("迁移: 添加 ai_recommendation 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_recommendation TEXT")
+        
         # 检查 users 表是否有 pushplus_token 字段
         cursor.execute("PRAGMA table_info(users)")
         user_columns = [col[1] for col in cursor.fetchall()]
@@ -366,7 +371,7 @@ def db_get_user_watchlist(username: str) -> List[Dict]:
                    COALESCE(starred, 0) as starred,
                    ai_buy_price, ai_sell_price, ai_price_updated_at, last_alert_at,
                    COALESCE(holding_period, 'swing') as holding_period,
-                   ai_buy_quantity, ai_sell_quantity
+                   ai_buy_quantity, ai_sell_quantity, ai_recommendation
             FROM watchlist WHERE username = ? 
             ORDER BY starred DESC, added_at DESC
         ''', (username,))
@@ -439,18 +444,21 @@ def db_update_watchlist_ai_prices(username: str, symbol: str,
                                    ai_buy_price: float = None, 
                                    ai_sell_price: float = None,
                                    ai_buy_quantity: int = None,
-                                   ai_sell_quantity: int = None) -> bool:
-    """更新自选项的AI建议买入/卖出价格和数量"""
+                                   ai_sell_quantity: int = None,
+                                   ai_recommendation: str = None) -> bool:
+    """更新自选项的AI建议买入/卖出价格、数量和建议"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
             UPDATE watchlist 
             SET ai_buy_price = ?, ai_sell_price = ?, 
                 ai_buy_quantity = ?, ai_sell_quantity = ?,
+                ai_recommendation = ?,
                 ai_price_updated_at = ?
             WHERE username = ? AND UPPER(symbol) = UPPER(?)
         ''', (ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity, 
-              datetime.now().isoformat(), username, symbol))
+              ai_recommendation, datetime.now().isoformat(), username, symbol))
+        return cursor.rowcount > 0
         return cursor.rowcount > 0
 
 
