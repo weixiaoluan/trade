@@ -3437,29 +3437,36 @@ def get_batch_quotes(symbols: list) -> dict:
         except Exception as e:
             print(f"LOF批量行情获取失败: {e}")
     
-    # 获取 A股 数据
+    # 获取 A股 数据 - 使用单个查询避免获取全部数据
     if codes:
         try:
-            if _quote_cache['stock']['data'] is None or \
-               _quote_cache['stock']['time'] is None or \
-               (now - _quote_cache['stock']['time']).seconds > cache_ttl:
-                print("[Quotes] 正在获取 A股 数据...")
-                _quote_cache['stock']['data'] = ak.stock_zh_a_spot_em()
-                _quote_cache['stock']['time'] = now
-            
-            df_stock = _quote_cache['stock']['data']
-            if df_stock is not None and len(df_stock) > 0:
-                for _, row in df_stock[df_stock['代码'].isin(codes)].iterrows():
-                    code = row['代码']
-                    symbol = code_map.get(code, code)
-                    price = safe_float(row.get('最新价', row.get('现价', 0)))
-                    change = safe_float(row.get('涨跌幅', 0))
-                    quotes[symbol] = {
-                        'symbol': symbol,
-                        'current_price': price,
-                        'change_percent': change
-                    }
-                    codes.discard(code)
+            # 不再获取全部A股数据，改用单个查询
+            print(f"[Quotes] 正在获取 A股 数据（单个查询）...")
+            import requests
+            for code in list(codes):
+                try:
+                    # 使用东方财富单个股票接口
+                    # 判断市场：6开头上证，其他深证
+                    market = "1" if code.startswith("6") else "0"
+                    url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={market}.{code}&fields=f43,f170,f58"
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    resp = requests.get(url, headers=headers, timeout=3)
+                    if resp.status_code == 200:
+                        data = resp.json().get("data", {})
+                        if data:
+                            symbol = code_map.get(code, code)
+                            price = safe_float(data.get("f43", 0)) / 100  # 价格需要除以100
+                            change = safe_float(data.get("f170", 0)) / 100  # 涨跌幅需要除以100
+                            if price > 0:
+                                quotes[symbol] = {
+                                    'symbol': symbol,
+                                    'current_price': price,
+                                    'change_percent': change
+                                }
+                                codes.discard(code)
+                                print(f"[Quotes] A股 {code}: 价格={price}, 涨跌={change}")
+                except Exception as e:
+                    print(f"[Quotes] A股 {code} 获取失败: {e}")
         except Exception as e:
             print(f"A股批量行情获取失败: {e}")
             import traceback
@@ -3545,16 +3552,24 @@ def get_realtime_quote(symbol: str) -> dict:
         except Exception as e:
             print(f"LOF行情获取失败: {e}")
         
-        # 尝试从 A股 获取
+        # 尝试从 A股 获取 - 使用东方财富单个接口
         try:
-            df_stock = ak.stock_zh_a_spot_em()
-            row = df_stock[df_stock['代码'] == code]
-            if not row.empty:
-                return {
-                    'symbol': symbol,
-                    'current_price': float(row.iloc[0]['最新价']),
-                    'change_percent': float(row.iloc[0]['涨跌幅'])
-                }
+            import requests
+            market = "1" if code.startswith("6") else "0"
+            url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={market}.{code}&fields=f43,f170,f58"
+            headers = {"User-Agent": "Mozilla/5.0"}
+            resp = requests.get(url, headers=headers, timeout=3)
+            if resp.status_code == 200:
+                data = resp.json().get("data", {})
+                if data:
+                    price = float(data.get("f43", 0)) / 100
+                    change = float(data.get("f170", 0)) / 100
+                    if price > 0:
+                        return {
+                            'symbol': symbol,
+                            'current_price': price,
+                            'change_percent': change
+                        }
         except Exception as e:
             print(f"A股行情获取失败: {e}")
         
