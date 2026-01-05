@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+ENV
+env
+
+# Node.js (根目录)
+node_modules
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# 日志和临时文件
+logs
+*.log
+*.tmp
+*.temp
+
+# 测试和文档
+tests
+test_*.py
+*.md
+!README.md
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker
+
+# 其他
+.env.example
+.DS_Store
+*.bak
+reports
+temp_*
