@@ -2414,11 +2414,11 @@ async def generate_ai_report_with_predictions(
     predictions = await predictions_task
     update_progress(50, 'AI预测完成，报告生成中')
     
-    # 等待报告完成（较慢），添加超时处理
+    # 等待报告完成，添加超时处理
     try:
-        report = await asyncio.wait_for(report_task, timeout=200)
+        report = await asyncio.wait_for(report_task, timeout=150)
     except asyncio.TimeoutError:
-        print(f"[AI报告] {ticker} 报告生成超时（200秒）")
+        print(f"[AI报告] {ticker} 报告生成超时（150秒）")
         raise Exception("AI报告生成超时，请稍后重试")
     except Exception as e:
         print(f"[AI报告] {ticker} 报告生成失败: {e}")
@@ -2589,83 +2589,60 @@ async def generate_ai_report(
     # 构建持仓信息提示（只有持仓和成本价都有值时才显示）
     position_hint = ""
     if user_position and user_cost_price:
-        position_hint = f"\n3. 用户持仓信息：持仓数量 {user_position}，成本价 ¥{user_cost_price}，请据此给出买入/卖出数量建议"
+        position_hint = f"\n用户持仓: {user_position}股，成本: ¥{user_cost_price}"
     
-    prompt = f"""
-**重要提示**: 
-1. 当前日期: {report_date} {report_time}
-2. 持有周期: **{holding_period_cn}**{position_hint}
+    prompt = f"""分析 {symbol} {display_name}，持有周期: {holding_period_cn}
+当前价: {current_price}，涨跌: {day_change_str}%
+支撑位: {key_levels.get('nearest_support', 'N/A')}，阻力位: {key_levels.get('nearest_resistance', 'N/A')}
+量化评分: {quant_score}/100，建议: {reco_map.get(quant_reco_code, quant_reco_code)}
+MACD: {ind.get('macd', {})}
+RSI: {ind.get('rsi', {})}
+{position_hint}
 
-{period_focus}
+请生成简洁的分析报告：
 
-## 标的信息
-- 代码: {symbol} | 名称: {display_name}
-- 当前价: {current_price} | 涨跌: {day_change_str}%
-- 52周高/低: {price_info.get('52_week_high', 'N/A')} / {price_info.get('52_week_low', 'N/A')}
-- 市盈率: {valuation.get('pe_ratio', 'N/A')} | 市净率: {valuation.get('price_to_book', 'N/A')}
+## 一、概况
+| 指标 | 值 |
+|------|-----|
+| 代码 | {symbol} |
+| 名称 | {display_name} |
+| 当前价 | {current_price} |
+| 涨跌幅 | {day_change_str}% |
 
-## 技术指标
-- MACD: {ind.get('macd', {})}
-- RSI: {ind.get('rsi', {})} | KDJ: {ind.get('kdj', {})}
-- 均线: {ind.get('moving_averages', {})}
-- 布林带: {ind.get('bollinger_bands', {})}
-- ADX: {ind.get('adx', {})} | ATR: {ind.get('atr', {})}
+## 二、技术分析
+简要分析趋势和关键指标
 
-## 量化分析
-- 趋势: {trend_analysis.get('trend_cn', trend_analysis.get('overall_trend', 'N/A'))} | 强度: {trend_analysis.get('trend_strength', 'N/A')}
-- 量化评分: {quant_score}/100 | 建议: {reco_map.get(quant_reco_code, quant_reco_code)}
-- 支撑位: {key_levels.get('nearest_support', 'N/A')} | 阻力位: {key_levels.get('nearest_resistance', 'N/A')}
-
----
-请生成**{holding_period_cn}**分析报告，包含以下章节：
-
-## 一、标的概况
-用表格展示核心指标
-
-## 二、AI研判
-简要分析消息面、技术面、市场情绪，给出操作建议
-
-## 三、技术分析
-分析MACD、RSI、KDJ、均线、布林带等关键指标
-
-## 四、建议买卖价格（重要）
+## 三、建议买卖价格
 | 类型 | 价格 | 数量 | 说明 |
 |------|------|------|------|
-| **建议买入价** | ¥X.XXX | XXX股 | 基于支撑位 |
-| **建议卖出价** | ¥X.XXX | XXX股 | 基于阻力位 |
-| **止损价** | ¥X.XXX | - | 跌破止损 |
+| 建议买入价 | ¥X.XXX | XXX股 | 基于支撑位 |
+| 建议卖出价 | ¥X.XXX | XXX股 | 基于阻力位 |
+| 止损价 | ¥X.XXX | - | 跌破止损 |
 
-{f"用户持仓: {user_position}股，成本: ¥{user_cost_price}，请给出具体数量建议" if user_position and user_cost_price else "无持仓信息，买入数量建议1000股起"}
+## 四、价格预测
+| 周期 | 方向 | 目标价 |
+|------|------|--------|
+| 1周 | 涨/跌 | ¥X.XX |
+| 1月 | 涨/跌 | ¥X.XX |
 
-## 五、价格预测
-| 周期 | 方向 | 目标价 | 置信度 |
-|------|------|--------|--------|
-| 1周 | ... | ... | ...% |
-| 1月 | ... | ... | ...% |
-| 3月 | ... | ... | ...% |
+## 五、总结
+评级和理由（一句话）
 
-## 六、风险提示
-列出3个主要风险
-
-## 七、总结评级
-给出评级（强力买入/买入/持有/减持/卖出）和理由
-
-**要求**：必须给出具体的建议买入价和卖出价数字（精确到小数点后3位）
-"""
+要求：必须给出具体的建议买入价和卖出价（精确到小数点后3位）"""
     try:
         import re
 
-        # 使用线程池执行同步API调用，避免阻塞事件循环
+        # 使用线程池执行同步API调用
         def sync_call():
             return client.chat.completions.create(
                 model=APIConfig.SILICONFLOW_MODEL,
                 messages=[
-                    {"role": "system", "content": "你是一位资深的证券分析师。请基于提供的数据生成简洁专业的投资分析报告，重点给出建议买入价和卖出价。"},
+                    {"role": "system", "content": "你是证券分析师，生成简洁的分析报告，重点给出建议买入价和卖出价。"},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=4000,
-                temperature=0.3,
-                timeout=180
+                max_tokens=2000,
+                temperature=0.2,
+                timeout=120
             )
         
         response = await asyncio.to_thread(sync_call)
