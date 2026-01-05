@@ -1122,6 +1122,112 @@ export default function DashboardPage() {
     setShowHoldingPeriodModal(true);
   }, [canUseFeatures, selectedItems, showPendingAlert]);
 
+  // 批量提醒
+  const handleBatchReminder = useCallback(() => {
+    if (selectedItems.size === 0) return;
+    
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      return;
+    }
+    
+    // 检查是否配置了微信推送
+    if (!userSettings?.wechat_openid) {
+      showAlertModal(
+        "请先配置推送",
+        "您还未配置微信推送，请先在设置中绑定微信 OpenID 才能使用提醒功能。",
+        "warning"
+      );
+      setShowSettingsModal(true);
+      return;
+    }
+    
+    // 重置提醒设置为默认值
+    setReminderType("both");
+    setReminderFrequency("trading_day");
+    setAnalysisWeekday(1);
+    setAnalysisDayOfMonth(1);
+    setAiAnalysisFrequency("trading_day");
+    setAiAnalysisTime("09:30");
+    setAiAnalysisWeekday(1);
+    setAiAnalysisDayOfMonth(1);
+    setReminderHoldingPeriod("short");
+    setShowBatchReminderModal(true);
+  }, [canUseFeatures, selectedItems, showPendingAlert, userSettings, showAlertModal]);
+
+  // 批量创建提醒
+  const handleCreateBatchReminder = useCallback(async () => {
+    if (selectedItems.size === 0) return;
+
+    setLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+    const failedSymbols: string[] = [];
+
+    try {
+      for (const symbol of selectedItems) {
+        const item = watchlist.find(w => w.symbol === symbol);
+        const payload = {
+          symbol: symbol,
+          name: item?.name || symbol,
+          reminder_type: reminderType,
+          frequency: reminderFrequency,
+          analysis_time: aiAnalysisTime,
+          weekday: reminderFrequency === "weekly" ? analysisWeekday : undefined,
+          day_of_month: reminderFrequency === "monthly" ? analysisDayOfMonth : undefined,
+          ai_analysis_frequency: aiAnalysisFrequency,
+          ai_analysis_time: aiAnalysisTime,
+          ai_analysis_weekday: aiAnalysisFrequency === "weekly" ? aiAnalysisWeekday : undefined,
+          ai_analysis_day_of_month: aiAnalysisFrequency === "monthly" ? aiAnalysisDayOfMonth : undefined,
+          holding_period: reminderHoldingPeriod,
+        };
+
+        try {
+          const response = await fetch(`${API_BASE}/api/reminders`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await response.json();
+          
+          if (response.ok && data.status !== "error") {
+            successCount++;
+          } else {
+            failCount++;
+            failedSymbols.push(symbol);
+          }
+        } catch {
+          failCount++;
+          failedSymbols.push(symbol);
+        }
+      }
+
+      setShowBatchReminderModal(false);
+      fetchReminders();
+      setSelectedItems(new Set());
+
+      if (failCount === 0) {
+        showAlertModal("批量提醒创建成功", `已为 ${successCount} 个标的创建提醒`, "success");
+      } else if (successCount === 0) {
+        showAlertModal("批量提醒创建失败", `所有 ${failCount} 个标的创建失败（可能已存在相同提醒）`, "error");
+      } else {
+        showAlertModal(
+          "部分提醒创建成功",
+          `成功: ${successCount} 个，失败: ${failCount} 个（${failedSymbols.join(", ")}）`,
+          "warning"
+        );
+      }
+    } catch (error) {
+      showAlertModal("批量提醒创建失败", "网络错误，请稍后重试", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedItems, watchlist, reminderType, reminderFrequency, aiAnalysisTime, analysisWeekday, analysisDayOfMonth, aiAnalysisFrequency, aiAnalysisWeekday, aiAnalysisDayOfMonth, reminderHoldingPeriod, getToken, fetchReminders, showAlertModal]);
+
   // 实际执行批量分析
   const executeBatchAnalyze = useCallback(async (symbols: string[], period: string) => {
     // 重置错误状态
@@ -1557,6 +1663,16 @@ export default function DashboardPage() {
                   <Play className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">批量分析</span>
                   <span className="sm:hidden">分析</span>
+                  <span>({selectedItems.size})</span>
+                </button>
+                <button
+                  onClick={handleBatchReminder}
+                  disabled={loading}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded-lg transition-all disabled:opacity-50 text-xs sm:text-sm"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">批量提醒</span>
+                  <span className="sm:hidden">提醒</span>
                   <span>({selectedItems.size})</span>
                 </button>
                 <button
@@ -2569,6 +2685,229 @@ export default function DashboardPage() {
                   className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base"
                 >
                   {loading ? "创建中..." : "创建提醒"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 批量提醒设置弹窗 */}
+      <AnimatePresence>
+        {showBatchReminderModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
+            onClick={() => setShowBatchReminderModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 max-h-[85vh] overflow-y-auto safe-area-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-white">提醒设置 - 批量提醒（{selectedItems.size}个）</h3>
+                <button onClick={() => setShowBatchReminderModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              {/* 已选标的列表 */}
+              <div className="mb-4 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <Bell className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm font-medium text-slate-300">已选标的</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
+                  {Array.from(selectedItems).map((symbol) => {
+                    const item = watchlist.find(w => w.symbol === symbol);
+                    return (
+                      <span key={symbol} className="px-2 py-0.5 bg-amber-500/10 text-amber-400 text-xs rounded">
+                        {item?.name || symbol}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* AI 自动分析设置 */}
+                <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Bot className="w-4 h-4 text-indigo-400" />
+                    <span className="text-sm font-medium text-indigo-400">AI 自动分析</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1.5 block">分析频率</label>
+                      <select
+                        value={aiAnalysisFrequency}
+                        onChange={(e) => setAiAnalysisFrequency(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
+                      >
+                        <option value="trading_day" className="bg-slate-800">每个交易日</option>
+                        <option value="weekly" className="bg-slate-800">每周</option>
+                        <option value="monthly" className="bg-slate-800">每月</option>
+                      </select>
+                    </div>
+
+                    {aiAnalysisFrequency === "weekly" && (
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1.5 block">选择周几</label>
+                        <div className="grid grid-cols-7 gap-1">
+                          {["一", "二", "三", "四", "五", "六", "日"].map((day, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setAiAnalysisWeekday(idx + 1)}
+                              className={`py-1.5 rounded text-xs font-medium ${aiAnalysisWeekday === idx + 1 ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {aiAnalysisFrequency === "monthly" && (
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1.5 block">选择日期</label>
+                        <select
+                          value={aiAnalysisDayOfMonth}
+                          onChange={(e) => setAiAnalysisDayOfMonth(Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
+                        >
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                            <option key={day} value={day} className="bg-slate-800">
+                              {day} 号
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1.5 block">分析时间</label>
+                      <select
+                        value={aiAnalysisTime}
+                        onChange={(e) => setAiAnalysisTime(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
+                      >
+                        {Array.from({ length: 24 }, (_, h) => 
+                          ["00", "30"].map(m => {
+                            const time = `${h.toString().padStart(2, "0")}:${m}`;
+                            return <option key={time} value={time} className="bg-slate-800">{time}</option>;
+                          })
+                        ).flat()}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1.5 block">持有周期</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { v: "short", l: "短线", desc: "1-5天" },
+                          { v: "swing", l: "波段", desc: "1-4周" },
+                          { v: "long", l: "中长线", desc: "1月以上" }
+                        ].map(({ v, l, desc }) => (
+                          <button
+                            key={v}
+                            onClick={() => setReminderHoldingPeriod(v)}
+                            className={`py-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center ${
+                              reminderHoldingPeriod === v 
+                                ? "bg-indigo-600 text-white" 
+                                : "bg-white/[0.05] text-slate-300 hover:bg-white/[0.08]"
+                            }`}
+                          >
+                            <span>{l}</span>
+                            <span className={`text-[10px] ${reminderHoldingPeriod === v ? "text-indigo-200" : "text-slate-500"}`}>{desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs sm:text-sm text-slate-400 mb-2 block">提醒类型</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[{v: "buy", l: "买入"}, {v: "sell", l: "卖出"}, {v: "both", l: "买+卖"}].map(({v, l}) => (
+                      <button
+                        key={v}
+                        onClick={() => setReminderType(v)}
+                        className={`py-2.5 rounded-xl text-sm font-medium transition-all ${reminderType === v ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300 active:bg-white/[0.1]"}`}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs sm:text-sm text-slate-400 mb-2 block">提醒频率</label>
+                  <select
+                    value={reminderFrequency}
+                    onChange={(e) => setReminderFrequency(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none text-sm"
+                  >
+                    <option value="trading_day" className="bg-slate-800">每个交易日</option>
+                    <option value="weekly" className="bg-slate-800">每周</option>
+                    <option value="monthly" className="bg-slate-800">每月</option>
+                  </select>
+                </div>
+
+                {reminderFrequency === "weekly" && (
+                  <div>
+                    <label className="text-xs sm:text-sm text-slate-400 mb-2 block">选择周几</label>
+                    <div className="grid grid-cols-7 gap-1">
+                      {["一", "二", "三", "四", "五", "六", "日"].map((day, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setAnalysisWeekday(idx + 1)}
+                          className={`py-2 rounded-lg text-xs font-medium transition-all ${analysisWeekday === idx + 1 ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {reminderFrequency === "monthly" && (
+                  <div>
+                    <label className="text-xs sm:text-sm text-slate-400 mb-2 block">选择日期</label>
+                    <select
+                      value={analysisDayOfMonth}
+                      onChange={(e) => setAnalysisDayOfMonth(Number(e.target.value))}
+                      className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none text-sm"
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                        <option key={day} value={day} className="bg-slate-800">
+                          {day} 号
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowBatchReminderModal(false)}
+                  className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm sm:text-base"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleCreateBatchReminder}
+                  disabled={loading}
+                  className="flex-1 py-2.5 sm:py-3 bg-amber-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base"
+                >
+                  {loading ? "创建中..." : `批量创建（${selectedItems.size}个）`}
                 </button>
               </div>
             </motion.div>
