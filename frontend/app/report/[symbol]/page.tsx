@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, memo } from "react";
+import { useState, useEffect, memo, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { FileText, AlertCircle, ArrowLeft, ExternalLink } from "lucide-react";
+import { FileText, AlertCircle, ArrowLeft, ExternalLink, Share2, Copy, Check, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -70,8 +70,84 @@ export default function ReportPage() {
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeHorizon, setActiveHorizon] = useState<'short' | 'mid' | 'long' | null>(null);
+  
+  // 分享相关状态
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const getToken = () => localStorage.getItem("token");
+  
+  // 获取分享链接
+  const getShareUrl = useCallback(() => {
+    if (typeof window === 'undefined') return '';
+    // 使用公开分享页面路径
+    return `${window.location.origin}/share/report/${encodeURIComponent(symbol)}`;
+  }, [symbol]);
+  
+  // 复制链接
+  const handleCopyLink = useCallback(async () => {
+    const url = getShareUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      // 降级方案
+      const input = document.createElement('input');
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    }
+  }, [getShareUrl]);
+  
+  // 分享到微信
+  const handleShareWeChat = useCallback(() => {
+    const url = getShareUrl();
+    const result = parseReportData(report);
+    const title = `${result.ticker} ${result.name} AI分析报告`;
+    // 微信分享需要在微信内打开，这里提供二维码或提示
+    // 移动端可以尝试唤起微信
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      // 移动端尝试唤起微信分享
+      window.open(`weixin://dl/business/?t=${encodeURIComponent(url)}`);
+    } else {
+      // PC端提示用户扫码或复制链接
+      alert(`请复制链接后在微信中分享：\n${url}`);
+      handleCopyLink();
+    }
+    setShowShareMenu(false);
+  }, [getShareUrl, report, handleCopyLink]);
+  
+  // 分享到QQ
+  const handleShareQQ = useCallback(() => {
+    const url = getShareUrl();
+    const result = parseReportData(report);
+    const title = `${result.ticker} ${result.name} AI分析报告`;
+    const summary = result.summary?.substring(0, 100) || 'AI智能分析报告';
+    // QQ分享链接
+    const qqShareUrl = `https://connect.qq.com/widget/shareqq/index.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&summary=${encodeURIComponent(summary)}`;
+    window.open(qqShareUrl, '_blank', 'width=600,height=500');
+    setShowShareMenu(false);
+  }, [getShareUrl, report]);
+  
+  // 分享到钉钉
+  const handleShareDingTalk = useCallback(() => {
+    const url = getShareUrl();
+    const result = parseReportData(report);
+    const title = `${result.ticker} ${result.name} AI分析报告`;
+    // 钉钉分享链接
+    const dingShareUrl = `dingtalk://dingtalkclient/page/link?url=${encodeURIComponent(url)}&pc_slide=true`;
+    window.open(dingShareUrl);
+    // 如果钉钉未安装，提示复制链接
+    setTimeout(() => {
+      setShowShareMenu(false);
+    }, 500);
+  }, [getShareUrl, report]);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -836,14 +912,95 @@ export default function ReportPage() {
                     <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500 hidden sm:block">AI QUANTITATIVE ANALYSIS</span>
                   </div>
                 </div>
-                <button
-                  onClick={handleDownloadReport}
-                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-[10px] sm:text-xs font-medium text-indigo-400 transition-all"
-                >
-                  <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span className="hidden sm:inline">下载报告</span>
-                  <span className="sm:hidden">下载</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* 分享按钮 */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowShareMenu(!showShareMenu)}
+                      className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 text-[10px] sm:text-xs font-medium text-emerald-400 transition-all"
+                    >
+                      <Share2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                      <span className="hidden sm:inline">分享</span>
+                    </button>
+                    
+                    {/* 分享菜单 */}
+                    {showShareMenu && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-40" 
+                          onClick={() => setShowShareMenu(false)}
+                        />
+                        <div className="absolute right-0 top-full mt-2 z-50 w-48 bg-slate-800/95 backdrop-blur-md rounded-xl border border-white/10 shadow-xl overflow-hidden">
+                          <div className="p-2">
+                            <button
+                              onClick={handleShareWeChat}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                                <svg className="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 01-.023-.156.49.49 0 01.201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.269-.03-.407-.03zm-2.53 3.274c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
+                                </svg>
+                              </div>
+                              <span className="text-sm text-slate-200">微信</span>
+                            </button>
+                            
+                            <button
+                              onClick={handleShareQQ}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M12.003 2c-2.265 0-6.29 1.364-6.29 7.325v1.195S3.55 14.96 3.55 17.474c0 .665.17 1.025.281 1.025.114 0 .902-.484 1.748-2.072 0 0-.18 2.197 1.904 3.967 0 0-1.77.495-1.77 1.182 0 .686 4.078.43 6.29.43 2.212 0 6.29.256 6.29-.43 0-.687-1.77-1.182-1.77-1.182 2.085-1.77 1.905-3.967 1.905-3.967.845 1.588 1.634 2.072 1.746 2.072.111 0 .283-.36.283-1.025 0-2.514-2.166-6.954-2.166-6.954V9.325C18.29 3.364 14.268 2 12.003 2z"/>
+                                </svg>
+                              </div>
+                              <span className="text-sm text-slate-200">QQ</span>
+                            </button>
+                            
+                            <button
+                              onClick={handleShareDingTalk}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                                <svg className="w-5 h-5 text-sky-400" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 14.957c-.09.188-.31.344-.482.406l-2.042.734.64 1.953c.063.188.016.39-.125.516-.14.125-.344.156-.515.078l-2.016-.922-1.266 1.656c-.11.14-.28.219-.453.219-.063 0-.125-.016-.188-.031-.234-.078-.39-.297-.39-.547v-2.078l-4.5-3.266c-.172-.125-.266-.328-.25-.531.016-.203.14-.39.328-.484l9-4.5c.172-.094.375-.078.531.031.156.11.25.297.234.5l-.516 6.266z"/>
+                                </svg>
+                              </div>
+                              <span className="text-sm text-slate-200">钉钉</span>
+                            </button>
+                            
+                            <div className="border-t border-white/10 my-1"></div>
+                            
+                            <button
+                              onClick={() => { handleCopyLink(); setShowShareMenu(false); }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-slate-500/20 flex items-center justify-center">
+                                {copySuccess ? (
+                                  <Check className="w-5 h-5 text-emerald-400" />
+                                ) : (
+                                  <Copy className="w-5 h-5 text-slate-400" />
+                                )}
+                              </div>
+                              <span className="text-sm text-slate-200">
+                                {copySuccess ? '已复制' : '复制链接'}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  
+                  {/* 下载按钮 */}
+                  <button
+                    onClick={handleDownloadReport}
+                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-[10px] sm:text-xs font-medium text-indigo-400 transition-all"
+                  >
+                    <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                    <span className="hidden sm:inline">下载报告</span>
+                    <span className="sm:hidden">下载</span>
+                  </button>
+                </div>
               </div>
 
               {/* Report Content */}

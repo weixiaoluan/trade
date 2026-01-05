@@ -1099,6 +1099,42 @@ async def get_report_detail(symbol: str, authorization: str = Header(None)):
     }
 
 
+@app.get("/api/share/report/{symbol}")
+async def get_shared_report(symbol: str):
+    """获取公开分享的报告（无需登录）"""
+    from web.database import get_db
+    
+    # 查找最新的该标的报告（任意用户的）
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, symbol, name, report_data, created_at, username
+            FROM reports 
+            WHERE UPPER(symbol) = UPPER(?) 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''', (symbol,))
+        row = cursor.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="报告不存在或已被删除")
+        
+        report = dict(row)
+        report['report_data'] = json.loads(report['report_data'])
+        
+        # 返回报告数据（隐藏用户名）
+        return {
+            "status": "success",
+            "report": {
+                "id": report['id'],
+                "symbol": report['symbol'],
+                "name": report['name'],
+                "data": report['report_data'],
+                "created_at": report['created_at']
+            }
+        }
+
+
 @app.delete("/api/reports/{symbol}")
 async def delete_report(symbol: str, authorization: str = Header(None)):
     """删除某个标的的报告"""
