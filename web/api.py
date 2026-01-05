@@ -2432,9 +2432,9 @@ async def generate_ai_report_with_predictions(
     
     # 等待报告完成，添加超时处理
     try:
-        report = await asyncio.wait_for(report_task, timeout=300)
+        report = await asyncio.wait_for(report_task, timeout=480)
     except asyncio.TimeoutError:
-        print(f"[AI报告] {ticker} 报告生成超时（300秒）")
+        print(f"[AI报告] {ticker} 报告生成超时（480秒）")
         raise Exception("AI报告生成超时，请稍后重试")
     except Exception as e:
         print(f"[AI报告] {ticker} 报告生成失败: {e}")
@@ -2776,7 +2776,7 @@ async def generate_ai_report(
                 ],
                 max_tokens=6000,
                 temperature=0.3,
-                timeout=240
+                timeout=420
             )
         
         response = await asyncio.to_thread(sync_call)
