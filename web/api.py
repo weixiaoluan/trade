@@ -246,11 +246,17 @@ async def login(request: LoginRequest):
 @app.get("/api/auth/me")
 async def get_me(authorization: str = Header(None)):
     """获取当前用户信息"""
+    import time
+    start = time.time()
+    print(f"[API] /api/auth/me 请求开始")
+    
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
+    
+    print(f"[API] /api/auth/me 耗时: {time.time() - start:.3f}s")
     
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
@@ -487,6 +493,10 @@ async def admin_delete_user(username: str, authorization: str = Header(None)):
 @app.get("/api/dashboard/init")
 async def get_dashboard_init_data(authorization: str = Header(None)):
     """一次性获取dashboard所有初始数据，减少请求次数"""
+    import time
+    start = time.time()
+    print(f"[API] /api/dashboard/init 请求开始")
+    
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -499,13 +509,23 @@ async def get_dashboard_init_data(authorization: str = Header(None)):
     username = user['username']
     
     # 获取所有数据
+    t1 = time.time()
     watchlist = get_user_watchlist(username)
+    print(f"[API] watchlist 耗时: {time.time() - t1:.3f}s")
+    
+    t2 = time.time()
     tasks = get_user_analysis_tasks(username)
+    print(f"[API] tasks 耗时: {time.time() - t2:.3f}s")
+    
+    t3 = time.time()
     reminders = get_user_reminders(username)
+    print(f"[API] reminders 耗时: {time.time() - t3:.3f}s")
     
     # 使用摘要查询，避免加载完整报告数据
+    t4 = time.time()
     from web.database import db_get_user_reports_summary
     reports = db_get_user_reports_summary(username)
+    print(f"[API] reports 耗时: {time.time() - t4:.3f}s")
     
     # 转换 reminder_id 为 id
     for r in reminders:
@@ -513,6 +533,7 @@ async def get_dashboard_init_data(authorization: str = Header(None)):
             r['id'] = r['reminder_id']
     
     # 获取用户设置
+    t5 = time.time()
     from web.database import get_db
     with get_db() as conn:
         cursor = conn.cursor()
@@ -520,8 +541,11 @@ async def get_dashboard_init_data(authorization: str = Header(None)):
         row = cursor.fetchone()
         pushplus_token = row['pushplus_token'] if row else None
         wechat_openid = row['wechat_openid'] if row else None
+    print(f"[API] settings 耗时: {time.time() - t5:.3f}s")
     
     wechat_configured = bool(wechat_openid and WECHAT_APP_SECRET and WECHAT_TEMPLATE_ID)
+    
+    print(f"[API] /api/dashboard/init 总耗时: {time.time() - start:.3f}s")
     
     return {
         "status": "success",
