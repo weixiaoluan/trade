@@ -104,24 +104,25 @@ export default function ReportPage() {
     }
   }, [getShareUrl]);
   
-  // 分享到微信
-  const handleShareWeChat = useCallback(() => {
+  // 分享到微信 - 复制链接并提示用户
+  const handleShareWeChat = useCallback(async () => {
     const url = getShareUrl();
-    const result = parseReportData(report);
-    const title = `${result.ticker} ${result.name} AI分析报告`;
-    // 微信分享需要在微信内打开，这里提供二维码或提示
-    // 移动端可以尝试唤起微信
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) {
-      // 移动端尝试唤起微信分享
-      window.open(`weixin://dl/business/?t=${encodeURIComponent(url)}`);
-    } else {
-      // PC端提示用户扫码或复制链接
-      alert(`请复制链接后在微信中分享：\n${url}`);
-      handleCopyLink();
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      const input = document.createElement('input');
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
     }
     setShowShareMenu(false);
-  }, [getShareUrl, report, handleCopyLink]);
+    // 显示提示
+    alert('链接已复制！请打开微信，粘贴链接发送给好友');
+  }, [getShareUrl]);
   
   // 分享到QQ
   const handleShareQQ = useCallback(() => {
@@ -135,19 +136,24 @@ export default function ReportPage() {
     setShowShareMenu(false);
   }, [getShareUrl, report]);
   
-  // 分享到钉钉
-  const handleShareDingTalk = useCallback(() => {
+  // 分享到钉钉 - 复制链接并提示用户
+  const handleShareDingTalk = useCallback(async () => {
     const url = getShareUrl();
-    const result = parseReportData(report);
-    const title = `${result.ticker} ${result.name} AI分析报告`;
-    // 钉钉分享链接
-    const dingShareUrl = `dingtalk://dingtalkclient/page/link?url=${encodeURIComponent(url)}&pc_slide=true`;
-    window.open(dingShareUrl);
-    // 如果钉钉未安装，提示复制链接
-    setTimeout(() => {
-      setShowShareMenu(false);
-    }, 500);
-  }, [getShareUrl, report]);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      const input = document.createElement('input');
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+    }
+    setShowShareMenu(false);
+    alert('链接已复制！请打开钉钉，粘贴链接发送给好友');
+  }, [getShareUrl]);
 
   useEffect(() => {
     const fetchReport = async () => {
