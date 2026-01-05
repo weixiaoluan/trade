@@ -2416,9 +2416,9 @@ async def generate_ai_report_with_predictions(
     
     # 等待报告完成（较慢），添加超时处理
     try:
-        report = await asyncio.wait_for(report_task, timeout=300)
+        report = await asyncio.wait_for(report_task, timeout=200)
     except asyncio.TimeoutError:
-        print(f"[AI报告] {ticker} 报告生成超时（300秒）")
+        print(f"[AI报告] {ticker} 报告生成超时（200秒）")
         raise Exception("AI报告生成超时，请稍后重试")
     except Exception as e:
         print(f"[AI报告] {ticker} 报告生成失败: {e}")
@@ -2570,232 +2570,87 @@ async def generate_ai_report(
     if holding_period == 'short':
         period_focus = """
 **短线交易分析重点（1-5天）**：
-- 重点关注日内和日线级别的技术信号
-- 关注分时图、5分钟、15分钟、60分钟K线形态
-- 重点分析MACD、KDJ、RSI等短期指标的金叉死叉信号
-- 关注成交量的突变和主力资金的短期动向
-- 建议买入价应接近当日支撑位，建议卖出价应接近短期阻力位
-- 止损幅度控制在2-3%以内"""
+- 关注日内和日线级别的技术信号
+- 建议买入价应接近当日支撑位，建议卖出价应接近短期阻力位"""
         price_guidance = "短线建议买入价应在当前价格下方1-3%的支撑位附近，建议卖出价应在当前价格上方2-5%的阻力位附近"
     elif holding_period == 'long':
         period_focus = """
 **中长线投资分析重点（1月以上）**：
-- 重点关注周线、月线级别的趋势方向
-- 关注均线系统的长期排列（MA60、MA120、MA250）
-- 重点分析基本面、估值水平、行业前景
-- 关注机构持仓变化和长期资金流向
-- 建议买入价应在重要支撑位或估值低位，建议卖出价应在长期阻力位或估值高位
-- 止损幅度可放宽到8-15%"""
+- 关注周线、月线级别的趋势方向
+- 建议买入价应在重要支撑位，建议卖出价应在长期阻力位"""
         price_guidance = "中长线建议买入价应在当前价格下方5-15%的重要支撑位，建议卖出价应在当前价格上方10-30%的长期目标位"
     else:  # swing
         period_focus = """
 **波段操作分析重点（1-4周）**：
-- 重点关注日线和周线级别的波段机会
-- 关注均线系统的中期排列（MA5、MA10、MA20、MA60）
-- 重点分析MACD、布林带等中期趋势指标
-- 关注量价配合和主力资金的中期动向
-- 建议买入价应在波段低点附近，建议卖出价应在波段高点附近
-- 止损幅度控制在5-8%"""
+- 关注日线和周线级别的波段机会
+- 建议买入价应在波段低点附近，建议卖出价应在波段高点附近"""
         price_guidance = "波段建议买入价应在当前价格下方3-8%的支撑位，建议卖出价应在当前价格上方5-15%的阻力位"
     
     # 构建持仓信息提示（只有持仓和成本价都有值时才显示）
     position_hint = ""
     if user_position and user_cost_price:
-        position_hint = f"3. 用户持仓信息：持仓数量 {user_position}，成本价 ¥{user_cost_price}"
+        position_hint = f"\n3. 用户持仓信息：持仓数量 {user_position}，成本价 ¥{user_cost_price}，请据此给出买入/卖出数量建议"
     
     prompt = f"""
 **重要提示**: 
-1. 当前日期是 {report_date}，当前时间是 {report_time}。请在报告中使用此日期作为报告生成时间。
-2. 本次分析的持有周期是：**{holding_period_cn}**，请根据此持有周期给出相应的建议买入价和卖出价。
-{position_hint}
+1. 当前日期: {report_date} {report_time}
+2. 持有周期: **{holding_period_cn}**{position_hint}
 
 {period_focus}
 
-请根据以下数据生成专业详细的证券/基金分析报告：
-
 ## 标的信息
-- 代码: {symbol}
-- 名称: {display_name}
-- 当前价格/净值: {current_price}
-- 日涨跌幅: {day_change_str}%
-- 52周最高: {price_info.get('52_week_high', 'N/A')}
-- 52周最低: {price_info.get('52_week_low', 'N/A')}
+- 代码: {symbol} | 名称: {display_name}
+- 当前价: {current_price} | 涨跌: {day_change_str}%
+- 52周高/低: {price_info.get('52_week_high', 'N/A')} / {price_info.get('52_week_low', 'N/A')}
+- 市盈率: {valuation.get('pe_ratio', 'N/A')} | 市净率: {valuation.get('price_to_book', 'N/A')}
 
-## 估值/规模指标
-- 市盈率 (P/E): {valuation.get('pe_ratio', 'N/A')}
-- 市净率 (P/B): {valuation.get('price_to_book', 'N/A')}
-- 市值/规模: {market_cap_display}
-
-## 技术指标数据
+## 技术指标
 - MACD: {ind.get('macd', {})}
-- RSI (14日): {ind.get('rsi', {})}
-- KDJ: {ind.get('kdj', {})}
-- 均线排列: {ind.get('ma_trend', 'N/A')}
-- 移动平均线: {ind.get('moving_averages', {})}
+- RSI: {ind.get('rsi', {})} | KDJ: {ind.get('kdj', {})}
+- 均线: {ind.get('moving_averages', {})}
 - 布林带: {ind.get('bollinger_bands', {})}
-- 成交量分析: {ind.get('volume_analysis', {})}
-- 价格位置: {ind.get('price_position', {})}
+- ADX: {ind.get('adx', {})} | ATR: {ind.get('atr', {})}
 
-## 高级技术指标
-- ATR波动率: {ind.get('atr', {})}
-- Williams %R: {ind.get('williams_r', {})}
-- CCI顺势指标: {ind.get('cci', {})}
-- ADX趋势强度: {ind.get('adx', {})}
-- 动量指标: {ind.get('momentum', {})}
-- ROC变动率: {ind.get('roc', {})}
-
-## 多周期涨跌幅
-{ind.get('period_returns', {})}
-
-## 趋势与量化分析结果
-- 综合趋势: {trend_analysis.get('trend_cn', trend_analysis.get('overall_trend', 'N/A'))}
-- 趋势强度: {trend_analysis.get('trend_strength', 'N/A')}
-- 量化评分 (0-100): {quant_score}
-- 市场状态 (Regime): {regime_map.get(quant_regime, quant_regime)}
-- 波动状态: {vol_map.get(quant_vol_state, quant_vol_state)}
-- 量化建议: {reco_map.get(quant_reco_code, quant_reco_code)}
-- 多头信号: {trend_analysis.get('bullish_signals', 0)} 个
-- 空头信号: {trend_analysis.get('bearish_signals', 0)} 个
-- 系统建议: {trend_analysis.get('recommendation', 'N/A')}
-
-## 关键价位
-- 支撑位: {key_levels.get('nearest_support', levels.get('support_levels', 'N/A'))}
-- 阻力位: {key_levels.get('nearest_resistance', levels.get('resistance_levels', 'N/A'))}
+## 量化分析
+- 趋势: {trend_analysis.get('trend_cn', trend_analysis.get('overall_trend', 'N/A'))} | 强度: {trend_analysis.get('trend_strength', 'N/A')}
+- 量化评分: {quant_score}/100 | 建议: {reco_map.get(quant_reco_code, quant_reco_code)}
+- 支撑位: {key_levels.get('nearest_support', 'N/A')} | 阻力位: {key_levels.get('nearest_resistance', 'N/A')}
 
 ---
-
-请生成一份针对**{holding_period_cn}**的专业投资分析报告，必须包含以下完整章节：
+请生成**{holding_period_cn}**分析报告，包含以下章节：
 
 ## 一、标的概况
-用 Markdown 表格展示核心指标（代码、名称、价格、涨跌、市值等）
+用表格展示核心指标
 
-## 二、AI深度研判（重要）
-请基于你的专业知识和对该标的的了解，从以下维度进行深度分析：
+## 二、AI研判
+简要分析消息面、技术面、市场情绪，给出操作建议
 
-### 2.1 消息面分析
-- 分析该标的近期可能存在的重大消息、政策影响、行业动态
-- 如果是股票，分析公司近期的经营动态、业绩预期、管理层变动等
-- 如果是ETF/基金，分析跟踪指数的行业前景、成分股变化等
-- 评估消息面对短期和中期走势的影响
+## 三、技术分析
+分析MACD、RSI、KDJ、均线、布林带等关键指标
 
-### 2.2 市场情绪分析
-- 根据成交量、换手率、涨跌幅等数据判断当前市场情绪
-- 分析是否存在恐慌性抛售或过度乐观的追涨
-- 评估当前价位的市场认可度
-- 判断主力资金的动向（根据量价关系推断）
-
-### 2.3 多周期技术共振分析
-基于日K、周K、月K等多周期数据进行综合研判：
-- **日线级别**: 短期趋势方向、关键支撑阻力
-- **周线级别**: 中期趋势确认、重要均线位置
-- **月线级别**: 长期趋势判断、历史高低点参考
-- 分析各周期是否形成共振，共振方向是什么
-
-### 2.4 AI综合研判结论
-综合以上分析，给出：
-- 当前最佳操作策略（买入/持有/卖出/观望）
-- 操作的核心逻辑（2-3句话概括）
-- 需要关注的关键变量
-
-## 三、技术面深度分析
-分小节详细分析（基于2年历史数据）：
-
-### 趋势类指标
-1. **趋势分析**: 当前趋势方向、趋势强度（ADX）、趋势持续时间
-2. **均线系统**: MA5/MA10/MA20/MA60/MA120/MA250 排列情况，支撑压力
-3. **MACD 分析**: DIF/DEA/柱状图状态，金叉/死叉信号
-
-### 震荡类指标
-4. **RSI 分析**: 当前 RSI 值，超买超卖区间，背离情况
-5. **KDJ 分析**: K/D/J 三线状态，交叉信号
-6. **Williams %R**: 威廉指标超买超卖判断
-7. **CCI 分析**: 顺势指标强弱判断
-
-### 波动与动量
-8. **布林带分析**: 价格位置、带宽变化、轨道压力支撑
-9. **ATR 波动率**: 日均波动幅度，风险评估
-10. **动量/ROC**: 价格动能方向和强度
-
-### 量价分析
-11. **成交量分析**: 量价配合、放量缩量、OBV能量潮趋势
-
-### 多周期表现
-12. **区间涨跌**:
-
-| 周期 | 涨跌幅 |
-|--------|--------|
-| 5日 | {period_returns.get('5日', 'N/A')}% |
-| 10日 | {period_returns.get('10日', 'N/A')}% |
-| 20日 | {period_returns.get('20日', 'N/A')}% |
-| 60日 | {period_returns.get('60日', 'N/A')}% |
-| 120日 | {period_returns.get('120日', 'N/A')}% |
-| 250日 | {period_returns.get('250日', 'N/A')}% |
-
-## 四、支撑阻力位分析
-- 列出多个支撑位和阻力位
-- 说明各价位的重要性
-- 给出突破/跌破后的应对策略
-
-## 五、AI建议买卖价格（重要）
-基于以上所有分析，给出明确的操作价格建议：
-
+## 四、建议买卖价格（重要）
 | 类型 | 价格 | 数量 | 说明 |
 |------|------|------|------|
-| **建议买入价** | ¥X.XXX | XXX股/份 | 基于支撑位和技术分析得出的最佳买入价位和建议买入数量 |
-| **建议卖出价** | ¥X.XXX | XXX股/份 | 基于阻力位和技术分析得出的目标卖出价位和建议卖出数量 |
-| **止损价** | ¥X.XXX | - | 跌破此价位建议止损 |
-| **加仓价** | ¥X.XXX | XXX股/份 | 如果继续下跌，可考虑加仓的价位和数量 |
+| **建议买入价** | ¥X.XXX | XXX股 | 基于支撑位 |
+| **建议卖出价** | ¥X.XXX | XXX股 | 基于阻力位 |
+| **止损价** | ¥X.XXX | - | 跌破止损 |
 
-**价格说明**：
-- 建议买入价应略高于最近支撑位，给予一定安全边际
-- 建议卖出价应略低于最近阻力位，确保能够成交
-- 请给出具体的数字价格，精确到小数点后3位
-{f"- 用户当前持仓数量: {user_position}，成本价: ¥{user_cost_price}，请根据持仓情况给出具体的买入/卖出数量建议" if user_position and user_cost_price else "- 用户暂无持仓信息，建议买入数量可以根据一般投资者的资金规模给出参考（如1000股起）"}
-- 建议卖出数量应考虑分批卖出策略，不建议一次性全部卖出
+{f"用户持仓: {user_position}股，成本: ¥{user_cost_price}，请给出具体数量建议" if user_position and user_cost_price else "无持仓信息，买入数量建议1000股起"}
 
-## 六、多周期价格预测
-用 Markdown 表格展示 8 个时间周期的预测：
+## 五、价格预测
+| 周期 | 方向 | 目标价 | 置信度 |
+|------|------|--------|--------|
+| 1周 | ... | ... | ...% |
+| 1月 | ... | ... | ...% |
+| 3月 | ... | ... | ...% |
 
-| 周期 | 预测方向 | 目标价位 | 置信度 | 关键观察点 |
-|------|----------|----------|--------|------------|
-| 下个交易日 | ... | ... | ...% | ... |
-| 3天 | ... | ... | ...% | ... |
-| 1周 | ... | ... | ...% | ... |
-| 2周 | ... | ... | ...% | ... |
-| 1个月 | ... | ... | ...% | ... |
-| 3个月 | ... | ... | ...% | ... |
-| 6个月 | ... | ... | ...% | ... |
-| 1年 | ... | ... | ...% | ... |
+## 六、风险提示
+列出3个主要风险
 
-## 七、操作建议
-分三个维度给出具体建议：
-1. **短线交易者** (1-5天): 具体买卖点位、止损位、目标位
-2. **波段操作者** (1-4周): 建仓区间、加仓条件、止盈止损
-3. **中长期投资者** (1月以上): 配置建议、定投策略、持仓比例
+## 七、总结评级
+给出评级（强力买入/买入/持有/减持/卖出）和理由
 
-## 八、风险提示
-列出至少 5 个风险因素：
-- 技术面风险
-- 基本面风险
-- 市场系统性风险
-- 流动性风险
-- 其他特定风险
-
-## 九、总结评级
-给出综合评级（强力买入/买入/持有/减持/卖出）和核心理由
-
-## 十、量化评分与策略说明
-用一小节专门解释本次量化打分逻辑：
-- 列出参与打分的主要指标（MACD、MA系统、RSI、KDJ、布林带、ATR、ADX、OBV、CCI、Williams %R、成交量、52周高低等）
-- 说明哪些指标当前偏多、哪些偏空
-- 解释为什么本次量化评分为 {quant_score} 分，以及对应的风险/机会
-- 指出当前更适合的策略模式（例如：趋势跟随、区间交易、观望防守），并给出1-2句简洁总结
-
----
-**重要要求**：
-1. 请务必给出具体的建议买入价和建议卖出价数字，这是用户最关心的信息
-2. AI深度研判部分要体现你的专业分析能力，不要只是复述数据
-3. 使用标准 Markdown 格式，表格清晰，层次分明
+**要求**：必须给出具体的建议买入价和卖出价数字（精确到小数点后3位）
 """
     try:
         import re
@@ -2805,12 +2660,12 @@ async def generate_ai_report(
             return client.chat.completions.create(
                 model=APIConfig.SILICONFLOW_MODEL,
                 messages=[
-                    {"role": "system", "content": "你是一位资深的证券分析师，拥有20年以上的投资研究经验。你擅长技术分析、基本面分析、消息面解读和市场情绪判断。请基于提供的数据和你的专业知识，生成专业、客观、有深度的投资分析报告。你的分析要有独到见解，不要只是简单复述数据。"},
+                    {"role": "system", "content": "你是一位资深的证券分析师。请基于提供的数据生成简洁专业的投资分析报告，重点给出建议买入价和卖出价。"},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=10000,
-                temperature=0.4,
-                timeout=240
+                max_tokens=4000,
+                temperature=0.3,
+                timeout=180
             )
         
         response = await asyncio.to_thread(sync_call)
