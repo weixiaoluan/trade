@@ -3325,8 +3325,13 @@ async def get_quotes(symbols: str, authorization: str = Header(None)):
     
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
     
-    # 批量获取实时行情数据
-    quotes = get_batch_quotes(symbol_list)
+    # 使用线程池异步执行，不阻塞其他请求
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor() as executor:
+        quotes = await loop.run_in_executor(executor, get_batch_quotes, symbol_list)
     
     return {"status": "success", "quotes": quotes}
 
