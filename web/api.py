@@ -2414,8 +2414,16 @@ async def generate_ai_report_with_predictions(
     predictions = await predictions_task
     update_progress(50, 'AI预测完成，报告生成中')
     
-    # 等待报告完成（较慢）
-    report = await report_task
+    # 等待报告完成（较慢），添加超时处理
+    try:
+        report = await asyncio.wait_for(report_task, timeout=300)
+    except asyncio.TimeoutError:
+        print(f"[AI报告] {ticker} 报告生成超时（300秒）")
+        raise Exception("AI报告生成超时，请稍后重试")
+    except Exception as e:
+        print(f"[AI报告] {ticker} 报告生成失败: {e}")
+        raise
+    
     update_progress(95, 'AI报告生成完成')
     
     return report, predictions
@@ -3307,20 +3315,30 @@ def get_batch_quotes(symbols: list) -> dict:
             print("[Quotes] 正在获取 ETF 数据...")
             _quote_cache['etf']['data'] = ak.fund_etf_spot_em()
             _quote_cache['etf']['time'] = now
-            print(f"[Quotes] ETF 数据获取成功，共 {len(_quote_cache['etf']['data'])} 条")
+            if _quote_cache['etf']['data'] is not None:
+                print(f"[Quotes] ETF 数据获取成功，共 {len(_quote_cache['etf']['data'])} 条")
+                print(f"[Quotes] ETF 数据列名: {list(_quote_cache['etf']['data'].columns)}")
+            else:
+                print("[Quotes] ETF 数据为空")
         
         df_etf = _quote_cache['etf']['data']
-        matched = df_etf[df_etf['代码'].isin(codes)]
-        print(f"[Quotes] ETF 匹配到 {len(matched)} 条")
-        for _, row in matched.iterrows():
-            code = row['代码']
-            symbol = code_map.get(code, code)
-            quotes[symbol] = {
-                'symbol': symbol,
-                'current_price': safe_float(row['最新价']),
-                'change_percent': safe_float(row['涨跌幅'])
-            }
-            codes.discard(code)
+        if df_etf is not None and len(df_etf) > 0:
+            matched = df_etf[df_etf['代码'].isin(codes)]
+            print(f"[Quotes] ETF 匹配到 {len(matched)} 条")
+            for _, row in matched.iterrows():
+                code = row['代码']
+                symbol = code_map.get(code, code)
+                price = safe_float(row.get('最新价', row.get('现价', 0)))
+                change = safe_float(row.get('涨跌幅', 0))
+                print(f"[Quotes] ETF {code}: 价格={price}, 涨跌={change}")
+                quotes[symbol] = {
+                    'symbol': symbol,
+                    'current_price': price,
+                    'change_percent': change
+                }
+                codes.discard(code)
+        else:
+            print("[Quotes] ETF 数据为空，跳过")
     except Exception as e:
         print(f"ETF批量行情获取失败: {e}")
         import traceback
@@ -3332,19 +3350,23 @@ def get_batch_quotes(symbols: list) -> dict:
             if _quote_cache['lof']['data'] is None or \
                _quote_cache['lof']['time'] is None or \
                (now - _quote_cache['lof']['time']).seconds > cache_ttl:
+                print("[Quotes] 正在获取 LOF 数据...")
                 _quote_cache['lof']['data'] = ak.fund_lof_spot_em()
                 _quote_cache['lof']['time'] = now
             
             df_lof = _quote_cache['lof']['data']
-            for _, row in df_lof[df_lof['代码'].isin(codes)].iterrows():
-                code = row['代码']
-                symbol = code_map.get(code, code)
-                quotes[symbol] = {
-                    'symbol': symbol,
-                    'current_price': safe_float(row['最新价']),
-                    'change_percent': safe_float(row['涨跌幅'])
-                }
-                codes.discard(code)
+            if df_lof is not None and len(df_lof) > 0:
+                for _, row in df_lof[df_lof['代码'].isin(codes)].iterrows():
+                    code = row['代码']
+                    symbol = code_map.get(code, code)
+                    price = safe_float(row.get('最新价', row.get('现价', 0)))
+                    change = safe_float(row.get('涨跌幅', 0))
+                    quotes[symbol] = {
+                        'symbol': symbol,
+                        'current_price': price,
+                        'change_percent': change
+                    }
+                    codes.discard(code)
         except Exception as e:
             print(f"LOF批量行情获取失败: {e}")
     
@@ -3354,21 +3376,27 @@ def get_batch_quotes(symbols: list) -> dict:
             if _quote_cache['stock']['data'] is None or \
                _quote_cache['stock']['time'] is None or \
                (now - _quote_cache['stock']['time']).seconds > cache_ttl:
+                print("[Quotes] 正在获取 A股 数据...")
                 _quote_cache['stock']['data'] = ak.stock_zh_a_spot_em()
                 _quote_cache['stock']['time'] = now
             
             df_stock = _quote_cache['stock']['data']
-            for _, row in df_stock[df_stock['代码'].isin(codes)].iterrows():
-                code = row['代码']
-                symbol = code_map.get(code, code)
-                quotes[symbol] = {
-                    'symbol': symbol,
-                    'current_price': safe_float(row['最新价']),
-                    'change_percent': safe_float(row['涨跌幅'])
-                }
-                codes.discard(code)
+            if df_stock is not None and len(df_stock) > 0:
+                for _, row in df_stock[df_stock['代码'].isin(codes)].iterrows():
+                    code = row['代码']
+                    symbol = code_map.get(code, code)
+                    price = safe_float(row.get('最新价', row.get('现价', 0)))
+                    change = safe_float(row.get('涨跌幅', 0))
+                    quotes[symbol] = {
+                        'symbol': symbol,
+                        'current_price': price,
+                        'change_percent': change
+                    }
+                    codes.discard(code)
         except Exception as e:
             print(f"A股批量行情获取失败: {e}")
+            import traceback
+            traceback.print_exc()
     
     # 获取场外基金净值数据（剩余未匹配的代码）
     if codes:
@@ -4329,7 +4357,8 @@ async def test_user_push(
             'ai': ai_reason
         })
         
-        result = send_wechat_template_message(wechat_openid, title, content, detail_url)
+        # 传入symbol和alert_type以使用正确的模板
+        result = send_wechat_template_message(wechat_openid, title, content, detail_url, test_symbol, "buy")
         used_method = "微信公众号"
         
         # 如果微信推送失败，检查access_token
