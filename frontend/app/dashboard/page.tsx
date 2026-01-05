@@ -1165,7 +1165,7 @@ export default function DashboardPage() {
     const failedSymbols: string[] = [];
 
     try {
-      for (const symbol of selectedItems) {
+      for (const symbol of Array.from(selectedItems)) {
         const item = watchlist.find(w => w.symbol === symbol);
         const payload = {
           symbol: symbol,
