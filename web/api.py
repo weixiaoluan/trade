@@ -1448,9 +1448,12 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 # 匹配多种格式的建议买入价
                 buy_patterns = [
                     r'\*\*建议买入价\*\*\s*\|\s*¥?([\d.]+)',
+                    r'\|\s*\*\*建议买入价\*\*\s*\|\s*¥?([\d.]+)',
+                    r'\|\s*建议买入价\s*\|\s*¥?([\d.]+)',
                     r'建议买入价[：:]\s*¥?([\d.]+)',
                     r'建议买入[：:]\s*¥?([\d.]+)',
                     r'买入价[：:]\s*¥?([\d.]+)',
+                    r'买入价位[：:]\s*¥?([\d.]+)',
                 ]
                 for pattern in buy_patterns:
                     buy_match = re.search(pattern, report)
@@ -1465,9 +1468,12 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 # 匹配多种格式的建议卖出价
                 sell_patterns = [
                     r'\*\*建议卖出价\*\*\s*\|\s*¥?([\d.]+)',
+                    r'\|\s*\*\*建议卖出价\*\*\s*\|\s*¥?([\d.]+)',
+                    r'\|\s*建议卖出价\s*\|\s*¥?([\d.]+)',
                     r'建议卖出价[：:]\s*¥?([\d.]+)',
                     r'建议卖出[：:]\s*¥?([\d.]+)',
                     r'卖出价[：:]\s*¥?([\d.]+)',
+                    r'卖出价位[：:]\s*¥?([\d.]+)',
                 ]
                 for pattern in sell_patterns:
                     sell_match = re.search(pattern, report)
@@ -1479,35 +1485,45 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                         except:
                             pass
                 
-                # 提取建议买入数量
+                # 提取建议买入数量 - 从表格行中提取
                 buy_qty_patterns = [
                     r'\*\*建议买入价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'建议买入.*?(\d{2,})\s*(?:股|份)',
-                    r'买入数量[：:]\s*(\d+)',
+                    r'\|\s*\*\*建议买入价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*建议买入价\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'建议买入[^|]*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'买入数量[：:]\s*([\d,]+)\s*(?:股|份)?',
+                    r'建议买入.*?([\d,]{3,})\s*(?:股|份)',
                 ]
                 for pattern in buy_qty_patterns:
                     qty_match = re.search(pattern, report)
                     if qty_match:
                         try:
-                            ai_buy_quantity = int(qty_match.group(1).replace(',', ''))
-                            print(f"[AI价格] 从报告中提取到买入数量: {ai_buy_quantity}")
-                            break
+                            qty_str = qty_match.group(1).replace(',', '').replace('，', '')
+                            ai_buy_quantity = int(qty_str)
+                            if ai_buy_quantity > 0:
+                                print(f"[AI价格] 从报告中提取到买入数量: {ai_buy_quantity}")
+                                break
                         except:
                             pass
                 
-                # 提取建议卖出数量
+                # 提取建议卖出数量 - 从表格行中提取
                 sell_qty_patterns = [
                     r'\*\*建议卖出价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'建议卖出.*?(\d{2,})\s*(?:股|份)',
-                    r'卖出数量[：:]\s*(\d+)',
+                    r'\|\s*\*\*建议卖出价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*建议卖出价\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'建议卖出[^|]*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'卖出数量[：:]\s*([\d,]+)\s*(?:股|份)?',
+                    r'建议卖出.*?([\d,]{3,})\s*(?:股|份)',
                 ]
                 for pattern in sell_qty_patterns:
                     qty_match = re.search(pattern, report)
                     if qty_match:
                         try:
-                            ai_sell_quantity = int(qty_match.group(1).replace(',', ''))
-                            print(f"[AI价格] 从报告中提取到卖出数量: {ai_sell_quantity}")
-                            break
+                            qty_str = qty_match.group(1).replace(',', '').replace('，', '')
+                            ai_sell_quantity = int(qty_str)
+                            if ai_sell_quantity > 0:
+                                print(f"[AI价格] 从报告中提取到卖出数量: {ai_sell_quantity}")
+                                break
                         except:
                             pass
             
