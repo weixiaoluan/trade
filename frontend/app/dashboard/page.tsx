@@ -378,6 +378,30 @@ export default function DashboardPage() {
     }
   }, [getToken]);
 
+  // 一次性获取所有dashboard数据
+  const fetchDashboardInit = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/dashboard/init`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setWatchlist(data.watchlist || []);
+        setTasks(data.tasks || {});
+        setReports(data.reports || []);
+        setReminders(data.reminders || []);
+        setUserSettings(data.settings);
+        setWechatOpenId(data.settings?.wechat_openid || "");
+      }
+    } catch (error) {
+      console.error("获取dashboard数据失败:", error);
+    }
+  }, [getToken]);
+
   const fetchTasks = useCallback(async () => {
     const token = getToken();
     if (!token) return;
@@ -565,14 +589,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authChecked) {
-      // 初始加载 - 并行获取所有数据
-      Promise.all([
-        fetchWatchlist(),
-        fetchTasks(),
-        fetchReports(),
-        fetchReminders(),
-        fetchUserSettings(),
-      ]);
+      // 初始加载 - 一次性获取所有数据
+      fetchDashboardInit();
 
       // 根据是否有活跃任务调整轮询频率
       // 有活跃任务时3秒轮询，无活跃任务时30秒轮询
@@ -585,7 +603,7 @@ export default function DashboardPage() {
 
       return () => clearInterval(interval);
     }
-  }, [authChecked, fetchWatchlist, fetchTasks, fetchReports, fetchReminders, fetchUserSettings, hasActiveTasks]);
+  }, [authChecked, fetchDashboardInit, fetchTasks, hasActiveTasks]);
 
   useEffect(() => {
     if (authChecked && watchlist.length > 0) {
@@ -1813,7 +1831,7 @@ export default function DashboardPage() {
                                   <span className="text-[10px] text-slate-500 text-center mt-1">
                                     {(() => {
                                       const d = new Date(report.created_at);
-                                      return `${d.getFullYear()}年${String(d.getMonth()+1).padStart(2,'0')}月${String(d.getDate()).padStart(2,'0')}日 ${String(d.getHours()).padStart(2,'0')}时${String(d.getMinutes()).padStart(2,'0')}分${String(d.getSeconds()).padStart(2,'0')}秒`;
+                                      return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
                                     })()}
                                   </span>
                                 </div>
@@ -2019,7 +2037,7 @@ export default function DashboardPage() {
                             <span className="text-[10px] text-slate-500 mt-0.5">
                               {(() => {
                                 const d = new Date(report.created_at);
-                                return `${d.getFullYear()}年${String(d.getMonth()+1).padStart(2,'0')}月${String(d.getDate()).padStart(2,'0')}日 ${String(d.getHours()).padStart(2,'0')}时${String(d.getMinutes()).padStart(2,'0')}分${String(d.getSeconds()).padStart(2,'0')}秒`;
+                                return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
                               })()}
                             </span>
                           </div>

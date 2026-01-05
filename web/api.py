@@ -484,6 +484,72 @@ async def admin_delete_user(username: str, authorization: str = Header(None)):
 # 自选列表 API
 # ============================================
 
+@app.get("/api/dashboard/init")
+async def get_dashboard_init_data(authorization: str = Header(None)):
+    """一次性获取dashboard所有初始数据，减少请求次数"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    
+    # 并行获取所有数据
+    watchlist = get_user_watchlist(username)
+    tasks = get_user_analysis_tasks(username)
+    reminders = get_user_reminders(username)
+    reports_raw = get_user_reports(username)
+    
+    # 简化报告数据
+    reports = []
+    for report in reports_raw:
+        data = report.get('data', {})
+        reports.append({
+            'id': report.get('id'),
+            'symbol': report.get('symbol'),
+            'created_at': report.get('created_at'),
+            'status': report.get('status'),
+            'name': data.get('name', ''),
+            'recommendation': data.get('recommendation', ''),
+            'quant_score': data.get('quant_score'),
+            'price': data.get('price'),
+            'change_percent': data.get('change_percent')
+        })
+    
+    # 转换 reminder_id 为 id
+    for r in reminders:
+        if 'reminder_id' in r:
+            r['id'] = r['reminder_id']
+    
+    # 获取用户设置
+    from web.database import get_db
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT pushplus_token, wechat_openid FROM users WHERE username = ?", (username,))
+        row = cursor.fetchone()
+        pushplus_token = row['pushplus_token'] if row else None
+        wechat_openid = row['wechat_openid'] if row else None
+    
+    wechat_configured = bool(wechat_openid and WECHAT_APP_SECRET and WECHAT_TEMPLATE_ID)
+    
+    return {
+        "status": "success",
+        "watchlist": watchlist,
+        "tasks": tasks,
+        "reports": reports,
+        "reminders": reminders,
+        "settings": {
+            "pushplus_token": pushplus_token or "",
+            "wechat_openid": wechat_openid or "",
+            "wechat_configured": wechat_configured
+        }
+    }
+
+
 @app.get("/api/watchlist")
 async def get_watchlist(authorization: str = Header(None)):
     """获取自选列表"""
