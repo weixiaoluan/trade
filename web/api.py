@@ -1190,6 +1190,15 @@ async def start_batch_analysis(
                 loop.run_until_complete(run_background_analysis_full(uname, sym, tid, hp, pos_info))
             except Exception as e:
                 print(f"分析任务异常 [{sym}]: {e}")
+                # 确保任务状态更新为失败
+                try:
+                    update_analysis_task(uname, sym, {
+                        'status': 'failed',
+                        'current_step': '分析失败',
+                        'error': str(e)
+                    })
+                except Exception as update_err:
+                    print(f"更新任务状态失败 [{sym}]: {update_err}")
             finally:
                 loop.close()
         return run
