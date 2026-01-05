@@ -1771,6 +1771,7 @@ export default function DashboardPage() {
               </div>
               <div className="w-20 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">持仓</div>
               <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">成本价</div>
+              <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">持仓盈亏</div>
               <div className="w-16 flex-shrink-0 text-sm font-semibold text-slate-300">周期</div>
               <div className="w-20 flex-shrink-0 text-sm font-semibold text-indigo-400">AI建议</div>
               <div className="w-28 flex-shrink-0 text-sm font-semibold text-emerald-400 text-right">买入价/量</div>
@@ -1890,6 +1891,25 @@ export default function DashboardPage() {
                             <div className="min-w-[70px]">
                               <div className="text-[10px] text-slate-500 mb-0.5">成本</div>
                               <span className="font-mono text-sm text-slate-200">{item.cost_price ? `¥${item.cost_price.toFixed(3)}` : "-"}</span>
+                            </div>
+                            <div className="min-w-[70px]">
+                              <div className="text-[10px] text-slate-500 mb-0.5">盈亏</div>
+                              {item.position && item.cost_price && quote?.current_price ? (
+                                (() => {
+                                  const profitLoss = (quote.current_price - item.cost_price) * item.position;
+                                  const isProfit = profitLoss >= 0;
+                                  return (
+                                    <span 
+                                      className="font-mono text-sm font-semibold"
+                                      style={{ color: isProfit ? "#f87171" : "#34d399" }}
+                                    >
+                                      {isProfit ? "+" : ""}{profitLoss.toFixed(2)}
+                                    </span>
+                                  );
+                                })()
+                              ) : (
+                                <span className="text-sm text-slate-500">-</span>
+                              )}
                             </div>
                             <div className="min-w-[50px]">
                               <div className="text-[10px] text-slate-500 mb-0.5">周期</div>
@@ -2081,6 +2101,26 @@ export default function DashboardPage() {
 
                       <div className="w-24 flex-shrink-0 text-right">
                         <span className="font-mono text-base text-slate-100">{item.cost_price ? `¥${item.cost_price.toFixed(3)}` : "-"}</span>
+                      </div>
+
+                      {/* 持仓盈亏 */}
+                      <div className="w-24 flex-shrink-0 text-right">
+                        {item.position && item.cost_price && quote?.current_price ? (
+                          (() => {
+                            const profitLoss = (quote.current_price - item.cost_price) * item.position;
+                            const isProfit = profitLoss >= 0;
+                            return (
+                              <span 
+                                className="font-mono text-base font-bold"
+                                style={{ color: isProfit ? "#f87171" : "#34d399" }}
+                              >
+                                {isProfit ? "+" : ""}{profitLoss.toFixed(2)}
+                              </span>
+                            );
+                          })()
+                        ) : (
+                          <span className="text-sm text-slate-500">-</span>
+                        )}
                       </div>
 
                       {/* 持有周期 */}
