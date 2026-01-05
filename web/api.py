@@ -2301,11 +2301,19 @@ async def generate_ai_report_with_predictions(
     
     api_key = APIConfig.SILICONFLOW_API_KEY
     
-    # 创建强制直连的 HTTP 客户端
-    transport = httpx.HTTPTransport(proxy=None)
+    # 创建优化的 HTTP 客户端配置
+    transport = httpx.HTTPTransport(
+        proxy=None,
+        retries=2  # 自动重试2次
+    )
     http_client = httpx.Client(
         transport=transport,
-        timeout=httpx.Timeout(300.0, connect=60.0)
+        timeout=httpx.Timeout(
+            600.0,  # 总超时600秒
+            connect=30.0,  # 连接超时30秒
+            read=300.0,  # 读取超时300秒
+            write=60.0  # 写入超时60秒
+        )
     )
     
     client = OpenAI(
@@ -2430,11 +2438,11 @@ async def generate_ai_report_with_predictions(
     predictions = await predictions_task
     update_progress(50, 'AI预测完成，报告生成中')
     
-    # 等待报告完成，添加超时处理
+    # 等待报告完成，添加超时处理（流式输出需要更长时间）
     try:
-        report = await asyncio.wait_for(report_task, timeout=480)
+        report = await asyncio.wait_for(report_task, timeout=600)
     except asyncio.TimeoutError:
-        print(f"[AI报告] {ticker} 报告生成超时（480秒）")
+        print(f"[AI报告] {ticker} 报告生成超时（600秒）")
         raise Exception("AI报告生成超时，请稍后重试")
     except Exception as e:
         print(f"[AI报告] {ticker} 报告生成失败: {e}")
@@ -2484,11 +2492,19 @@ async def generate_ai_report(
     
     api_key = APIConfig.SILICONFLOW_API_KEY
     
-    # 创建强制直连的 HTTP 客户端
-    transport = httpx.HTTPTransport(proxy=None)
+    # 创建优化的 HTTP 客户端配置（流式输出需要更长超时）
+    transport = httpx.HTTPTransport(
+        proxy=None,
+        retries=2  # 自动重试2次
+    )
     http_client = httpx.Client(
         transport=transport,
-        timeout=httpx.Timeout(300.0, connect=60.0)
+        timeout=httpx.Timeout(
+            600.0,  # 总超时600秒
+            connect=30.0,  # 连接超时30秒
+            read=300.0,  # 读取超时300秒（流式输出）
+            write=60.0  # 写入超时60秒
+        )
     )
     
     client = OpenAI(
@@ -2766,9 +2782,11 @@ async def generate_ai_report(
     try:
         import re
 
-        # 使用线程池执行同步API调用
-        def sync_call():
-            return client.chat.completions.create(
+        # 使用流式API调用，边生成边接收，减少超时风险
+        def sync_stream_call():
+            """使用流式输出，逐块接收响应"""
+            chunks = []
+            stream = client.chat.completions.create(
                 model=APIConfig.SILICONFLOW_MODEL,
                 messages=[
                     {"role": "system", "content": "你是资深证券分析师，拥有20年投资研究经验。擅长技术分析、基本面分析、消息面解读和市场情绪判断。请基于提供的数据和你的专业知识，生成专业、客观、有深度的投资分析报告。分析要有独到见解，不要只是简单复述数据。"},
@@ -2776,11 +2794,16 @@ async def generate_ai_report(
                 ],
                 max_tokens=6000,
                 temperature=0.3,
-                timeout=420
+                stream=True  # 启用流式输出
             )
+            
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    chunks.append(chunk.choices[0].delta.content)
+            
+            return "".join(chunks)
         
-        response = await asyncio.to_thread(sync_call)
-        report_text = response.choices[0].message.content
+        report_text = await asyncio.to_thread(sync_stream_call)
 
         # 规范化报告日期和时间为当前北京时间
         current_datetime = get_beijing_now()
