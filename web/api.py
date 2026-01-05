@@ -1588,28 +1588,47 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             if isinstance(ai_sell_price, str):
                 ai_sell_price = None
             
-            # 从报告中提取AI建议（强力买入/买入/持有/减持/卖出）
+            # 从报告中提取AI建议（四个字的建议：建议买入/建议卖出/持有观望等）
             ai_recommendation = None
             if report:
                 # 匹配总结评级部分的建议
                 reco_patterns = [
-                    r'综合评级[：:]\s*\*?\*?(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)',
-                    r'总结评级[：:]\s*\*?\*?(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)',
-                    r'评级[：:]\s*\*?\*?(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)',
-                    r'建议[：:]\s*\*?\*?(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)',
-                    r'\*\*(强力买入|建议买入|买入|持有观望|持有|减持|建议卖出|卖出|强力卖出)\*\*',
+                    r'综合评级[：:]\s*\*?\*?(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)',
+                    r'总结评级[：:]\s*\*?\*?(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)',
+                    r'评级[：:]\s*\*?\*?(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)',
+                    r'建议[：:]\s*\*?\*?(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)',
+                    r'\*\*(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)\*\*',
                     r'操作策略[：:]\s*\*?\*?(买入|持有|卖出|观望)',
                 ]
                 for pattern in reco_patterns:
                     reco_match = re.search(pattern, report)
                     if reco_match:
                         ai_recommendation = reco_match.group(1)
+                        # 将两个字的建议转换为四个字
+                        if ai_recommendation == '买入':
+                            ai_recommendation = '建议买入'
+                        elif ai_recommendation == '卖出':
+                            ai_recommendation = '建议卖出'
+                        elif ai_recommendation == '持有':
+                            ai_recommendation = '持有观望'
+                        elif ai_recommendation == '观望':
+                            ai_recommendation = '持有观望'
+                        elif ai_recommendation == '减持':
+                            ai_recommendation = '建议减持'
                         print(f"[AI建议] 从报告中提取到建议: {ai_recommendation}")
                         break
                 
                 # 如果没有匹配到，尝试从量化建议获取
                 if not ai_recommendation:
-                    ai_recommendation = reco_map.get(quant_reco, None)
+                    # 量化建议映射为四个字
+                    quant_reco_map = {
+                        'strong_buy': '强力买入',
+                        'buy': '建议买入',
+                        'hold': '持有观望',
+                        'sell': '建议卖出',
+                        'strong_sell': '强力卖出',
+                    }
+                    ai_recommendation = quant_reco_map.get(quant_reco, None)
                     if ai_recommendation:
                         print(f"[AI建议] 从量化分析获取建议: {ai_recommendation}")
             

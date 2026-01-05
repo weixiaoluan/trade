@@ -1797,7 +1797,7 @@ export default function DashboardPage() {
                                 ) : (
                                   <Play className="w-4 h-4" />
                                 )}
-                                {isRunning ? `${task?.progress}%` : isPending ? "排队中" : isFailed ? "重新分析" : "分析"}
+                                {isRunning ? `${task?.progress}%` : isPending ? "排队中" : isFailed ? "重新分析" : "AI分析"}
                               </button>
                               
                               {report && (
@@ -1808,10 +1808,13 @@ export default function DashboardPage() {
                                     className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600/20 text-emerald-400 text-sm rounded-xl min-w-[90px] touch-target active:bg-emerald-600/30"
                                   >
                                     <FileText className="w-4 h-4" />
-                                    报告
+                                    AI报告
                                   </button>
                                   <span className="text-[10px] text-slate-500 text-center mt-1">
-                                    {new Date(report.created_at).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}
+                                    {(() => {
+                                      const d = new Date(report.created_at);
+                                      return `${d.getFullYear()}年${String(d.getMonth()+1).padStart(2,'0')}月${String(d.getDate()).padStart(2,'0')}日 ${String(d.getHours()).padStart(2,'0')}时${String(d.getMinutes()).padStart(2,'0')}分${String(d.getSeconds()).padStart(2,'0')}秒`;
+                                    })()}
                                   </span>
                                 </div>
                               )}
@@ -1995,23 +1998,31 @@ export default function DashboardPage() {
                         <button
                           onClick={() => handleAnalyzeSingle(item.symbol)}
                           disabled={isRunning || isPending}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all disabled:opacity-50 ${
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-all disabled:opacity-50 ${
                             isFailed ? "bg-rose-600/20 text-rose-400 hover:bg-rose-600/30" : "bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30"
                           }`}
                         >
-                          <Play className="w-4 h-4" />
-                          {isFailed ? "重试" : "分析"}
+                          <Play className="w-5 h-5" />
+                          {isFailed ? "重试" : "AI分析"}
                         </button>
 
                         {report && (
-                          <button
-                            onClick={() => handleViewReport(item.symbol)}
-                            onMouseEnter={() => prefetchReport(item.symbol)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 text-xs rounded-lg hover:bg-emerald-600/30 transition-colors"
-                          >
-                            <FileText className="w-4 h-4" />
-                            报告
-                          </button>
+                          <div className="flex flex-col items-center">
+                            <button
+                              onClick={() => handleViewReport(item.symbol)}
+                              onMouseEnter={() => prefetchReport(item.symbol)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 text-sm rounded-lg hover:bg-emerald-600/30 transition-colors"
+                            >
+                              <FileText className="w-5 h-5" />
+                              AI报告
+                            </button>
+                            <span className="text-[10px] text-slate-500 mt-0.5">
+                              {(() => {
+                                const d = new Date(report.created_at);
+                                return `${d.getFullYear()}年${String(d.getMonth()+1).padStart(2,'0')}月${String(d.getDate()).padStart(2,'0')}日 ${String(d.getHours()).padStart(2,'0')}时${String(d.getMinutes()).padStart(2,'0')}分${String(d.getSeconds()).padStart(2,'0')}秒`;
+                              })()}
+                            </span>
+                          </div>
                         )}
 
                         <button
