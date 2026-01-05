@@ -2313,14 +2313,14 @@ async def generate_ai_report_with_predictions(
     # 创建优化的 HTTP 客户端配置
     transport = httpx.HTTPTransport(
         proxy=None,
-        retries=2  # 自动重试2次
+        retries=3  # 自动重试3次
     )
     http_client = httpx.Client(
         transport=transport,
         timeout=httpx.Timeout(
-            600.0,  # 总超时600秒
-            connect=30.0,  # 连接超时30秒
-            read=300.0,  # 读取超时300秒
+            900.0,  # 总超时900秒
+            connect=60.0,  # 连接超时60秒
+            read=600.0,  # 读取超时600秒
             write=60.0  # 写入超时60秒
         )
     )
@@ -2449,9 +2449,9 @@ async def generate_ai_report_with_predictions(
     
     # 等待报告完成，添加超时处理（流式输出需要更长时间）
     try:
-        report = await asyncio.wait_for(report_task, timeout=600)
+        report = await asyncio.wait_for(report_task, timeout=900)  # 15分钟超时
     except asyncio.TimeoutError:
-        print(f"[AI报告] {ticker} 报告生成超时（600秒）")
+        print(f"[AI报告] {ticker} 报告生成超时（900秒）")
         raise Exception("AI报告生成超时，请稍后重试")
     except Exception as e:
         print(f"[AI报告] {ticker} 报告生成失败: {e}")
@@ -2504,14 +2504,14 @@ async def generate_ai_report(
     # 创建优化的 HTTP 客户端配置（流式输出需要更长超时）
     transport = httpx.HTTPTransport(
         proxy=None,
-        retries=2  # 自动重试2次
+        retries=3  # 自动重试3次
     )
     http_client = httpx.Client(
         transport=transport,
         timeout=httpx.Timeout(
-            600.0,  # 总超时600秒
-            connect=30.0,  # 连接超时30秒
-            read=300.0,  # 读取超时300秒（流式输出）
+            900.0,  # 总超时900秒（15分钟）
+            connect=60.0,  # 连接超时60秒
+            read=600.0,  # 读取超时600秒（流式输出需要更长）
             write=60.0  # 写入超时60秒
         )
     )
@@ -2691,102 +2691,43 @@ async def generate_ai_report(
 - 阻力位: {key_levels.get('nearest_resistance', levels.get('resistance_levels', 'N/A'))}
 
 ---
-请生成**{holding_period_cn}**专业深度分析报告，必须包含以下完整章节：
+请生成**{holding_period_cn}**专业分析报告，包含以下章节：
 
 ## 一、标的概况
-用Markdown表格展示核心指标（代码、名称、价格、涨跌、市值、市盈率等）
+用Markdown表格展示核心指标
 
-## 二、AI深度研判（重要，请详细分析）
+## 二、AI深度研判
+### 2.1 消息面与情绪分析
+简要分析近期消息、市场情绪、资金动向
 
-### 2.1 消息面分析
-- 分析该标的近期重大消息、政策影响、行业动态
-- 如果是股票，分析公司经营动态、业绩预期、管理层变动
-- 如果是ETF/基金，分析跟踪指数的行业前景、成分股变化
-- 评估消息面对短期和中期走势的影响
+### 2.2 多周期技术共振
+综合分时/日K/周K/月K研判趋势方向
 
-### 2.2 市场情绪分析
-- 根据成交量、换手率、涨跌幅判断当前市场情绪
-- 分析是否存在恐慌性抛售或过度乐观追涨
-- 评估当前价位的市场认可度
-- 判断主力资金动向（根据量价关系推断）
+### 2.3 综合结论
+当前最佳操作策略和核心逻辑
 
-### 2.3 多周期技术共振分析
-基于分时、日K、周K、月K等多周期数据综合研判：
-- **分时级别**: 当日走势特征、盘中支撑阻力
-- **日线级别**: 短期趋势方向、关键支撑阻力
-- **周线级别**: 中期趋势确认、重要均线位置
-- **月线级别**: 长期趋势判断、历史高低点参考
-- 分析各周期是否形成共振，共振方向是什么
+## 三、技术指标分析
+分析MACD、RSI、KDJ、布林带等关键指标状态
 
-### 2.4 AI综合研判结论
-- 当前最佳操作策略（买入/持有/卖出/观望）
-- 操作的核心逻辑（2-3句话概括）
-- 需要关注的关键变量
-
-## 三、技术指标深度分析
-
-### 趋势类指标
-1. **趋势分析**: 当前趋势方向、趋势强度(ADX)、趋势持续时间
-2. **均线系统**: MA5/MA10/MA20/MA60排列情况，支撑压力位
-3. **MACD分析**: DIF/DEA/柱状图状态，金叉/死叉信号
-
-### 震荡类指标
-4. **RSI分析**: 当前RSI值，超买超卖区间，背离情况
-5. **KDJ分析**: K/D/J三线状态，交叉信号
-6. **Williams %R**: 威廉指标超买超卖判断
-7. **CCI分析**: 顺势指标强弱判断
-
-### 波动与动量
-8. **布林带分析**: 价格位置、带宽变化、轨道压力支撑
-9. **ATR波动率**: 日均波动幅度，风险评估
-10. **动量/ROC**: 价格动能方向和强度
-
-### 量价分析
-11. **成交量分析**: 量价配合、放量缩量、OBV能量潮趋势
-
-## 四、支撑阻力位分析
-- 列出多个支撑位和阻力位
-- 说明各价位的重要性
-- 给出突破/跌破后的应对策略
+## 四、支撑阻力位
+列出关键支撑位和阻力位
 
 ## 五、建议买卖价格（重要）
 | 类型 | 价格 | 数量 | 说明 |
 |------|------|------|------|
-| **建议买入价** | ¥X.XXX | XXX股 | 基于支撑位和技术分析得出 |
-| **建议卖出价** | ¥X.XXX | XXX股 | 基于阻力位和技术分析得出 |
-| **止损价** | ¥X.XXX | - | 跌破此价位建议止损 |
-| **加仓价** | ¥X.XXX | XXX股 | 如继续下跌可考虑加仓 |
+| **建议买入价** | ¥X.XXX | XXX股 | 基于支撑位 |
+| **建议卖出价** | ¥X.XXX | XXX股 | 基于阻力位 |
+| **止损价** | ¥X.XXX | - | 止损位 |
 
-{f"用户持仓: {user_position}股，成本: ¥{user_cost_price}，请给出具体数量建议" if user_position and user_cost_price else "无持仓信息，买入数量建议1000股起"}
+{f"用户持仓: {user_position}股，成本: ¥{user_cost_price}" if user_position and user_cost_price else ""}
 
-## 六、多周期价格预测
-| 周期 | 预测方向 | 目标价位 | 置信度 | 关键观察点 |
-|------|----------|----------|--------|------------|
-| 1周 | 涨/跌 | ¥X.XX | XX% | ... |
-| 2周 | 涨/跌 | ¥X.XX | XX% | ... |
-| 1个月 | 涨/跌 | ¥X.XX | XX% | ... |
-| 3个月 | 涨/跌 | ¥X.XX | XX% | ... |
+## 六、操作建议与风险提示
+给出{holding_period_cn}具体建议和主要风险
 
-## 七、操作建议
-根据{holding_period_cn}给出具体建议：
-- 具体买卖点位
-- 止损止盈设置
-- 仓位管理建议
+## 七、总结评级
+综合评级（强力买入/买入/持有/减持/卖出）
 
-## 八、风险提示
-列出主要风险因素：
-- 技术面风险
-- 基本面风险
-- 市场系统性风险
-- 其他特定风险
-
-## 九、总结评级
-给出综合评级（强力买入/买入/持有/减持/卖出）和核心理由
-
-**重要要求**：
-1. 必须给出具体的建议买入价和卖出价数字（精确到小数点后3位）
-2. AI深度研判部分要体现专业分析能力，不要只是复述数据
-3. 使用标准Markdown格式，表格清晰，层次分明
+**要求**：必须给出具体的建议买入价和卖出价数字（精确到小数点后3位）
 """
     try:
         import re
@@ -2803,10 +2744,10 @@ async def generate_ai_report(
                     stream = client.chat.completions.create(
                         model=APIConfig.SILICONFLOW_MODEL,
                         messages=[
-                            {"role": "system", "content": "你是资深证券分析师，拥有20年投资研究经验。擅长技术分析、基本面分析、消息面解读和市场情绪判断。请基于提供的数据和你的专业知识，生成专业、客观、有深度的投资分析报告。分析要有独到见解，不要只是简单复述数据。"},
+                            {"role": "system", "content": "你是资深证券分析师。请基于数据生成专业、简洁的投资分析报告。"},
                             {"role": "user", "content": prompt}
                         ],
-                        max_tokens=6000,
+                        max_tokens=4000,  # 减少token数量加快生成速度
                         temperature=0.3,
                         stream=True  # 启用流式输出
                     )
