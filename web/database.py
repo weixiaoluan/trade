@@ -529,6 +529,35 @@ def db_get_user_reports(username: str) -> List[Dict]:
         return reports
 
 
+def db_get_user_reports_summary(username: str) -> List[Dict]:
+    """获取用户所有报告的摘要信息（不加载完整report_data，提升性能）"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, symbol, name, 
+                   json_extract(report_data, '$.recommendation') as recommendation,
+                   json_extract(report_data, '$.quant_score') as quant_score,
+                   json_extract(report_data, '$.price') as price,
+                   json_extract(report_data, '$.change_percent') as change_percent,
+                   created_at 
+            FROM reports WHERE username = ? ORDER BY created_at DESC
+        ''', (username,))
+        reports = []
+        for row in cursor.fetchall():
+            reports.append({
+                'id': row['id'],
+                'symbol': row['symbol'],
+                'name': row['name'],
+                'recommendation': row['recommendation'],
+                'quant_score': row['quant_score'],
+                'price': row['price'],
+                'change_percent': row['change_percent'],
+                'created_at': row['created_at'],
+                'status': 'completed'
+            })
+        return reports
+
+
 def db_get_user_report(username: str, symbol: str) -> Optional[Dict]:
     """获取用户某个证券的报告"""
     with get_db() as conn:

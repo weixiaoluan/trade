@@ -498,27 +498,14 @@ async def get_dashboard_init_data(authorization: str = Header(None)):
     
     username = user['username']
     
-    # 并行获取所有数据
+    # 获取所有数据
     watchlist = get_user_watchlist(username)
     tasks = get_user_analysis_tasks(username)
     reminders = get_user_reminders(username)
-    reports_raw = get_user_reports(username)
     
-    # 简化报告数据
-    reports = []
-    for report in reports_raw:
-        data = report.get('data', {})
-        reports.append({
-            'id': report.get('id'),
-            'symbol': report.get('symbol'),
-            'created_at': report.get('created_at'),
-            'status': report.get('status'),
-            'name': data.get('name', ''),
-            'recommendation': data.get('recommendation', ''),
-            'quant_score': data.get('quant_score'),
-            'price': data.get('price'),
-            'change_percent': data.get('change_percent')
-        })
+    # 使用摘要查询，避免加载完整报告数据
+    from web.database import db_get_user_reports_summary
+    reports = db_get_user_reports_summary(username)
     
     # 转换 reminder_id 为 id
     for r in reminders:
@@ -1055,27 +1042,13 @@ async def get_reports_list(authorization: str = Header(None)):
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    reports = get_user_reports(user['username'])
-    
-    # 简化报告数据，只返回摘要信息
-    summary_reports = []
-    for report in reports:
-        data = report.get('data', {})
-        summary_reports.append({
-            'id': report.get('id'),
-            'symbol': report.get('symbol'),
-            'created_at': report.get('created_at'),
-            'status': report.get('status'),
-            'name': data.get('name', ''),
-            'recommendation': data.get('recommendation', ''),
-            'quant_score': data.get('quant_score'),
-            'price': data.get('price'),
-            'change_percent': data.get('change_percent')
-        })
+    # 使用摘要查询，避免加载完整报告数据
+    from web.database import db_get_user_reports_summary
+    reports = db_get_user_reports_summary(user['username'])
     
     return {
         "status": "success",
-        "reports": summary_reports
+        "reports": reports
     }
 
 
