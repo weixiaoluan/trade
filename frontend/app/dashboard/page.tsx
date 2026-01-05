@@ -240,6 +240,11 @@ export default function DashboardPage() {
     tasksRef.current = tasks;
   }, [tasks]);
 
+  const reportsRef = useRef(reports);
+  useEffect(() => {
+    reportsRef.current = reports;
+  }, [reports]);
+
   // 检测移动端并设置合适的分页大小
   useEffect(() => {
     const checkMobile = () => {
@@ -395,9 +400,12 @@ export default function DashboardPage() {
           const prevTask = tasksRef.current[symbol];
           // 只有从 running/pending 变成 failed 才弹窗
           // 必须有 prevTask 且之前是 running/pending 状态，才说明是刚刚失败的
+          // 额外检查：如果该标的已有报告，不弹失败提示（可能是旧任务状态）
+          const hasReport = reportsRef.current.some(r => r.symbol?.toUpperCase() === symbol.toUpperCase());
           if (task.status === "failed" && 
               prevTask && 
-              (prevTask.status === "running" || prevTask.status === "pending")) {
+              (prevTask.status === "running" || prevTask.status === "pending") &&
+              !hasReport) {
             // 检查是否已经弹过窗
             if (!shownErrorTasks.has(symbol)) {
               failedTasks.push(symbol);

@@ -2793,24 +2793,44 @@ async def generate_ai_report(
 
         # 使用流式API调用，边生成边接收，减少超时风险
         def sync_stream_call():
-            """使用流式输出，逐块接收响应"""
-            chunks = []
-            stream = client.chat.completions.create(
-                model=APIConfig.SILICONFLOW_MODEL,
-                messages=[
-                    {"role": "system", "content": "你是资深证券分析师，拥有20年投资研究经验。擅长技术分析、基本面分析、消息面解读和市场情绪判断。请基于提供的数据和你的专业知识，生成专业、客观、有深度的投资分析报告。分析要有独到见解，不要只是简单复述数据。"},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=6000,
-                temperature=0.3,
-                stream=True  # 启用流式输出
-            )
+            """使用流式输出，逐块接收响应，带重试机制"""
+            max_retries = 2
+            last_error = None
             
-            for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    chunks.append(chunk.choices[0].delta.content)
+            for attempt in range(max_retries + 1):
+                try:
+                    chunks = []
+                    stream = client.chat.completions.create(
+                        model=APIConfig.SILICONFLOW_MODEL,
+                        messages=[
+                            {"role": "system", "content": "你是资深证券分析师，拥有20年投资研究经验。擅长技术分析、基本面分析、消息面解读和市场情绪判断。请基于提供的数据和你的专业知识，生成专业、客观、有深度的投资分析报告。分析要有独到见解，不要只是简单复述数据。"},
+                            {"role": "user", "content": prompt}
+                        ],
+                        max_tokens=6000,
+                        temperature=0.3,
+                        stream=True  # 启用流式输出
+                    )
+                    
+                    for chunk in stream:
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            chunks.append(chunk.choices[0].delta.content)
+                    
+                    result = "".join(chunks)
+                    if result and len(result) > 100:  # 确保有有效内容
+                        return result
+                    else:
+                        raise Exception("AI返回内容过短或为空")
+                        
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries:
+                        print(f"[AI报告] 流式输出失败，第{attempt + 1}次重试: {e}")
+                        import time
+                        time.sleep(2)  # 等待2秒后重试
+                    else:
+                        raise last_error
             
-            return "".join(chunks)
+            raise last_error if last_error else Exception("AI报告生成失败")
         
         report_text = await asyncio.to_thread(sync_stream_call)
 
