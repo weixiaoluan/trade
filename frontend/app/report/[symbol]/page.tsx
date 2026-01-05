@@ -198,9 +198,151 @@ export default function ReportPage() {
     return `¥${value.toLocaleString()}`;
   };
 
-  // 下载报告
+  // 备用的Markdown转HTML函数（当无法获取页面渲染内容时使用）
+  const convertMarkdownToHtml = (markdown: string): string => {
+    if (!markdown) return '';
+    
+    let html = markdown;
+    
+    // 1. 先处理代码块（避免内部内容被其他规则处理）
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    
+    // 2. 处理表格
+    const lines = html.split('\n');
+    let inTable = false;
+    let tableHtml = '';
+    let resultLines: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isTableRow = /^\|.*\|$/.test(line.trim());
+      const isSeparator = /^\|[-:\s|]+\|$/.test(line.trim());
+      
+      if (isTableRow && !isSeparator) {
+        if (!inTable) {
+          inTable = true;
+          tableHtml = '<table>';
+          // 这是表头
+          const cells = line.split('|').filter(c => c.trim());
+          tableHtml += '<thead><tr>' + cells.map(c => `<th>${c.trim().replace(/\*\*/g, '')}</th>`).join('') + '</tr></thead><tbody>';
+        } else {
+          // 这是数据行
+          const cells = line.split('|').filter(c => c.trim());
+          tableHtml += '<tr>' + cells.map(c => `<td>${c.trim().replace(/\*\*/g, '')}</td>`).join('') + '</tr>';
+        }
+      } else if (isSeparator) {
+        // 跳过分隔行
+        continue;
+      } else {
+        if (inTable) {
+          tableHtml += '</tbody></table>';
+          resultLines.push(tableHtml);
+          inTable = false;
+          tableHtml = '';
+        }
+        resultLines.push(line);
+      }
+    }
+    if (inTable) {
+      tableHtml += '</tbody></table>';
+      resultLines.push(tableHtml);
+    }
+    
+    html = resultLines.join('\n');
+    
+    // 3. 处理标题
+    html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    
+    // 4. 处理粗体和斜体
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    
+    // 5. 处理无序列表
+    const listLines = html.split('\n');
+    let inList = false;
+    let listResult: string[] = [];
+    
+    for (const line of listLines) {
+      if (/^[-*] (.+)$/.test(line)) {
+        if (!inList) {
+          listResult.push('<ul>');
+          inList = true;
+        }
+        listResult.push(`<li>${line.replace(/^[-*] /, '')}</li>`);
+      } else {
+        if (inList) {
+          listResult.push('</ul>');
+          inList = false;
+        }
+        listResult.push(line);
+      }
+    }
+    if (inList) listResult.push('</ul>');
+    html = listResult.join('\n');
+    
+    // 6. 处理分隔线
+    html = html.replace(/^---$/gm, '<hr>');
+    
+    // 7. 处理段落 - 将连续的非标签行包装成段落
+    const paragraphLines = html.split('\n');
+    let finalResult: string[] = [];
+    let paragraphBuffer: string[] = [];
+    
+    const isHtmlTag = (line: string) => /^<[a-z]|^<\/[a-z]/i.test(line.trim());
+    
+    for (const line of paragraphLines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (paragraphBuffer.length > 0) {
+          finalResult.push('<p>' + paragraphBuffer.join(' ') + '</p>');
+          paragraphBuffer = [];
+        }
+      } else if (isHtmlTag(trimmed)) {
+        if (paragraphBuffer.length > 0) {
+          finalResult.push('<p>' + paragraphBuffer.join(' ') + '</p>');
+          paragraphBuffer = [];
+        }
+        finalResult.push(line);
+      } else {
+        paragraphBuffer.push(trimmed);
+      }
+    }
+    if (paragraphBuffer.length > 0) {
+      finalResult.push('<p>' + paragraphBuffer.join(' ') + '</p>');
+    }
+    
+    return finalResult.join('\n');
+  };
+
+  // 下载报告 - 直接捕获页面渲染后的内容
   const handleDownloadReport = () => {
     const result = parseReportData(report);
+    const createdAt = report?.created_at 
+      ? new Date(report.created_at).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\//g, '/') 
+      : new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\//g, '/');
+    
+    // 直接获取页面上已渲染的Markdown内容（ReactMarkdown已经转换为HTML）
+    // 注意：ReactMarkdown 渲染后的内容在 .markdown-content 内部
+    const markdownContainer = document.querySelector('#analysis-report-section .markdown-content');
+    let reportContentHtml = '';
+    
+    if (markdownContainer) {
+      // 获取ReactMarkdown渲染后的HTML内容
+      const innerHtml = markdownContainer.innerHTML;
+      // 检查是否是真正的HTML（包含标签）还是纯文本
+      if (innerHtml && innerHtml.includes('<')) {
+        reportContentHtml = innerHtml;
+      }
+    }
+    
+    // 如果获取失败或内容不是HTML，使用备用的Markdown转HTML方法
+    if (!reportContentHtml || !reportContentHtml.includes('<p>') && !reportContentHtml.includes('<h')) {
+      reportContentHtml = convertMarkdownToHtml(result.report);
+    }
+    
     const reportHtml = `
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -210,29 +352,298 @@ export default function ReportPage() {
   <title>${result.ticker} - ${result.name} 分析报告</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #e2e8f0; min-height: 100vh; padding: 40px 20px; line-height: 1.6; }
-    .container { max-width: 900px; margin: 0 auto; }
-    .header { text-align: center; margin-bottom: 40px; padding: 30px; background: rgba(30, 41, 59, 0.8); border-radius: 16px; border: 1px solid rgba(56, 189, 248, 0.2); }
-    .header h1 { font-size: 28px; color: #38bdf8; margin-bottom: 8px; }
-    .header .subtitle { color: #94a3b8; font-size: 14px; }
-    .card { background: rgba(30, 41, 59, 0.6); border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid rgba(71, 85, 105, 0.5); }
-    .card h2 { color: #38bdf8; font-size: 18px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid rgba(71, 85, 105, 0.5); }
-    .footer { text-align: center; margin-top: 40px; padding: 20px; color: #64748b; font-size: 12px; }
-    strong { color: #f8fafc; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; 
+      background: #020617; 
+      color: #e2e8f0; 
+      min-height: 100vh; 
+      line-height: 1.7;
+    }
+    .container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+    
+    /* 头部样式 - 与页面一致 */
+    .header { 
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px; 
+      padding: 16px 20px; 
+      background: rgba(2, 6, 23, 0.9); 
+      border-radius: 12px; 
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 6px rgba(99, 102, 241, 0.2);
+    }
+    .header-icon svg {
+      width: 16px;
+      height: 16px;
+      color: #818cf8;
+    }
+    .header-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+    .header-subtitle {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #64748b;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ticker {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 700;
+      color: #818cf8;
+      font-size: 14px;
+    }
+    .name {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    .score-badge {
+      padding: 4px 8px;
+      border-radius: 9999px;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .score-high { background: rgba(16, 185, 129, 0.1); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .score-mid { background: rgba(14, 165, 233, 0.1); color: #7dd3fc; border: 1px solid rgba(14, 165, 233, 0.3); }
+    .score-low { background: rgba(244, 63, 94, 0.1); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.3); }
+    .score-neutral { background: rgba(100, 116, 139, 0.1); color: #cbd5e1; border: 1px solid rgba(100, 116, 139, 0.6); }
+    
+    /* 报告卡片样式 - 与页面glass-card一致 */
+    .report-card { 
+      background: rgba(15, 23, 42, 0.4); 
+      border-radius: 12px; 
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+    }
+    .report-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .report-card-header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .report-card-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 6px rgba(99, 102, 241, 0.2);
+    }
+    .report-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .report-card-subtitle {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #64748b;
+    }
+    .report-time {
+      font-size: 11px;
+      color: #64748b;
+    }
+    
+    /* 报告内容样式 - 与页面prose样式一致 */
+    .report-content {
+      padding: 24px 32px;
+      color: #cbd5e1;
+      font-size: 14px;
+      line-height: 1.75;
+    }
+    .report-content h1 {
+      color: #f1f5f9;
+      font-size: 1.5em;
+      font-weight: 800;
+      margin-top: 0;
+      margin-bottom: 0.8em;
+      line-height: 1.3;
+    }
+    .report-content h2 {
+      color: #f1f5f9;
+      font-size: 1.25em;
+      font-weight: 700;
+      margin-top: 1.5em;
+      margin-bottom: 0.75em;
+      line-height: 1.4;
+    }
+    .report-content h3 {
+      color: #e2e8f0;
+      font-size: 1.1em;
+      font-weight: 600;
+      margin-top: 1.25em;
+      margin-bottom: 0.5em;
+    }
+    .report-content p {
+      margin-top: 1em;
+      margin-bottom: 1em;
+    }
+    .report-content strong {
+      color: #f1f5f9;
+      font-weight: 600;
+    }
+    .report-content ul, .report-content ol {
+      margin-top: 1em;
+      margin-bottom: 1em;
+      padding-left: 1.5em;
+    }
+    .report-content li {
+      margin-top: 0.25em;
+      margin-bottom: 0.25em;
+    }
+    .report-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5em 0;
+      font-size: 0.875em;
+    }
+    .report-content thead {
+      border-bottom: 1px solid rgba(71, 85, 105, 0.5);
+    }
+    .report-content th {
+      color: #94a3b8;
+      font-weight: 600;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .report-content td {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    }
+    .report-content tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .report-content hr {
+      border: none;
+      border-top: 1px solid rgba(71, 85, 105, 0.5);
+      margin: 2em 0;
+    }
+    .report-content blockquote {
+      border-left: 3px solid #818cf8;
+      padding-left: 1em;
+      margin: 1.5em 0;
+      color: #94a3b8;
+      font-style: italic;
+    }
+    .report-content code {
+      background: rgba(51, 65, 85, 0.5);
+      padding: 0.2em 0.4em;
+      border-radius: 4px;
+      font-size: 0.875em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .report-content pre {
+      background: rgba(15, 23, 42, 0.8);
+      padding: 1em;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 1.5em 0;
+    }
+    .report-content pre code {
+      background: none;
+      padding: 0;
+    }
+    .report-content a {
+      color: #818cf8;
+      text-decoration: none;
+    }
+    .report-content a:hover {
+      text-decoration: underline;
+    }
+    
+    /* 页脚样式 */
+    .footer { 
+      text-align: center; 
+      margin-top: 32px; 
+      padding: 20px; 
+      color: #475569; 
+      font-size: 12px;
+      border-top: 1px solid rgba(71, 85, 105, 0.3);
+    }
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- 头部信息 -->
     <div class="header">
-      <h1>${result.ticker} - ${result.name}</h1>
-      <p class="subtitle">生成时间: ${new Date().toLocaleString('zh-CN', { hour12: false })} | AI 多维度分析报告</p>
+      <div class="header-left">
+        <div class="header-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+        </div>
+        <div>
+          <div class="header-title">智能研报</div>
+          <div class="header-subtitle">AI QUANTITATIVE ANALYSIS</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="ticker">${result.ticker}</span>
+        <span class="name">${result.name}</span>
+        ${typeof result.quantScore === 'number' ? `
+        <span class="score-badge ${result.quantScore >= 80 ? 'score-high' : result.quantScore >= 60 ? 'score-mid' : result.quantScore <= 40 ? 'score-low' : 'score-neutral'}">
+          <span style="font-family: monospace; font-size: 11px;">${result.quantScore.toFixed(1)}</span>
+          <span style="opacity: 0.7;">分</span>
+        </span>
+        ` : ''}
+      </div>
     </div>
-    <div class="card">
-      <h2>📊 详细分析报告</h2>
-      ${result.report.replace(/\n/g, '<br>')}
+    
+    <!-- 报告卡片 -->
+    <div class="report-card">
+      <div class="report-card-header">
+        <div class="report-card-header-left">
+          <div class="report-card-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+          </div>
+          <div>
+            <div class="report-card-title">详细分析报告</div>
+            <div class="report-card-subtitle">DETAILED ANALYSIS</div>
+          </div>
+        </div>
+        <div class="report-time">生成时间: ${createdAt}</div>
+      </div>
+      <div class="report-content">
+        ${reportContentHtml}
+      </div>
     </div>
+    
     <div class="footer">
-      <p>ℹ️ 本报告由 AI 多智能体系统生成，仅供参考，不构成投资建议。</p>
+      ℹ️ 本报告由 AI 多智能体系统生成，仅供参考，不构成投资建议。投资有风险，入市需谨慎。
     </div>
   </div>
 </body>
