@@ -170,6 +170,13 @@ export default function DashboardPage() {
   const [analysisDayOfMonth, setAnalysisDayOfMonth] = useState<number>(1);
   const [showBatchReminderModal, setShowBatchReminderModal] = useState(false);
 
+  // 提醒记录
+  const [showReminderLogsModal, setShowReminderLogsModal] = useState(false);
+  const [reminderLogsSymbol, setReminderLogsSymbol] = useState<string>("");
+  const [reminderLogsName, setReminderLogsName] = useState<string>("");
+  const [reminderLogs, setReminderLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
   // AI 自动分析设置
   const [aiAnalysisFrequency, setAiAnalysisFrequency] = useState<string>("trading_day");
   const [aiAnalysisTime, setAiAnalysisTime] = useState<string>("09:30");
@@ -1228,6 +1235,29 @@ export default function DashboardPage() {
     }
   }, [selectedItems, watchlist, reminderType, reminderFrequency, aiAnalysisTime, analysisWeekday, analysisDayOfMonth, aiAnalysisFrequency, aiAnalysisWeekday, aiAnalysisDayOfMonth, reminderHoldingPeriod, getToken, fetchReminders, showAlertModal]);
 
+  // 查看提醒记录
+  const openReminderLogsModal = useCallback(async (symbol: string, name?: string) => {
+    setReminderLogsSymbol(symbol);
+    setReminderLogsName(name || symbol);
+    setReminderLogs([]);
+    setShowReminderLogsModal(true);
+    setLoadingLogs(true);
+    
+    try {
+      const response = await fetch(`${API_BASE}/api/reminder-logs/${symbol}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setReminderLogs(data.logs || []);
+      }
+    } catch (error) {
+      console.error("获取提醒记录失败:", error);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, [getToken]);
+
   // 实际执行批量分析
   const executeBatchAnalyze = useCallback(async (symbols: string[], period: string) => {
     // 重置错误状态
@@ -1746,6 +1776,7 @@ export default function DashboardPage() {
               <div className="w-24 flex-shrink-0 text-sm font-medium text-emerald-400/70 text-right">买入价/量</div>
               <div className="w-24 flex-shrink-0 text-sm font-medium text-rose-400/70 text-right">卖出价/量</div>
               <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400">状态</div>
+              <div className="w-16 flex-shrink-0 text-sm font-medium text-slate-400">提醒记录</div>
               <div className="flex-1 min-w-[200px] text-sm font-medium text-slate-400 text-right">操作</div>
             </div>
           </div>
@@ -1858,7 +1889,7 @@ export default function DashboardPage() {
                             </div>
                             <div className="min-w-[70px]">
                               <div className="text-[10px] text-slate-500 mb-0.5">成本</div>
-                              <span className="font-mono text-sm text-slate-200">{item.cost_price ? `¥${item.cost_price.toFixed(2)}` : "-"}</span>
+                              <span className="font-mono text-sm text-slate-200">{item.cost_price ? `¥${item.cost_price.toFixed(3)}` : "-"}</span>
                             </div>
                             <div className="min-w-[50px]">
                               <div className="text-[10px] text-slate-500 mb-0.5">周期</div>
@@ -2049,7 +2080,7 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="w-16 flex-shrink-0 text-right">
-                        <span className="font-mono text-sm text-slate-200">{item.cost_price ? `¥${item.cost_price.toFixed(2)}` : "-"}</span>
+                        <span className="font-mono text-sm text-slate-200">{item.cost_price ? `¥${item.cost_price.toFixed(3)}` : "-"}</span>
                       </div>
 
                       {/* 持有周期 */}
@@ -2126,6 +2157,16 @@ export default function DashboardPage() {
                         ) : (
                           <span className="text-xs text-slate-500">未分析</span>
                         )}
+                      </div>
+
+                      {/* 提醒记录 */}
+                      <div className="w-16 flex-shrink-0">
+                        <button
+                          onClick={() => openReminderLogsModal(item.symbol, item.name)}
+                          className="text-xs text-indigo-400 hover:text-indigo-300 hover:underline"
+                        >
+                          查看详情
+                        </button>
                       </div>
 
                       <div className="flex-1 min-w-[200px] flex items-center justify-end gap-2">
@@ -2908,6 +2949,95 @@ export default function DashboardPage() {
                   className="flex-1 py-2.5 sm:py-3 bg-amber-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base"
                 >
                   {loading ? "创建中..." : `批量创建（${selectedItems.size}个）`}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 提醒记录弹窗 */}
+      <AnimatePresence>
+        {showReminderLogsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
+            onClick={() => setShowReminderLogsModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-lg sm:mx-4 max-h-[85vh] overflow-y-auto safe-area-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-white">
+                  提醒记录 - {reminderLogsName} ({reminderLogsSymbol})
+                </h3>
+                <button onClick={() => setShowReminderLogsModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              {loadingLogs ? (
+                <div className="py-8 text-center">
+                  <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-2" />
+                  <span className="text-sm text-slate-400">加载中...</span>
+                </div>
+              ) : reminderLogs.length === 0 ? (
+                <div className="py-8 text-center">
+                  <Bell className="w-12 h-12 text-slate-600 mx-auto mb-2" />
+                  <span className="text-sm text-slate-500">暂无提醒记录</span>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                  {reminderLogs.map((log, index) => (
+                    <div key={index} className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`px-2 py-0.5 text-xs rounded ${
+                          log.reminder_type === 'buy' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                        }`}>
+                          {log.reminder_type === 'buy' ? '买入提醒' : '卖出提醒'}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {(() => {
+                            const d = new Date(log.created_at);
+                            return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                          })()}
+                        </span>
+                      </div>
+                      <div className="text-sm text-slate-300 mb-2">{log.message}</div>
+                      <div className="flex flex-wrap gap-3 text-xs">
+                        {log.current_price && (
+                          <span className="text-slate-400">当前价: <span className="text-white">¥{log.current_price.toFixed(3)}</span></span>
+                        )}
+                        {log.buy_price && (
+                          <span className="text-emerald-400/70">买入价: ¥{log.buy_price.toFixed(3)}</span>
+                        )}
+                        {log.buy_quantity && (
+                          <span className="text-emerald-400/70">买入量: {log.buy_quantity}股</span>
+                        )}
+                        {log.sell_price && (
+                          <span className="text-rose-400/70">卖出价: ¥{log.sell_price.toFixed(3)}</span>
+                        )}
+                        {log.sell_quantity && (
+                          <span className="text-rose-400/70">卖出量: {log.sell_quantity}股</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4">
+                <button
+                  onClick={() => setShowReminderLogsModal(false)}
+                  className="w-full py-2.5 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm"
+                >
+                  关闭
                 </button>
               </div>
             </motion.div>

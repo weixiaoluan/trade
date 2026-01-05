@@ -3133,6 +3133,23 @@ async def get_symbol_reminders_list(symbol: str, authorization: str = Header(Non
     return {"status": "success", "reminders": reminders}
 
 
+@app.get("/api/reminder-logs/{symbol}")
+async def get_reminder_logs(symbol: str, authorization: str = Header(None)):
+    """获取某个证券的提醒历史记录"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_get_reminder_logs
+    logs = db_get_reminder_logs(user['username'], symbol)
+    return {"status": "success", "logs": logs}
+
+
 @app.post("/api/reminders")
 async def create_reminder(
     reminder: ReminderItem,
@@ -4137,7 +4154,7 @@ def send_price_alert_notification(username: str, symbol: str, name: str,
     """发送价格提醒通知（带 AI 分析）
     优先使用微信公众号模板消息推送
     """
-    from web.database import get_db
+    from web.database import get_db, db_add_reminder_log
     import urllib.parse
     
     # 获取用户的推送配置
@@ -4229,6 +4246,19 @@ AI分析{action}原因：
         
         result = send_wechat_template_message(user_openid, title, content, detail_url, symbol, alert_type)
         if result:
+            # 记录提醒历史
+            db_add_reminder_log(
+                username=username,
+                symbol=symbol,
+                name=name,
+                reminder_type=alert_type,
+                buy_price=ai_buy_price,
+                buy_quantity=ai_buy_quantity,
+                sell_price=ai_sell_price,
+                sell_quantity=ai_sell_quantity,
+                current_price=current_price,
+                message=f"触发{action}价格 ¥{target_price:.3f}"
+            )
             return True
         print(f"[Alert] 微信公众号推送失败，尝试 PushPlus 备用方案")
     
@@ -4274,7 +4304,22 @@ AI分析{action}原因：
     </div>
     """
     
-    return send_wechat_notification(message, f"【{action}提醒】{name} ¥{current_price:.3f}", user_token)
+    result = send_wechat_notification(message, f"【{action}提醒】{name} ¥{current_price:.3f}", user_token)
+    if result:
+        # 记录提醒历史
+        db_add_reminder_log(
+            username=username,
+            symbol=symbol,
+            name=name,
+            reminder_type=alert_type,
+            buy_price=ai_buy_price,
+            buy_quantity=ai_buy_quantity,
+            sell_price=ai_sell_price,
+            sell_quantity=ai_sell_quantity,
+            current_price=current_price,
+            message=f"触发{action}价格 ¥{target_price:.3f}"
+        )
+    return result
 
 
 # ============================================

@@ -135,11 +135,32 @@ def init_database():
             )
         ''')
         
+        # 提醒历史记录表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS reminder_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                name TEXT,
+                reminder_type TEXT NOT NULL,
+                buy_price REAL,
+                buy_quantity INTEGER,
+                sell_price REAL,
+                sell_quantity INTEGER,
+                current_price REAL,
+                message TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        
         # 创建索引
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_username ON watchlist(username)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_reports_username ON reports(username)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_reminders_username ON reminders(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_reminder_logs_username ON reminder_logs(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_reminder_logs_symbol ON reminder_logs(username, symbol)')
         
         conn.commit()
         print("数据库初始化完成")
@@ -773,6 +794,46 @@ def db_delete_reminder(username: str, reminder_id: str) -> bool:
         # 直接按 reminder_id 删除（reminder_id 是唯一的）
         cursor.execute('DELETE FROM reminders WHERE reminder_id = ?', (reminder_id,))
         return cursor.rowcount > 0
+
+
+# ============================================
+# 提醒历史记录
+# ============================================
+
+def db_add_reminder_log(username: str, symbol: str, name: str, reminder_type: str,
+                        buy_price: float = None, buy_quantity: int = None,
+                        sell_price: float = None, sell_quantity: int = None,
+                        current_price: float = None, message: str = None) -> bool:
+    """添加提醒历史记录"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        created_at = datetime.now().isoformat()
+        cursor.execute('''
+            INSERT INTO reminder_logs (username, symbol, name, reminder_type, 
+                buy_price, buy_quantity, sell_price, sell_quantity, current_price, message, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (username, symbol, name, reminder_type, buy_price, buy_quantity, 
+              sell_price, sell_quantity, current_price, message, created_at))
+        return cursor.rowcount > 0
+
+
+def db_get_reminder_logs(username: str, symbol: str = None, limit: int = 50) -> List[Dict]:
+    """获取提醒历史记录"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if symbol:
+            cursor.execute('''
+                SELECT * FROM reminder_logs 
+                WHERE username = ? AND symbol = ?
+                ORDER BY created_at DESC LIMIT ?
+            ''', (username, symbol, limit))
+        else:
+            cursor.execute('''
+                SELECT * FROM reminder_logs 
+                WHERE username = ?
+                ORDER BY created_at DESC LIMIT ?
+            ''', (username, limit))
+        return [dict(row) for row in cursor.fetchall()]
 
 
 def db_delete_user(username: str) -> bool:
