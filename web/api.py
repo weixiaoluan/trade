@@ -2416,9 +2416,9 @@ async def generate_ai_report_with_predictions(
     
     # 等待报告完成，添加超时处理
     try:
-        report = await asyncio.wait_for(report_task, timeout=180)
+        report = await asyncio.wait_for(report_task, timeout=300)
     except asyncio.TimeoutError:
-        print(f"[AI报告] {ticker} 报告生成超时（180秒）")
+        print(f"[AI报告] {ticker} 报告生成超时（300秒）")
         raise Exception("AI报告生成超时，请稍后重试")
     except Exception as e:
         print(f"[AI报告] {ticker} 报告生成失败: {e}")
@@ -2594,88 +2594,158 @@ async def generate_ai_report(
     prompt = f"""**重要提示**: 
 1. 当前日期: {report_date} {report_time}
 2. 持有周期: **{holding_period_cn}**
-3. 请基于最新行情数据和技术指标进行深度分析{position_hint}
+3. 请基于最新行情数据、分时/日K/周K/月K等多周期技术指标进行深度分析{position_hint}
 
 {period_focus}
 
-## 标的信息
-- 代码: {symbol} | 名称: {display_name}
-- 当前价: {current_price} | 涨跌: {day_change_str}%
-- 52周高/低: {price_info.get('52_week_high', 'N/A')} / {price_info.get('52_week_low', 'N/A')}
-- 市盈率: {valuation.get('pe_ratio', 'N/A')} | 市净率: {valuation.get('price_to_book', 'N/A')}
-- 市值: {market_cap_display}
+## 标的基本信息
+- 代码: {symbol}
+- 名称: {display_name}
+- 当前价格: {current_price}
+- 日涨跌幅: {day_change_str}%
+- 52周最高: {price_info.get('52_week_high', 'N/A')}
+- 52周最低: {price_info.get('52_week_low', 'N/A')}
+- 市盈率(P/E): {valuation.get('pe_ratio', 'N/A')}
+- 市净率(P/B): {valuation.get('price_to_book', 'N/A')}
+- 市值/规模: {market_cap_display}
 
-## 技术指标数据
+## 技术指标数据（基于最新行情）
+### 趋势指标
 - MACD: {ind.get('macd', {})}
-- RSI: {ind.get('rsi', {})}
-- KDJ: {ind.get('kdj', {})}
 - 均线系统: {ind.get('moving_averages', {})}
-- 布林带: {ind.get('bollinger_bands', {})}
 - ADX趋势强度: {ind.get('adx', {})}
+
+### 震荡指标
+- RSI(14日): {ind.get('rsi', {})}
+- KDJ: {ind.get('kdj', {})}
+- Williams %R: {ind.get('williams_r', {})}
+- CCI顺势指标: {ind.get('cci', {})}
+
+### 波动与动量
+- 布林带: {ind.get('bollinger_bands', {})}
 - ATR波动率: {ind.get('atr', {})}
+- 动量指标: {ind.get('momentum', {})}
+- ROC变动率: {ind.get('roc', {})}
+
+### 量价分析
 - 成交量分析: {ind.get('volume_analysis', {})}
+- 价格位置: {ind.get('price_position', {})}
+
+### 多周期涨跌幅
+{ind.get('period_returns', {})}
 
 ## 量化分析结果
 - 综合趋势: {trend_analysis.get('trend_cn', trend_analysis.get('overall_trend', 'N/A'))}
 - 趋势强度: {trend_analysis.get('trend_strength', 'N/A')}
-- 量化评分: {quant_score}/100
+- 量化评分(0-100): {quant_score}
 - 市场状态: {regime_map.get(quant_regime, quant_regime)}
 - 波动状态: {vol_map.get(quant_vol_state, quant_vol_state)}
 - 量化建议: {reco_map.get(quant_reco_code, quant_reco_code)}
-- 多头信号: {trend_analysis.get('bullish_signals', 0)}个 | 空头信号: {trend_analysis.get('bearish_signals', 0)}个
+- 多头信号数: {trend_analysis.get('bullish_signals', 0)}
+- 空头信号数: {trend_analysis.get('bearish_signals', 0)}
+- 系统建议: {trend_analysis.get('recommendation', 'N/A')}
 
 ## 关键价位
-- 支撑位: {key_levels.get('nearest_support', 'N/A')}
-- 阻力位: {key_levels.get('nearest_resistance', 'N/A')}
+- 支撑位: {key_levels.get('nearest_support', levels.get('support_levels', 'N/A'))}
+- 阻力位: {key_levels.get('nearest_resistance', levels.get('resistance_levels', 'N/A'))}
 
 ---
-请生成**{holding_period_cn}**专业分析报告，包含以下章节：
+请生成**{holding_period_cn}**专业深度分析报告，必须包含以下完整章节：
 
 ## 一、标的概况
-用表格展示核心指标（代码、名称、价格、涨跌、市值等）
+用Markdown表格展示核心指标（代码、名称、价格、涨跌、市值、市盈率等）
 
-## 二、AI深度研判
-基于消息面、市场情绪、技术面进行综合分析：
-- 近期重大消息和政策影响
-- 市场情绪和资金动向
-- 多周期技术共振分析
-- 给出操作建议和核心逻辑
+## 二、AI深度研判（重要，请详细分析）
 
-## 三、技术指标分析
-详细分析以下指标：
-1. 趋势分析（均线系统MA5/10/20/60排列）
-2. MACD分析（DIF/DEA状态、金叉死叉）
-3. RSI分析（超买超卖、背离）
-4. KDJ分析（K/D/J三线状态）
-5. 布林带分析（价格位置、带宽）
-6. 成交量分析（量价配合）
+### 2.1 消息面分析
+- 分析该标的近期重大消息、政策影响、行业动态
+- 如果是股票，分析公司经营动态、业绩预期、管理层变动
+- 如果是ETF/基金，分析跟踪指数的行业前景、成分股变化
+- 评估消息面对短期和中期走势的影响
 
-## 四、建议买卖价格（重要）
+### 2.2 市场情绪分析
+- 根据成交量、换手率、涨跌幅判断当前市场情绪
+- 分析是否存在恐慌性抛售或过度乐观追涨
+- 评估当前价位的市场认可度
+- 判断主力资金动向（根据量价关系推断）
+
+### 2.3 多周期技术共振分析
+基于分时、日K、周K、月K等多周期数据综合研判：
+- **分时级别**: 当日走势特征、盘中支撑阻力
+- **日线级别**: 短期趋势方向、关键支撑阻力
+- **周线级别**: 中期趋势确认、重要均线位置
+- **月线级别**: 长期趋势判断、历史高低点参考
+- 分析各周期是否形成共振，共振方向是什么
+
+### 2.4 AI综合研判结论
+- 当前最佳操作策略（买入/持有/卖出/观望）
+- 操作的核心逻辑（2-3句话概括）
+- 需要关注的关键变量
+
+## 三、技术指标深度分析
+
+### 趋势类指标
+1. **趋势分析**: 当前趋势方向、趋势强度(ADX)、趋势持续时间
+2. **均线系统**: MA5/MA10/MA20/MA60排列情况，支撑压力位
+3. **MACD分析**: DIF/DEA/柱状图状态，金叉/死叉信号
+
+### 震荡类指标
+4. **RSI分析**: 当前RSI值，超买超卖区间，背离情况
+5. **KDJ分析**: K/D/J三线状态，交叉信号
+6. **Williams %R**: 威廉指标超买超卖判断
+7. **CCI分析**: 顺势指标强弱判断
+
+### 波动与动量
+8. **布林带分析**: 价格位置、带宽变化、轨道压力支撑
+9. **ATR波动率**: 日均波动幅度，风险评估
+10. **动量/ROC**: 价格动能方向和强度
+
+### 量价分析
+11. **成交量分析**: 量价配合、放量缩量、OBV能量潮趋势
+
+## 四、支撑阻力位分析
+- 列出多个支撑位和阻力位
+- 说明各价位的重要性
+- 给出突破/跌破后的应对策略
+
+## 五、建议买卖价格（重要）
 | 类型 | 价格 | 数量 | 说明 |
 |------|------|------|------|
-| **建议买入价** | ¥X.XXX | XXX股 | 基于支撑位分析 |
-| **建议卖出价** | ¥X.XXX | XXX股 | 基于阻力位分析 |
-| **止损价** | ¥X.XXX | - | 跌破此价位止损 |
-| **加仓价** | ¥X.XXX | XXX股 | 可考虑加仓价位 |
+| **建议买入价** | ¥X.XXX | XXX股 | 基于支撑位和技术分析得出 |
+| **建议卖出价** | ¥X.XXX | XXX股 | 基于阻力位和技术分析得出 |
+| **止损价** | ¥X.XXX | - | 跌破此价位建议止损 |
+| **加仓价** | ¥X.XXX | XXX股 | 如继续下跌可考虑加仓 |
 
 {f"用户持仓: {user_position}股，成本: ¥{user_cost_price}，请给出具体数量建议" if user_position and user_cost_price else "无持仓信息，买入数量建议1000股起"}
 
-## 五、价格预测
-| 周期 | 方向 | 目标价 | 置信度 |
-|------|------|--------|--------|
-| 1周 | 涨/跌 | ¥X.XX | XX% |
-| 1月 | 涨/跌 | ¥X.XX | XX% |
-| 3月 | 涨/跌 | ¥X.XX | XX% |
+## 六、多周期价格预测
+| 周期 | 预测方向 | 目标价位 | 置信度 | 关键观察点 |
+|------|----------|----------|--------|------------|
+| 1周 | 涨/跌 | ¥X.XX | XX% | ... |
+| 2周 | 涨/跌 | ¥X.XX | XX% | ... |
+| 1个月 | 涨/跌 | ¥X.XX | XX% | ... |
+| 3个月 | 涨/跌 | ¥X.XX | XX% | ... |
 
-## 六、风险提示
-列出主要风险因素
+## 七、操作建议
+根据{holding_period_cn}给出具体建议：
+- 具体买卖点位
+- 止损止盈设置
+- 仓位管理建议
 
-## 七、总结评级
+## 八、风险提示
+列出主要风险因素：
+- 技术面风险
+- 基本面风险
+- 市场系统性风险
+- 其他特定风险
+
+## 九、总结评级
 给出综合评级（强力买入/买入/持有/减持/卖出）和核心理由
 
-**要求**：
-1. 必须给出具体的建议买入价和卖出价（精确到小数点后3位）
-2. 分析要有深度，不要只是复述数据
+**重要要求**：
+1. 必须给出具体的建议买入价和卖出价数字（精确到小数点后3位）
+2. AI深度研判部分要体现专业分析能力，不要只是复述数据
+3. 使用标准Markdown格式，表格清晰，层次分明
 """
     try:
         import re
@@ -2685,12 +2755,12 @@ async def generate_ai_report(
             return client.chat.completions.create(
                 model=APIConfig.SILICONFLOW_MODEL,
                 messages=[
-                    {"role": "system", "content": "你是资深证券分析师，擅长技术分析、基本面分析和市场情绪判断。请基于数据生成专业深度的投资分析报告，重点给出建议买入价和卖出价。"},
+                    {"role": "system", "content": "你是资深证券分析师，拥有20年投资研究经验。擅长技术分析、基本面分析、消息面解读和市场情绪判断。请基于提供的数据和你的专业知识，生成专业、客观、有深度的投资分析报告。分析要有独到见解，不要只是简单复述数据。"},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=3500,
+                max_tokens=6000,
                 temperature=0.3,
-                timeout=150
+                timeout=240
             )
         
         response = await asyncio.to_thread(sync_call)
