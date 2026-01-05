@@ -2416,9 +2416,9 @@ async def generate_ai_report_with_predictions(
     
     # 等待报告完成，添加超时处理
     try:
-        report = await asyncio.wait_for(report_task, timeout=150)
+        report = await asyncio.wait_for(report_task, timeout=180)
     except asyncio.TimeoutError:
-        print(f"[AI报告] {ticker} 报告生成超时（150秒）")
+        print(f"[AI报告] {ticker} 报告生成超时（180秒）")
         raise Exception("AI报告生成超时，请稍后重试")
     except Exception as e:
         print(f"[AI报告] {ticker} 报告生成失败: {e}")
@@ -2589,46 +2589,94 @@ async def generate_ai_report(
     # 构建持仓信息提示（只有持仓和成本价都有值时才显示）
     position_hint = ""
     if user_position and user_cost_price:
-        position_hint = f"\n用户持仓: {user_position}股，成本: ¥{user_cost_price}"
+        position_hint = f"\n4. 用户持仓: {user_position}股，成本价: ¥{user_cost_price}，请据此给出买入/卖出数量建议"
     
-    prompt = f"""分析 {symbol} {display_name}，持有周期: {holding_period_cn}
-当前价: {current_price}，涨跌: {day_change_str}%
-支撑位: {key_levels.get('nearest_support', 'N/A')}，阻力位: {key_levels.get('nearest_resistance', 'N/A')}
-量化评分: {quant_score}/100，建议: {reco_map.get(quant_reco_code, quant_reco_code)}
-MACD: {ind.get('macd', {})}
-RSI: {ind.get('rsi', {})}
-{position_hint}
+    prompt = f"""**重要提示**: 
+1. 当前日期: {report_date} {report_time}
+2. 持有周期: **{holding_period_cn}**
+3. 请基于最新行情数据和技术指标进行深度分析{position_hint}
 
-请生成简洁的分析报告：
+{period_focus}
 
-## 一、概况
-| 指标 | 值 |
-|------|-----|
-| 代码 | {symbol} |
-| 名称 | {display_name} |
-| 当前价 | {current_price} |
-| 涨跌幅 | {day_change_str}% |
+## 标的信息
+- 代码: {symbol} | 名称: {display_name}
+- 当前价: {current_price} | 涨跌: {day_change_str}%
+- 52周高/低: {price_info.get('52_week_high', 'N/A')} / {price_info.get('52_week_low', 'N/A')}
+- 市盈率: {valuation.get('pe_ratio', 'N/A')} | 市净率: {valuation.get('price_to_book', 'N/A')}
+- 市值: {market_cap_display}
 
-## 二、技术分析
-简要分析趋势和关键指标
+## 技术指标数据
+- MACD: {ind.get('macd', {})}
+- RSI: {ind.get('rsi', {})}
+- KDJ: {ind.get('kdj', {})}
+- 均线系统: {ind.get('moving_averages', {})}
+- 布林带: {ind.get('bollinger_bands', {})}
+- ADX趋势强度: {ind.get('adx', {})}
+- ATR波动率: {ind.get('atr', {})}
+- 成交量分析: {ind.get('volume_analysis', {})}
 
-## 三、建议买卖价格
+## 量化分析结果
+- 综合趋势: {trend_analysis.get('trend_cn', trend_analysis.get('overall_trend', 'N/A'))}
+- 趋势强度: {trend_analysis.get('trend_strength', 'N/A')}
+- 量化评分: {quant_score}/100
+- 市场状态: {regime_map.get(quant_regime, quant_regime)}
+- 波动状态: {vol_map.get(quant_vol_state, quant_vol_state)}
+- 量化建议: {reco_map.get(quant_reco_code, quant_reco_code)}
+- 多头信号: {trend_analysis.get('bullish_signals', 0)}个 | 空头信号: {trend_analysis.get('bearish_signals', 0)}个
+
+## 关键价位
+- 支撑位: {key_levels.get('nearest_support', 'N/A')}
+- 阻力位: {key_levels.get('nearest_resistance', 'N/A')}
+
+---
+请生成**{holding_period_cn}**专业分析报告，包含以下章节：
+
+## 一、标的概况
+用表格展示核心指标（代码、名称、价格、涨跌、市值等）
+
+## 二、AI深度研判
+基于消息面、市场情绪、技术面进行综合分析：
+- 近期重大消息和政策影响
+- 市场情绪和资金动向
+- 多周期技术共振分析
+- 给出操作建议和核心逻辑
+
+## 三、技术指标分析
+详细分析以下指标：
+1. 趋势分析（均线系统MA5/10/20/60排列）
+2. MACD分析（DIF/DEA状态、金叉死叉）
+3. RSI分析（超买超卖、背离）
+4. KDJ分析（K/D/J三线状态）
+5. 布林带分析（价格位置、带宽）
+6. 成交量分析（量价配合）
+
+## 四、建议买卖价格（重要）
 | 类型 | 价格 | 数量 | 说明 |
 |------|------|------|------|
-| 建议买入价 | ¥X.XXX | XXX股 | 基于支撑位 |
-| 建议卖出价 | ¥X.XXX | XXX股 | 基于阻力位 |
-| 止损价 | ¥X.XXX | - | 跌破止损 |
+| **建议买入价** | ¥X.XXX | XXX股 | 基于支撑位分析 |
+| **建议卖出价** | ¥X.XXX | XXX股 | 基于阻力位分析 |
+| **止损价** | ¥X.XXX | - | 跌破此价位止损 |
+| **加仓价** | ¥X.XXX | XXX股 | 可考虑加仓价位 |
 
-## 四、价格预测
-| 周期 | 方向 | 目标价 |
-|------|------|--------|
-| 1周 | 涨/跌 | ¥X.XX |
-| 1月 | 涨/跌 | ¥X.XX |
+{f"用户持仓: {user_position}股，成本: ¥{user_cost_price}，请给出具体数量建议" if user_position and user_cost_price else "无持仓信息，买入数量建议1000股起"}
 
-## 五、总结
-评级和理由（一句话）
+## 五、价格预测
+| 周期 | 方向 | 目标价 | 置信度 |
+|------|------|--------|--------|
+| 1周 | 涨/跌 | ¥X.XX | XX% |
+| 1月 | 涨/跌 | ¥X.XX | XX% |
+| 3月 | 涨/跌 | ¥X.XX | XX% |
 
-要求：必须给出具体的建议买入价和卖出价（精确到小数点后3位）"""
+## 六、风险提示
+列出主要风险因素
+
+## 七、总结评级
+给出综合评级（强力买入/买入/持有/减持/卖出）和核心理由
+
+**要求**：
+1. 必须给出具体的建议买入价和卖出价（精确到小数点后3位）
+2. 分析要有深度，不要只是复述数据
+"""
     try:
         import re
 
@@ -2637,12 +2685,12 @@ RSI: {ind.get('rsi', {})}
             return client.chat.completions.create(
                 model=APIConfig.SILICONFLOW_MODEL,
                 messages=[
-                    {"role": "system", "content": "你是证券分析师，生成简洁的分析报告，重点给出建议买入价和卖出价。"},
+                    {"role": "system", "content": "你是资深证券分析师，擅长技术分析、基本面分析和市场情绪判断。请基于数据生成专业深度的投资分析报告，重点给出建议买入价和卖出价。"},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=2000,
-                temperature=0.2,
-                timeout=120
+                max_tokens=3500,
+                temperature=0.3,
+                timeout=150
             )
         
         response = await asyncio.to_thread(sync_call)

@@ -26,7 +26,7 @@ class APIConfig:
     # 硅基流动 (SiliconFlow) API - DeepSeek
     SILICONFLOW_API_KEY: str = os.getenv("SILICONFLOW_API_KEY", "")
     SILICONFLOW_BASE_URL: str = "https://api.siliconflow.cn/v1"
-    SILICONFLOW_MODEL: str = "deepseek-ai/DeepSeek-V3"  # 使用更快的 V3 模型
+    SILICONFLOW_MODEL: str = "deepseek-ai/DeepSeek-V3"  # DeepSeek V3 模型
     
     # 默认使用的 LLM 提供商: "gemini" 或 "siliconflow"
     DEFAULT_LLM_PROVIDER: str = os.getenv("DEFAULT_LLM_PROVIDER", "siliconflow")
