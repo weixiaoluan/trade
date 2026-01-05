@@ -359,16 +359,21 @@ export default function ReportPage() {
       min-height: 100vh; 
       line-height: 1.7;
     }
-    .container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+    .container { 
+      width: 100%; 
+      max-width: 100%; 
+      margin: 0; 
+      padding: 24px 40px; 
+    }
     
-    /* 头部样式 - 与页面一致 */
+    /* 头部样式 - 占满宽度 */
     .header { 
       display: flex;
       align-items: center;
       justify-content: space-between;
       margin-bottom: 24px; 
-      padding: 16px 20px; 
-      background: rgba(2, 6, 23, 0.9); 
+      padding: 16px 24px; 
+      background: rgba(15, 23, 42, 0.6); 
       border-radius: 12px; 
       border: 1px solid rgba(255, 255, 255, 0.06);
     }
@@ -394,7 +399,7 @@ export default function ReportPage() {
       color: #818cf8;
     }
     .header-title {
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 700;
       color: #fff;
       letter-spacing: 0.5px;
@@ -408,22 +413,22 @@ export default function ReportPage() {
     .header-right {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 12px;
     }
     .ticker {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-weight: 700;
       color: #818cf8;
-      font-size: 14px;
+      font-size: 16px;
     }
     .name {
-      font-size: 12px;
+      font-size: 14px;
       color: #94a3b8;
     }
     .score-badge {
-      padding: 4px 8px;
+      padding: 6px 12px;
       border-radius: 9999px;
-      font-size: 10px;
+      font-size: 12px;
       display: flex;
       align-items: center;
       gap: 4px;
@@ -433,8 +438,9 @@ export default function ReportPage() {
     .score-low { background: rgba(244, 63, 94, 0.1); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.3); }
     .score-neutral { background: rgba(100, 116, 139, 0.1); color: #cbd5e1; border: 1px solid rgba(100, 116, 139, 0.6); }
     
-    /* 报告卡片样式 - 与页面glass-card一致 */
+    /* 报告卡片样式 - 占满宽度 */
     .report-card { 
+      width: 100%;
       background: rgba(15, 23, 42, 0.4); 
       border-radius: 12px; 
       border: 1px solid rgba(255, 255, 255, 0.06);
@@ -444,7 +450,7 @@ export default function ReportPage() {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 20px;
+      padding: 16px 24px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       background: rgba(255, 255, 255, 0.02);
     }
@@ -454,8 +460,8 @@ export default function ReportPage() {
       gap: 12px;
     }
     .report-card-icon {
-      width: 32px;
-      height: 32px;
+      width: 36px;
+      height: 36px;
       background: rgba(99, 102, 241, 0.1);
       border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 8px;
@@ -465,31 +471,31 @@ export default function ReportPage() {
       box-shadow: 0 4px 6px rgba(99, 102, 241, 0.2);
     }
     .report-card-title {
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 700;
       color: #fff;
     }
     .report-card-subtitle {
-      font-size: 10px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 1px;
       color: #64748b;
     }
     .report-time {
-      font-size: 11px;
+      font-size: 13px;
       color: #64748b;
     }
     
-    /* 报告内容样式 - 与页面prose样式一致 */
+    /* 报告内容样式 - 更大的内边距 */
     .report-content {
-      padding: 24px 32px;
+      padding: 32px 40px;
       color: #cbd5e1;
-      font-size: 14px;
-      line-height: 1.75;
+      font-size: 15px;
+      line-height: 1.8;
     }
     .report-content h1 {
       color: #f1f5f9;
-      font-size: 1.5em;
+      font-size: 1.6em;
       font-weight: 800;
       margin-top: 0;
       margin-bottom: 0.8em;
@@ -497,7 +503,7 @@ export default function ReportPage() {
     }
     .report-content h2 {
       color: #f1f5f9;
-      font-size: 1.25em;
+      font-size: 1.35em;
       font-weight: 700;
       margin-top: 1.5em;
       margin-bottom: 0.75em;
@@ -505,7 +511,7 @@ export default function ReportPage() {
     }
     .report-content h3 {
       color: #e2e8f0;
-      font-size: 1.1em;
+      font-size: 1.15em;
       font-weight: 600;
       margin-top: 1.25em;
       margin-bottom: 0.5em;
@@ -543,7 +549,7 @@ export default function ReportPage() {
       text-align: left;
     }
     .report-content td {
-      padding: 8px 12px;
+      padding: 10px 16px;
       border-bottom: 1px solid rgba(51, 65, 85, 0.5);
     }
     .report-content tbody tr:last-child td {
@@ -591,7 +597,7 @@ export default function ReportPage() {
     .footer { 
       text-align: center; 
       margin-top: 32px; 
-      padding: 20px; 
+      padding: 24px 40px; 
       color: #475569; 
       font-size: 12px;
       border-top: 1px solid rgba(71, 85, 105, 0.3);
