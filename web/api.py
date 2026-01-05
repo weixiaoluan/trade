@@ -1572,6 +1572,11 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 report_data['ai_sell_price'] = ai_sell_price
                 report_data['ai_buy_quantity'] = ai_buy_quantity
                 report_data['ai_sell_quantity'] = ai_sell_quantity
+            
+            # 更新持有周期到自选列表
+            from web.database import db_update_watchlist_item
+            db_update_watchlist_item(username, original_symbol, holding_period=holding_period)
+            print(f"[周期更新] 已更新 {original_symbol} 的持有周期: {holding_period}")
         except Exception as e:
             print(f"[AI价格] 更新建议价格失败: {e}")
         
@@ -4326,6 +4331,14 @@ async def test_user_push(
         
         result = send_wechat_template_message(wechat_openid, title, content, detail_url)
         used_method = "微信公众号"
+        
+        # 如果微信推送失败，检查access_token
+        if not result:
+            access_token = get_wechat_access_token()
+            if not access_token:
+                raise HTTPException(status_code=500, detail="微信公众号推送失败：无法获取access_token，请检查AppID和AppSecret配置")
+            else:
+                raise HTTPException(status_code=500, detail="微信公众号推送失败：请检查OpenID是否正确，或模板ID是否有效")
     
     elif push_type == "pushplus" or push_type == "auto":
         # PushPlus 推送
