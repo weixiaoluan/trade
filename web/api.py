@@ -1403,6 +1403,8 @@ async def get_report_detail(symbol: str, authorization: str = Header(None)):
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
+    # 统一转为大写，与保存时保持一致
+    symbol = symbol.upper()
     report = get_user_report(user['username'], symbol)
     
     if not report:
@@ -1462,6 +1464,8 @@ async def delete_report(symbol: str, authorization: str = Header(None)):
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
+    # 统一转为大写，与保存时保持一致
+    symbol = symbol.upper()
     success = delete_user_report(user['username'], symbol)
     
     if not success:
