@@ -1423,14 +1423,19 @@ async def get_report_detail(symbol: str, authorization: str = Header(None)):
     
     # 统一转为大写，与保存时保持一致
     symbol = symbol.upper()
+    print(f"[报告查询] 原始symbol: {symbol}")
+    
     # symbol已经是URL规范化格式（点号已替换为下划线），直接使用
     report = get_user_report(user['username'], symbol)
+    print(f"[报告查询] 使用 {symbol} 查询结果: {'找到' if report else '未找到'}")
     
     if not report:
         # 尝试还原点号格式再查询一次（兼容旧数据）
         original_symbol = restore_symbol_from_url(symbol)
+        print(f"[报告查询] 还原后symbol: {original_symbol}")
         if original_symbol != symbol:
             report = get_user_report(user['username'], original_symbol)
+            print(f"[报告查询] 使用 {original_symbol} 查询结果: {'找到' if report else '未找到'}")
     
     if not report:
         raise HTTPException(status_code=404, detail="未找到该标的的报告")
@@ -1917,6 +1922,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         
         # 保存报告时使用规范化的symbol（点号替换为下划线）
         save_symbol = normalize_symbol_for_url(original_symbol)
+        print(f"[报告保存] 原始symbol: {original_symbol}, 规范化后: {save_symbol}")
         save_user_report(username, save_symbol, report_data)
         
         # 从报告中提取AI建议价格并更新到自选列表
