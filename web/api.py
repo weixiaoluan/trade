@@ -1471,9 +1471,23 @@ def clean_nan_values(obj):
 
 
 @app.get("/api/share/report/{symbol}")
-async def get_shared_report(symbol: str):
-    """获取公开分享的报告（无需登录）"""
+async def get_shared_report(symbol: str, authorization: str = Header(None)):
+    """获取分享的报告（需要登录且审核通过）"""
     from web.database import get_db
+    
+    # 验证登录状态
+    if not authorization:
+        raise HTTPException(status_code=401, detail="请先登录后查看")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    # 验证用户是否审核通过
+    if not is_approved(user) and not is_admin(user):
+        raise HTTPException(status_code=403, detail="您的账户正在审核中，审核通过后即可查看")
     
     symbol = symbol.upper()
     # 尝试两种格式查询（下划线格式和点号格式）

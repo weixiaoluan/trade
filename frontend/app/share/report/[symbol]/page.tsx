@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, memo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { FileText, AlertCircle, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { FileText, AlertCircle, TrendingUp, TrendingDown, Minus, LogIn } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -57,6 +57,7 @@ const ReportSkeleton = memo(() => (
 ));
 
 export default function ShareReportPage() {
+  const router = useRouter();
   const params = useParams();
   // 解码URL中的symbol参数，处理特殊字符如 SPAX.PVT
   const symbol = decodeURIComponent(params.symbol as string);
@@ -64,8 +65,11 @@ export default function ShareReportPage() {
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<'auth' | 'pending' | 'notfound' | 'other'>('other');
   const [activeHorizon, setActiveHorizon] = useState<'short' | 'mid' | 'long' | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+
+  const getToken = () => localStorage.getItem("token");
 
   // 检测设备类型
   useEffect(() => {
@@ -79,20 +83,42 @@ export default function ShareReportPage() {
 
   useEffect(() => {
     const fetchReport = async () => {
+      const token = getToken();
+      
+      // 检查是否登录
+      if (!token) {
+        setError("请先登录后查看报告");
+        setErrorType('auth');
+        setLoading(false);
+        return;
+      }
+
       try {
-        // 使用公开API获取报告
+        // 需要带 token 访问
         const response = await fetch(
-          `${API_BASE}/api/share/report/${encodeURIComponent(symbol)}`
+          `${API_BASE}/api/share/report/${encodeURIComponent(symbol)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
         );
 
         if (!response.ok) {
-          throw new Error("报告不存在或已被删除");
+          if (response.status === 401) {
+            setError("请先登录后查看报告");
+            setErrorType('auth');
+          } else if (response.status === 403) {
+            setError("您的账户正在审核中，审核通过后即可查看");
+            setErrorType('pending');
+          } else {
+            setError("报告不存在或已被删除");
+            setErrorType('notfound');
+          }
+          return;
         }
 
         const data = await response.json();
         setReport(data.report);
       } catch (err: any) {
-        setError(err.message);
+        setError(err.message || "加载失败");
+        setErrorType('other');
       } finally {
         setLoading(false);
       }
@@ -201,10 +227,34 @@ export default function ShareReportPage() {
   if (error) {
     return (
       <main className="min-h-screen bg-[#020617] flex items-center justify-center px-4">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 sm:w-16 sm:h-16 text-rose-400 mx-auto mb-4" />
-          <p className="text-slate-300 mb-4 text-sm sm:text-base">{error}</p>
-          <p className="text-slate-500 text-xs">该报告可能已过期或不存在</p>
+        <div className="text-center max-w-md">
+          {errorType === 'auth' ? (
+            <>
+              <LogIn className="w-12 h-12 sm:w-16 sm:h-16 text-indigo-400 mx-auto mb-4" />
+              <p className="text-slate-300 mb-4 text-sm sm:text-base">{error}</p>
+              <button
+                onClick={() => router.push('/login')}
+                className="px-6 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors"
+              >
+                立即登录
+              </button>
+              <p className="text-slate-500 text-xs mt-4">
+                还没有账号？<a href="/register" className="text-indigo-400 hover:underline">立即注册</a>
+              </p>
+            </>
+          ) : errorType === 'pending' ? (
+            <>
+              <AlertCircle className="w-12 h-12 sm:w-16 sm:h-16 text-amber-400 mx-auto mb-4" />
+              <p className="text-slate-300 mb-4 text-sm sm:text-base">{error}</p>
+              <p className="text-slate-500 text-xs">请耐心等待管理员审核</p>
+            </>
+          ) : (
+            <>
+              <AlertCircle className="w-12 h-12 sm:w-16 sm:h-16 text-rose-400 mx-auto mb-4" />
+              <p className="text-slate-300 mb-4 text-sm sm:text-base">{error}</p>
+              <p className="text-slate-500 text-xs">该报告可能已过期或不存在</p>
+            </>
+          )}
         </div>
       </main>
     );
