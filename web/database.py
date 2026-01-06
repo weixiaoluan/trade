@@ -970,6 +970,31 @@ def db_remove_ai_pick(symbol: str) -> bool:
         return cursor.rowcount > 0
 
 
+def db_update_ai_pick(symbol: str, name: str = None, type_: str = None) -> bool:
+    """更新 AI 优选标的的名称和类型"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        updates = []
+        params = []
+        
+        if name:
+            updates.append("name = ?")
+            params.append(name)
+        if type_:
+            updates.append("type = ?")
+            params.append(type_)
+        
+        if not updates:
+            return False
+        
+        params.append(symbol.upper())
+        cursor.execute(f'''
+            UPDATE ai_picks SET {", ".join(updates)}
+            WHERE symbol = ?
+        ''', params)
+        return cursor.rowcount > 0
+
+
 def db_is_ai_pick(symbol: str) -> bool:
     """检查是否是 AI 优选标的"""
     with get_db() as conn:

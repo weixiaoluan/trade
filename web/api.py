@@ -1089,6 +1089,7 @@ class AiPickItem(BaseModel):
 @app.post("/api/ai-picks")
 async def add_ai_pick(
     item: AiPickItem,
+    background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
     """添加 AI 优选（仅管理员）"""
@@ -1104,13 +1105,83 @@ async def add_ai_pick(
     if not is_admin(user):
         raise HTTPException(status_code=403, detail="无权限操作")
     
+    # 快速识别类型（不调用外部API）
+    symbol = item.symbol.upper().strip()
+    name = item.name or symbol
+    asset_type = item.type or 'stock'
+    
+    if symbol.isdigit() and len(symbol) == 6:
+        # 中国标的快速识别
+        if symbol.startswith(('510', '511', '512', '513', '515', '516', '517', '518', '520', '560', '561', '562', '563', '588')) or symbol.startswith('159'):
+            asset_type = 'etf'
+        elif symbol.startswith('16'):
+            asset_type = 'lof'
+        elif symbol.startswith(('6', '000', '001', '002', '003', '300', '301', '688')):
+            asset_type = 'stock'
+        else:
+            asset_type = 'fund'
+    
     from web.database import db_add_ai_pick
-    success = db_add_ai_pick(item.symbol, item.name, item.type, user['username'])
+    success = db_add_ai_pick(symbol, name, asset_type, user['username'])
     
     if success:
-        return {"status": "success", "message": f"{item.symbol} 已添加到 AI 优选"}
+        # 后台异步获取名称和更精确的类型
+        background_tasks.add_task(update_ai_pick_name_and_type, symbol)
+        return {"status": "success", "message": f"{symbol} 已添加到 AI 优选"}
     else:
         return {"status": "error", "message": "添加失败"}
+
+
+def update_ai_pick_name_and_type(symbol: str):
+    """后台任务：更新 AI 优选标的的名称和类型"""
+    try:
+        from tools.data_fetcher import get_stock_info
+        from web.database import db_update_ai_pick
+        
+        # 获取股票信息
+        stock_info_result = get_stock_info(symbol)
+        info_dict = json.loads(stock_info_result)
+        
+        if info_dict.get('status') == 'success':
+            basic_info = info_dict.get('basic_info', {})
+            name = basic_info.get('name', '')
+            quote_type = basic_info.get('quote_type', '').upper()
+            
+            # 如果名称为空或者是默认名称，尝试其他方式获取
+            if not name or name == symbol or name.startswith('股票 ') or name.startswith('ETF ') or name.startswith('基金 ') or name.startswith('LOF '):
+                # 尝试从 fund_info 获取（场外基金）
+                fund_info = info_dict.get('fund_info', {})
+                if fund_info.get('name'):
+                    name = fund_info.get('name')
+                # 尝试从 etf_specific 获取
+                etf_info = info_dict.get('etf_specific', {})
+                if etf_info.get('tracking_index') and not name:
+                    name = etf_info.get('tracking_index')
+            
+            # 根据 quote_type 确定类型
+            asset_type = None
+            if quote_type in ('ETF', 'EXCHANGETRADEDFUND'):
+                asset_type = 'etf'
+            elif quote_type == 'LOF':
+                asset_type = 'lof'
+            elif quote_type in ('MUTUALFUND', 'FUND'):
+                asset_type = 'fund'
+            elif quote_type in ('EQUITY', 'STOCK'):
+                asset_type = 'stock'
+            
+            # 更新数据库
+            if name and name != symbol and not name.startswith('股票 ') and not name.startswith('ETF ') and not name.startswith('基金 ') and not name.startswith('LOF '):
+                db_update_ai_pick(symbol, name=name, type_=asset_type)
+                print(f"[AI Picks] 更新 {symbol}: name={name}, type={asset_type}")
+            elif asset_type:
+                db_update_ai_pick(symbol, type_=asset_type)
+                print(f"[AI Picks] 更新 {symbol}: type={asset_type}")
+            else:
+                print(f"[AI Picks] {symbol} 无需更新")
+        else:
+            print(f"[AI Picks] 获取 {symbol} 信息失败: {info_dict.get('message', '未知错误')}")
+    except Exception as e:
+        print(f"[AI Picks] 获取 {symbol} 信息失败: {e}")
 
 
 @app.post("/api/ai-picks/batch")

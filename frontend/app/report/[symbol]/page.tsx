@@ -1020,6 +1020,13 @@ export default function ReportPage() {
                   </ReactMarkdown>
                 </div>
               </div>
+              
+              {/* 免责声明 */}
+              <div className="px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 pt-2 border-t border-white/[0.06]">
+                <p className="text-xs sm:text-sm text-slate-500 text-center">
+                  本报告由 AI 多智能体系统生成，仅供参考，不构成投资建议。投资有风险，入市需谨慎。
+                </p>
+              </div>
             </div>
           </div>
         </div>
