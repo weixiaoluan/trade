@@ -252,6 +252,15 @@ export default function DashboardPage() {
   const [selectedAiPicks, setSelectedAiPicks] = useState<Set<string>>(new Set());
   const [addAsAiPick, setAddAsAiPick] = useState(false);  // 添加自选时是否同时添加为AI优选
 
+  // 计算用户还没有添加到自选的 AI 优选标的
+  const availableAiPicks = useMemo(() => {
+    const watchlistSymbols = new Set(watchlist.map(item => item.symbol.toUpperCase()));
+    return aiPicks.filter(pick => !watchlistSymbols.has(pick.symbol.toUpperCase()));
+  }, [aiPicks, watchlist]);
+
+  // 新增的 AI 优选数量（用于角标显示）
+  const newAiPicksCount = availableAiPicks.length;
+
   const getToken = useCallback(() => localStorage.getItem("token"), []);
 
   const tasksRef = useRef(tasks);
@@ -635,15 +644,15 @@ export default function DashboardPage() {
     });
   }, []);
 
-  // 全选/取消全选 AI 优选
+  // 全选/取消全选 AI 优选（只针对可用的，即用户还没添加到自选的）
   const toggleSelectAllAiPicks = useCallback(() => {
     setSelectedAiPicks(prev => {
-      if (prev.size === aiPicks.length) {
+      if (prev.size === availableAiPicks.length) {
         return new Set();
       }
-      return new Set(aiPicks.map(p => p.symbol));
+      return new Set(availableAiPicks.map(p => p.symbol));
     });
-  }, [aiPicks]);
+  }, [availableAiPicks]);
 
   // 添加选中的 AI 优选到自选
   const handleAddAiPicksToWatchlist = useCallback(async () => {
@@ -652,7 +661,7 @@ export default function DashboardPage() {
       return;
     }
 
-    const items = aiPicks
+    const items = availableAiPicks
       .filter(p => selectedAiPicks.has(p.symbol))
       .map(p => ({ symbol: p.symbol, name: p.name, type: p.type }));
 
@@ -688,7 +697,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAiPicks, aiPicks, getToken, fetchWatchlist, showAlertModal]);
+  }, [selectedAiPicks, availableAiPicks, getToken, fetchWatchlist, showAlertModal]);
 
   // 添加标的为 AI 优选（管理员）
   const handleAddToAiPicks = useCallback(async (symbol: string, name: string, type: string) => {
@@ -741,6 +750,8 @@ export default function DashboardPage() {
     if (authChecked) {
       // 初始加载 - 一次性获取所有数据
       fetchDashboardInit();
+      // 获取 AI 优选列表（用于显示角标）
+      fetchAiPicks();
 
       // 根据是否有活跃任务调整轮询频率
       // 有活跃任务时3秒轮询，无活跃任务时30秒轮询
@@ -753,7 +764,7 @@ export default function DashboardPage() {
 
       return () => clearInterval(interval);
     }
-  }, [authChecked, fetchDashboardInit, fetchTasks, hasActiveTasks]);
+  }, [authChecked, fetchDashboardInit, fetchTasks, fetchAiPicks, hasActiveTasks]);
 
   useEffect(() => {
     if (authChecked && watchlist.length > 0) {
@@ -1875,11 +1886,17 @@ export default function DashboardPage() {
               {/* AI 优选按钮 */}
               <button
                 onClick={handleOpenAiPicks}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded-lg text-xs sm:text-sm hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
+                className="relative flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded-lg text-xs sm:text-sm hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
                 title="AI 优选"
               >
                 <Sparkles className="w-4 h-4" />
                 <span className="hidden sm:inline">AI 优选</span>
+                {/* 新增数量角标 */}
+                {newAiPicksCount > 0 && (
+                  <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg">
+                    +{newAiPicksCount > 99 ? '99' : newAiPicksCount}
+                  </span>
+                )}
               </button>
               {/* 设置按钮 */}
               <button
@@ -3732,10 +3749,11 @@ export default function DashboardPage() {
                 <div className="flex-1 flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
                 </div>
-              ) : aiPicks.length === 0 ? (
+              ) : availableAiPicks.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-500">
                   <Sparkles className="w-12 h-12 mb-3 opacity-30" />
-                  <p>暂无 AI 优选标的</p>
+                  <p>暂无新的 AI 优选标的</p>
+                  <p className="text-xs mt-1">您已添加所有推荐标的到自选</p>
                 </div>
               ) : (
                 <>
@@ -3745,7 +3763,7 @@ export default function DashboardPage() {
                       onClick={toggleSelectAllAiPicks}
                       className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200"
                     >
-                      {selectedAiPicks.size === aiPicks.length ? (
+                      {selectedAiPicks.size === availableAiPicks.length ? (
                         <CheckSquare className="w-4 h-4 text-amber-400" />
                       ) : (
                         <Square className="w-4 h-4" />
@@ -3753,13 +3771,13 @@ export default function DashboardPage() {
                       全选
                     </button>
                     <span className="text-xs text-slate-500">
-                      已选 {selectedAiPicks.size}/{aiPicks.length}
+                      已选 {selectedAiPicks.size}/{availableAiPicks.length}
                     </span>
                   </div>
 
                   {/* 列表 */}
                   <div className="flex-1 overflow-y-auto space-y-2 mb-4">
-                    {aiPicks.map((pick) => (
+                    {availableAiPicks.map((pick) => (
                       <div
                         key={pick.symbol}
                         className={`p-3 rounded-xl transition-all cursor-pointer ${
