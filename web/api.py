@@ -3343,7 +3343,7 @@ async def generate_ai_report(
                             {"role": "system", "content": "你是资深证券分析师。请基于数据生成专业、简洁的投资分析报告。"},
                             {"role": "user", "content": prompt}
                         ],
-                        max_tokens=3000,  # 减少token数量加快生成速度
+                        max_tokens=4000,  # token数量
                         temperature=0.3,
                         stream=True,  # 启用流式输出
                         timeout=300  # 5分钟超时
