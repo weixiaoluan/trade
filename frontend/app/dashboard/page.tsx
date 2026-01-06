@@ -2926,6 +2926,13 @@ export default function DashboardPage() {
 
               <p className="text-slate-500 text-xs sm:text-sm mb-4">请选择要添加到自选的标的</p>
 
+              {/* 免责提示 */}
+              <div className="mb-4 p-2.5 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                <p className="text-amber-400/80 text-[10px] sm:text-xs leading-relaxed">
+                  ⚠️ 本功能仅用于从图片中提取证券代码，便于添加到研究列表。识别结果不代表任何投资建议或推荐。
+                </p>
+              </div>
+
               <div className="flex-1 overflow-y-auto space-y-2 sm:space-y-3 mb-4">
                 {ocrResults.map((item, index) => (
                   <div

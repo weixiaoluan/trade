@@ -50,6 +50,7 @@ export default function DisclaimerPage() {
                 <p>2. AI生成的所有内容仅为技术分析结果的文字化呈现，不代表任何投资观点或建议。</p>
                 <p>3. AI模型可能存在错误、偏差或幻觉，生成内容仅供学习参考，不应作为投资决策依据。</p>
                 <p>4. 所谓"参考价位"、"技术评级"等均为基于技术指标的数学计算结果，不构成买卖建议。</p>
+                <p>5. 图片识别功能仅用于从图片中提取证券代码，便于添加到研究列表，不代表对任何标的的推荐或建议。</p>
               </div>
             </section>
 
@@ -76,18 +77,42 @@ export default function DisclaimerPage() {
               </div>
             </section>
 
+            {/* 禁止行为 */}
+            <section>
+              <h2 className="text-lg font-semibold text-slate-200 mb-3">六、禁止行为</h2>
+              <div className="space-y-2 pl-4 border-l-2 border-rose-500/30 bg-rose-500/5 p-4 rounded-r-lg">
+                <p className="text-rose-300 font-medium">⚠️ 以下行为严格禁止：</p>
+                <p>1. 将本工具生成的分析报告用于商业传播、销售或牟利。</p>
+                <p>2. 向不特定第三人公开分享、转发或传播分析报告。</p>
+                <p>3. 以任何形式向他人提供投资咨询、推荐或指导服务。</p>
+                <p>4. 将本工具的输出内容作为投资建议向他人推荐。</p>
+                <p>5. 利用本工具从事任何违反法律法规的活动。</p>
+                <p className="text-amber-300 mt-3">违反上述规定的，本工具有权立即停止服务、注销账户并清除所有数据，且不承担任何责任。</p>
+              </div>
+            </section>
+
             {/* 知识产权 */}
             <section>
-              <h2 className="text-lg font-semibold text-slate-200 mb-3">六、知识产权</h2>
+              <h2 className="text-lg font-semibold text-slate-200 mb-3">七、知识产权</h2>
               <div className="space-y-2 pl-4 border-l-2 border-indigo-500/30">
                 <p>1. 本工具的代码、界面设计等知识产权归开发者所有。</p>
                 <p>2. 用户生成的分析报告仅供个人使用，不得用于商业传播。</p>
               </div>
             </section>
 
-            {/* 联系方式 */}
+            {/* 账户管理 */}
             <section>
-              <h2 className="text-lg font-semibold text-slate-200 mb-3">七、其他</h2>
+              <h2 className="text-lg font-semibold text-slate-200 mb-3">八、账户管理</h2>
+              <div className="space-y-2 pl-4 border-l-2 border-indigo-500/30">
+                <p>1. 管理员有权对违规用户进行警告、限制功能或注销账户处理。</p>
+                <p>2. 账户注销后，该账户下的所有数据（包括自选列表、分析报告、提醒设置等）将被永久删除且无法恢复。</p>
+                <p>3. 用户可主动申请注销账户，注销后数据同样将被永久删除。</p>
+              </div>
+            </section>
+
+            {/* 其他 */}
+            <section>
+              <h2 className="text-lg font-semibold text-slate-200 mb-3">九、其他</h2>
               <div className="space-y-2 pl-4 border-l-2 border-indigo-500/30">
                 <p>1. 本协议的解释权归本工具开发者所有。</p>
                 <p>2. 如有任何争议，应友好协商解决。</p>

@@ -902,7 +902,7 @@ async def recognize_stocks_from_images(
     files: List[UploadFile] = File(...),
     authorization: str = Header(None)
 ):
-    """从多张图片识别股票代码（最多10张）"""
+    """从多张图片识别证券代码（最多10张）- 仅用于代码提取，不构成任何投资建议"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -939,20 +939,21 @@ async def recognize_stocks_from_images(
                         seen_symbols.add(symbol)
                         all_recognized.append(item)
         
-        print(f"OCR 识别完成，共识别到 {len(all_recognized)} 个标的")
+        print(f"[代码识别] 完成，共识别到 {len(all_recognized)} 个代码")
         
         return {
             "status": "success",
             "recognized": all_recognized,
-            "image_count": len(files)
+            "image_count": len(files),
+            "disclaimer": "本功能仅用于从图片中提取证券代码，便于添加到研究列表。识别结果不代表任何投资建议或推荐，请自行判断是否添加到自选进行研究。"
         }
     except Exception as e:
-        print(f"OCR 识别失败: {e}")
+        print(f"[代码识别] 失败: {e}")
         raise HTTPException(status_code=500, detail=f"图片识别失败: {str(e)}")
 
 
 async def recognize_stocks_with_ai(base64_image: str, content_type: str) -> List[Dict]:
-    """使用 AI 识别图片中的股票代码"""
+    """使用 AI 识别图片中的证券代码 - 仅提取代码，不做任何投资判断"""
     from openai import OpenAI
     import httpx
     import os
@@ -976,7 +977,10 @@ async def recognize_stocks_with_ai(base64_image: str, content_type: str) -> List
         http_client=http_client
     )
     
-    prompt = """请仔细分析这张图片，识别出其中所有的股票、ETF、基金代码和名称。
+    # 优化后的提示词 - 强调仅做代码提取，不涉及投资建议
+    prompt = """请从这张图片中提取所有出现的证券代码（股票、ETF、基金）。
+
+注意：这是一个纯粹的代码提取任务，仅识别图片中出现的代码和名称，不做任何投资相关的判断或建议。
 
 请按以下JSON格式返回识别结果（只返回JSON，不要其他内容）：
 ```json
@@ -987,15 +991,17 @@ async def recognize_stocks_with_ai(base64_image: str, content_type: str) -> List
 ]
 ```
 
-识别规则：
+代码格式规则：
 1. A股代码为6位数字（如600519、000001）
 2. ETF代码为6位数字（如510300、159915）
 3. 美股代码为英文字母（如AAPL、TSLA）
-4. 基金代码为6位数字（如000001基金）
+4. 基金代码为6位数字
 5. 如果无法确定名称，name可以为空字符串
 6. type可以是：stock（股票）、etf、fund（基金）
 
-如果图片中没有股票代码，返回空数组：[]"""
+重要：只提取代码信息，不要对图片中可能出现的任何"推荐"、"建议"等内容做任何判断或转述。
+
+如果图片中没有证券代码，返回空数组：[]"""
 
     try:
         # 尝试使用支持视觉的模型
