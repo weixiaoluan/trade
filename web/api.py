@@ -1059,7 +1059,7 @@ async def get_ai_picks(
     background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
-    """获取 AI 优选列表（所有已审核用户可见）"""
+    """获取 AI 优选列表（用户看到的是排除已处理的，管理员看到全部）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1073,8 +1073,13 @@ async def get_ai_picks(
     if not is_approved(user):
         raise HTTPException(status_code=403, detail="账户待审核，暂无权限查看")
     
-    from web.database import db_get_ai_picks
-    picks = db_get_ai_picks()
+    # 管理员看到全部，普通用户看到排除已处理的
+    if is_admin(user):
+        from web.database import db_get_ai_picks
+        picks = db_get_ai_picks()
+    else:
+        from web.database import db_get_ai_picks_for_user
+        picks = db_get_ai_picks_for_user(user['username'])
     
     # 检查是否有需要更新名称的标的（名称为空或等于代码）
     for pick in picks:
@@ -1083,8 +1088,88 @@ async def get_ai_picks(
     
     return {
         "status": "success",
-        "picks": picks
+        "picks": picks,
+        "is_admin": is_admin(user)
     }
+
+
+@app.post("/api/ai-picks/dismiss")
+async def dismiss_ai_pick(
+    data: dict,
+    authorization: str = Header(None)
+):
+    """用户标记 AI 优选标的为已处理（从列表中移除）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_approved(user):
+        raise HTTPException(status_code=403, detail="账户待审核，暂无权限操作")
+    
+    symbol = data.get('symbol', '').upper()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="请提供标的代码")
+    
+    from web.database import db_dismiss_ai_pick
+    db_dismiss_ai_pick(user['username'], symbol)
+    
+    return {"status": "success", "message": f"{symbol} 已从 AI 优选中移除"}
+
+
+@app.post("/api/ai-picks/dismiss-batch")
+async def dismiss_ai_picks_batch(
+    data: dict,
+    authorization: str = Header(None)
+):
+    """用户批量标记 AI 优选标的为已处理"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_approved(user):
+        raise HTTPException(status_code=403, detail="账户待审核，暂无权限操作")
+    
+    symbols = data.get('symbols', [])
+    if not symbols:
+        raise HTTPException(status_code=400, detail="请提供标的代码列表")
+    
+    from web.database import db_dismiss_ai_picks_batch
+    count = db_dismiss_ai_picks_batch(user['username'], symbols)
+    
+    return {"status": "success", "message": f"已移除 {count} 个标的", "count": count}
+
+
+@app.post("/api/ai-picks/dismiss-all")
+async def dismiss_all_ai_picks(
+    authorization: str = Header(None)
+):
+    """用户清空所有 AI 优选"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_approved(user):
+        raise HTTPException(status_code=403, detail="账户待审核，暂无权限操作")
+    
+    from web.database import db_dismiss_all_ai_picks
+    count = db_dismiss_all_ai_picks(user['username'])
+    
+    return {"status": "success", "message": f"已清空 {count} 个标的", "count": count}
 
 
 @app.post("/api/ai-picks/refresh")

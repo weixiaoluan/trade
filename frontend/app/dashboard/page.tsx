@@ -678,9 +678,22 @@ export default function DashboardPage() {
 
       if (response.ok) {
         const data = await response.json();
+        
+        // 标记这些标的为已处理（用户不再看到）
+        const symbolsToDissmiss = items.map(i => i.symbol);
+        await fetch(`${API_BASE}/api/ai-picks/dismiss-batch`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ symbols: symbolsToDissmiss }),
+        });
+        
         setShowAiPicksModal(false);
         setSelectedAiPicks(new Set());
         fetchWatchlist();
+        fetchAiPicks();  // 刷新 AI 优选列表
         
         if (data.skipped && data.skipped.length > 0) {
           showAlertModal(
@@ -697,7 +710,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAiPicks, availableAiPicks, getToken, fetchWatchlist, showAlertModal]);
+  }, [selectedAiPicks, availableAiPicks, getToken, fetchWatchlist, fetchAiPicks, showAlertModal]);
 
   // 添加标的为 AI 优选（管理员）
   const handleAddToAiPicks = useCallback(async (symbol: string, name: string, type: string) => {
@@ -722,7 +735,7 @@ export default function DashboardPage() {
     }
   }, [getToken, showAlertModal]);
 
-  // 从 AI 优选移除（管理员）
+  // 从 AI 优选移除（管理员 - 全局删除）
   const handleRemoveFromAiPicks = useCallback(async (symbol: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/ai-picks/${encodeURIComponent(symbol)}`, {
@@ -731,7 +744,7 @@ export default function DashboardPage() {
       });
 
       if (response.ok) {
-        showAlertModal("移除成功", `${symbol} 已从 AI 优选移除`, "success");
+        showAlertModal("移除成功", `${symbol} 已从 AI 优选移除（全局）`, "success");
         fetchAiPicks();
       } else {
         const data = await response.json();
@@ -739,6 +752,88 @@ export default function DashboardPage() {
       }
     } catch (error) {
       showAlertModal("移除失败", "网络错误，请稍后重试", "error");
+    }
+  }, [getToken, showAlertModal, fetchAiPicks]);
+
+  // 用户从 AI 优选中移除单个标的（仅对自己隐藏）
+  const handleDismissAiPick = useCallback(async (symbol: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/ai-picks/dismiss`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ symbol }),
+      });
+
+      if (response.ok) {
+        fetchAiPicks();
+      } else {
+        const data = await response.json();
+        showAlertModal("移除失败", data.detail || "移除失败", "error");
+      }
+    } catch (error) {
+      showAlertModal("移除失败", "网络错误，请稍后重试", "error");
+    }
+  }, [getToken, showAlertModal, fetchAiPicks]);
+
+  // 用户批量移除选中的 AI 优选
+  const handleDismissSelectedAiPicks = useCallback(async () => {
+    if (selectedAiPicks.size === 0) {
+      showAlertModal("请选择标的", "请至少选择一个标的", "warning");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/ai-picks/dismiss-batch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ symbols: Array.from(selectedAiPicks) }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedAiPicks(new Set());
+        fetchAiPicks();
+        showAlertModal("移除成功", `已移除 ${data.count || selectedAiPicks.size} 个标的`, "success");
+      } else {
+        const data = await response.json();
+        showAlertModal("移除失败", data.detail || "移除失败", "error");
+      }
+    } catch (error) {
+      showAlertModal("移除失败", "网络错误，请稍后重试", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedAiPicks, getToken, showAlertModal, fetchAiPicks]);
+
+  // 用户清空所有 AI 优选
+  const handleDismissAllAiPicks = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/ai-picks/dismiss-all`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedAiPicks(new Set());
+        fetchAiPicks();
+        showAlertModal("清空成功", `已清空 ${data.count || 0} 个标的`, "success");
+      } else {
+        const data = await response.json();
+        showAlertModal("清空失败", data.detail || "清空失败", "error");
+      }
+    } catch (error) {
+      showAlertModal("清空失败", "网络错误，请稍后重试", "error");
+    } finally {
+      setLoading(false);
     }
   }, [getToken, showAlertModal, fetchAiPicks]);
 
@@ -3800,45 +3895,79 @@ export default function DashboardPage() {
                               <span className="font-mono font-semibold text-white text-sm">{pick.symbol}</span>
                               {pick.type && (
                                 <span className="px-1.5 py-0.5 text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded">
-                                  {pick.type === "stock" ? "股票" : pick.type === "etf" ? "ETF" : "基金"}
+                                  {pick.type === "stock" ? "股票" : pick.type === "etf" ? "ETF" : pick.type === "lof" ? "LOF" : "基金"}
                                 </span>
                               )}
                             </div>
-                            {pick.name && (
+                            {pick.name && pick.name !== pick.symbol && (
                               <div className="text-xs text-slate-500 truncate mt-0.5">{pick.name}</div>
                             )}
                           </div>
-                          {/* 管理员可以删除 */}
-                          {user?.role === 'admin' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
+                          {/* 删除按钮 - 管理员全局删除，普通用户仅隐藏 */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (user?.role === 'admin') {
                                 handleRemoveFromAiPicks(pick.symbol);
-                              }}
-                              className="p-1.5 hover:bg-rose-500/20 rounded-lg text-slate-500 hover:text-rose-400 transition-all"
-                              title="从 AI 优选移除"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                              } else {
+                                handleDismissAiPick(pick.symbol);
+                              }
+                            }}
+                            className="p-1.5 hover:bg-rose-500/20 rounded-lg text-slate-500 hover:text-rose-400 transition-all"
+                            title={user?.role === 'admin' ? "全局删除" : "不再显示"}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* 添加按钮 */}
-                  <button
-                    onClick={handleAddAiPicksToWatchlist}
-                    disabled={loading || selectedAiPicks.size === 0}
-                    className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base flex items-center justify-center gap-2 font-medium"
-                  >
-                    {loading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Plus className="w-4 h-4" />
-                    )}
-                    添加到自选 ({selectedAiPicks.size})
-                  </button>
+                  {/* 操作按钮区域 */}
+                  <div className="space-y-2">
+                    {/* 添加到自选按钮 */}
+                    <button
+                      onClick={handleAddAiPicksToWatchlist}
+                      disabled={loading || selectedAiPicks.size === 0}
+                      className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base flex items-center justify-center gap-2 font-medium"
+                    >
+                      {loading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
+                      添加到自选 ({selectedAiPicks.size})
+                    </button>
+                    
+                    {/* 批量删除和清空按钮 */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDismissSelectedAiPicks}
+                        disabled={loading || selectedAiPicks.size === 0}
+                        className="flex-1 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl disabled:opacity-50 text-sm flex items-center justify-center gap-1.5 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {user?.role === 'admin' ? '批量删除' : '批量移除'} ({selectedAiPicks.size})
+                      </button>
+                      <button
+                        onClick={() => {
+                          showConfirmModal(
+                            user?.role === 'admin' ? "确认清空全部？" : "确认清空？",
+                            user?.role === 'admin' 
+                              ? "此操作将删除所有 AI 优选标的（全局生效），确定继续吗？" 
+                              : "清空后这些标的将不再显示，除非管理员重新添加。确定继续吗？",
+                            handleDismissAllAiPicks,
+                            "warning"
+                          );
+                        }}
+                        disabled={loading || availableAiPicks.length === 0}
+                        className="py-2 px-4 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-xl disabled:opacity-50 text-sm flex items-center justify-center gap-1.5 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        清空
+                      </button>
+                    </div>
+                  </div>
                 </>
               )}
             </motion.div>

@@ -286,6 +286,20 @@ def migrate_database():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_picks_symbol ON ai_picks(symbol)')
         print("迁移: AI 优选表已创建/检查完成")
         
+        # 创建用户已处理的 AI 优选表（用户添加到自选或手动删除的标的）
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_dismissed_ai_picks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                dismissed_at TEXT NOT NULL,
+                UNIQUE(username, symbol),
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_dismissed_ai_picks ON user_dismissed_ai_picks(username, symbol)')
+        print("迁移: 用户已处理 AI 优选表已创建/检查完成")
+        
         conn.commit()
         print("数据库迁移完成")
 
@@ -1001,6 +1015,74 @@ def db_is_ai_pick(symbol: str) -> bool:
         cursor = conn.cursor()
         cursor.execute('SELECT 1 FROM ai_picks WHERE symbol = ?', (symbol.upper(),))
         return cursor.fetchone() is not None
+
+
+def db_get_ai_picks_for_user(username: str) -> List[Dict]:
+    """获取用户可见的 AI 优选标的（排除已处理的）"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT ap.symbol, ap.name, ap.type, ap.added_by, ap.added_at 
+            FROM ai_picks ap
+            WHERE ap.symbol NOT IN (
+                SELECT symbol FROM user_dismissed_ai_picks WHERE username = ?
+            )
+            ORDER BY ap.added_at DESC
+        ''', (username,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_dismiss_ai_pick(username: str, symbol: str) -> bool:
+    """用户标记 AI 优选标的为已处理（添加到自选或手动删除）"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO user_dismissed_ai_picks (username, symbol, dismissed_at)
+                VALUES (?, ?, ?)
+            ''', (username, symbol.upper(), datetime.now().isoformat()))
+            return True
+        except sqlite3.IntegrityError:
+            # 已存在
+            return True
+
+
+def db_dismiss_ai_picks_batch(username: str, symbols: List[str]) -> int:
+    """批量标记 AI 优选标的为已处理"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        count = 0
+        for symbol in symbols:
+            try:
+                cursor.execute('''
+                    INSERT INTO user_dismissed_ai_picks (username, symbol, dismissed_at)
+                    VALUES (?, ?, ?)
+                ''', (username, symbol.upper(), datetime.now().isoformat()))
+                count += 1
+            except sqlite3.IntegrityError:
+                pass
+        return count
+
+
+def db_dismiss_all_ai_picks(username: str) -> int:
+    """用户清空所有 AI 优选（标记所有当前的为已处理）"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # 获取所有当前的 AI 优选
+        cursor.execute('SELECT symbol FROM ai_picks')
+        symbols = [row['symbol'] for row in cursor.fetchall()]
+        
+        count = 0
+        for symbol in symbols:
+            try:
+                cursor.execute('''
+                    INSERT INTO user_dismissed_ai_picks (username, symbol, dismissed_at)
+                    VALUES (?, ?, ?)
+                ''', (username, symbol, datetime.now().isoformat()))
+                count += 1
+            except sqlite3.IntegrityError:
+                pass
+        return count
 
 
 # ============================================
