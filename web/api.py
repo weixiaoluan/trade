@@ -4035,6 +4035,43 @@ def get_batch_quotes(symbols: list) -> dict:
                 except Exception as e:
                     print(f"[Quotes] 场外基金 {code} 净值获取失败: {e}")
     
+    # 获取美股/港股数据（使用 yfinance）
+    if codes:
+        remaining_codes = list(codes)
+        print(f"[Quotes] 尝试获取美股/港股数据，剩余代码: {remaining_codes}")
+        try:
+            import yfinance as yf
+            for code in remaining_codes:
+                # 非纯数字代码，可能是美股或港股
+                if not code.isdigit():
+                    try:
+                        # 还原点号格式（如 SPAX_PVT -> SPAX.PVT）
+                        ticker_code = code.replace('_', '.')
+                        ticker = yf.Ticker(ticker_code)
+                        info = ticker.info
+                        if info:
+                            symbol = code_map.get(code, code)
+                            price = safe_float(info.get('currentPrice', info.get('regularMarketPrice', info.get('previousClose', 0))))
+                            prev_close = safe_float(info.get('previousClose', info.get('regularMarketPreviousClose', price)))
+                            if price > 0 and prev_close > 0:
+                                change = ((price - prev_close) / prev_close) * 100
+                            else:
+                                change = safe_float(info.get('regularMarketChangePercent', 0))
+                            if price > 0:
+                                quotes[symbol] = {
+                                    'symbol': symbol,
+                                    'current_price': price,
+                                    'change_percent': round(change, 2)
+                                }
+                                codes.discard(code)
+                                print(f"[Quotes] 美股/港股 {ticker_code}: 价格={price}, 涨跌={change:.2f}%")
+                    except Exception as e:
+                        print(f"[Quotes] 美股/港股 {code} 获取失败: {e}")
+        except Exception as e:
+            print(f"美股/港股批量行情获取失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
     print(f"[Quotes] 返回 {len(quotes)} 条行情数据")
     return quotes
 

@@ -557,16 +557,31 @@ def db_save_report(username: str, symbol: str, name: str, report_data: Dict) -> 
     # 使用北京时间 (UTC+8)
     beijing_now = datetime.utcnow() + timedelta(hours=8)
     
+    print(f"[DB报告保存] username={username}, symbol={symbol}, name={name}")
+    
     with get_db() as conn:
         cursor = conn.cursor()
-        # 先删除旧报告
-        cursor.execute('DELETE FROM reports WHERE username = ? AND symbol = ?', (username, symbol))
+        # 先删除旧报告（同时删除点号和下划线格式）
+        symbol_with_dot = symbol.replace('_', '.')
+        symbol_with_underscore = symbol.replace('.', '_')
+        cursor.execute('''
+            DELETE FROM reports WHERE username = ? AND (
+                UPPER(symbol) = UPPER(?) OR 
+                UPPER(symbol) = UPPER(?) OR 
+                UPPER(symbol) = UPPER(?)
+            )
+        ''', (username, symbol, symbol_with_dot, symbol_with_underscore))
+        deleted = cursor.rowcount
+        print(f"[DB报告保存] 删除旧报告: {deleted} 条")
+        
         # 插入新报告
         cursor.execute('''
             INSERT INTO reports (username, symbol, name, report_data, created_at)
             VALUES (?, ?, ?, ?, ?)
         ''', (username, symbol, name, json.dumps(report_data, ensure_ascii=False), beijing_now.isoformat()))
-        return cursor.lastrowid
+        report_id = cursor.lastrowid
+        print(f"[DB报告保存] 新报告ID: {report_id}")
+        return report_id
 
 
 def db_get_user_reports(username: str) -> List[Dict]:
@@ -622,6 +637,7 @@ def db_get_user_report(username: str, symbol: str) -> Optional[Dict]:
         # 例如：SPAX_PVT 和 SPAX.PVT
         symbol_with_dot = symbol.replace('_', '.')
         symbol_with_underscore = symbol.replace('.', '_')
+        print(f"[DB报告查询] username={username}, symbol={symbol}, dot={symbol_with_dot}, underscore={symbol_with_underscore}")
         cursor.execute('''
             SELECT id, symbol, name, report_data, created_at 
             FROM reports 
@@ -635,8 +651,10 @@ def db_get_user_report(username: str, symbol: str) -> Optional[Dict]:
         row = cursor.fetchone()
         if row:
             report = dict(row)
+            print(f"[DB报告查询] 找到报告: id={report['id']}, symbol={report['symbol']}")
             report['report_data'] = json.loads(report['report_data'])
             return report
+        print(f"[DB报告查询] 未找到报告")
         return None
 
 
