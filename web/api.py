@@ -2837,11 +2837,44 @@ async def generate_ai_report_with_predictions(
     # ============================================
     # Agent 1: 技术分析师 - 生成多周期预测
     # ============================================
-    prediction_prompt = f"""你是一位资深的量化分析师，请基于以下技术指标数据，对标的进行多周期价格预测。
+    
+    # 获取量化分析数据（与智能研报一致）
+    quant_data = stock_data.get("quant_analysis", {})
+    quant_score = quant_data.get("score", 50)
+    quant_regime = quant_data.get("market_regime", "unknown")
+    quant_vol_state = quant_data.get("volatility_state", "medium")
+    quant_reco_code = quant_data.get("recommendation", "hold")
+    
+    regime_map = {"trending": "趋势市", "ranging": "震荡市", "squeeze": "窄幅整理", "unknown": "待判定"}
+    vol_map = {"high": "高波动", "medium": "中等波动", "low": "低波动"}
+    reco_map = {"strong_buy": "强力买入", "buy": "建议买入", "hold": "持有观望", "sell": "建议减持", "strong_sell": "强力卖出"}
+    
+    # 获取基本面数据
+    valuation = stock_info.get("valuation", {})
+    market_cap = info.get("market_cap", valuation.get("market_cap"))
+    
+    prediction_prompt = f"""你是一位资深的量化分析师，请基于以下多维度数据，对标的进行多周期价格预测。
 
-## 标的信息
+## 标的基本信息
 - 代码: {ticker}
+- 名称: {info.get('name', ticker)}
 - 当前价格: {latest_price}
+- 日涨跌幅: {price_info.get('day_change', 'N/A')}%
+- 52周最高: {price_info.get('52_week_high', 'N/A')}
+- 52周最低: {price_info.get('52_week_low', 'N/A')}
+- 市盈率(P/E): {valuation.get('pe_ratio', 'N/A')}
+- 市净率(P/B): {valuation.get('price_to_book', 'N/A')}
+- 市值: {market_cap}
+
+## 量化分析结果
+- 量化评分(0-100): {quant_score}
+- 市场状态: {regime_map.get(quant_regime, quant_regime)}
+- 波动状态: {vol_map.get(quant_vol_state, quant_vol_state)}
+- 量化建议: {reco_map.get(quant_reco_code, quant_reco_code)}
+- 多头信号数: {trend_analysis.get('bullish_signals', 0)}
+- 空头信号数: {trend_analysis.get('bearish_signals', 0)}
+- 综合趋势: {trend_analysis.get('trend_cn', trend_analysis.get('overall_trend', 'N/A'))}
+- 趋势强度: {trend_analysis.get('trend_strength', 'N/A')}
 
 ## 基础技术指标
 - MACD: {ind.get('macd', {})}
@@ -2860,15 +2893,22 @@ async def generate_ai_report_with_predictions(
 - 动量: {ind.get('momentum', {})}
 - ROC变动率: {ind.get('roc', {})}
 - OBV能量潮: {ind.get('obv', {})}
-- 成交量: {ind.get('volume_analysis', {})}
+- 成交量分析: {ind.get('volume_analysis', {})}
+
+## 新增技术指标
+- VWAP成交量加权均价: {ind.get('vwap', {})}
+- 资金流向MFI: {ind.get('mfi', {})}
+- 换手率: {ind.get('turnover_rate', {})}
+- BIAS乖离率: {ind.get('bias', {})}
+- DMI趋向指标: {ind.get('dmi', {})}
+- SAR抛物线: {ind.get('sar', {})}
+
+## 关键价位
+- 支撑位: {levels.get('support_levels', levels.get('nearest_support', 'N/A'))}
+- 阻力位: {levels.get('resistance_levels', levels.get('nearest_resistance', 'N/A'))}
 
 ## 多周期涨跌幅历史
 {ind.get('period_returns', {})}
-
-## 趋势分析
-- 综合趋势: {trend_analysis.get('trend_cn', trend_analysis.get('overall_trend', 'N/A'))}
-- 多头信号: {trend_analysis.get('bullish_signals', 0)}
-- 空头信号: {trend_analysis.get('bearish_signals', 0)}
 
 请严格按以下JSON格式输出8个周期的预测（不要输出其他内容）：
 ```json
@@ -2884,13 +2924,16 @@ async def generate_ai_report_with_predictions(
 ]
 ```
 
-分析要点：
-1. 综合多个指标信号：RSI/KDJ超买超卖、MACD/均线金叉死叉、CCI/Williams %R趋势
-2. 参考ADX趋势强度、ATR波动率、OBV资金流向、动量/ROC变化
-3. 结合多周期历史涨跌幅表现，短期参考5日/10日，长期参考60日/250日
-4. 短期预测置信度应更高（有数据支撑），长期预测置信度降低
-5. target涨跌幅要合理：短期(1D-1W)±0.5%~5%，中期(15D-1M)±3%~15%，长期(3M-1Y)±10%~50%
-6. 如果多空信号冲突严重，选择neutral并降低置信度"""
+**综合分析要点**：
+1. **量化信号权重**：量化评分>70看多，<30看空；参考多空信号数量对比
+2. **技术指标共振**：RSI/KDJ超买超卖、MACD/均线金叉死叉、CCI/Williams %R趋势、DMI方向
+3. **资金面分析**：OBV能量潮、MFI资金流向、换手率活跃度、成交量变化
+4. **波动与风险**：ATR波动率、布林带宽度、市场状态（趋势/震荡）
+5. **价位参考**：当前价格相对支撑阻力位的位置，VWAP偏离度
+6. **历史表现**：短期参考5日/10日涨跌幅，长期参考60日/250日涨跌幅
+7. **估值参考**：PE/PB是否合理，市值规模
+8. **置信度规则**：短期预测置信度更高，长期降低；信号冲突时选neutral
+9. **涨跌幅范围**：短期(1D-1W)±0.5%~5%，中期(15D-1M)±3%~15%，长期(3M-1Y)±10%~50%"""
 
     async def call_predictions() -> list:
         """调用 DeepSeek 生成多周期预测，如失败则使用本地量化规则回退。"""
