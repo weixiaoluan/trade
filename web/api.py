@@ -3021,11 +3021,11 @@ async def generate_ai_report_with_predictions(
     predictions = await predictions_task
     update_progress(50, 'AI预测完成，报告生成中')
     
-    # 等待报告完成，添加超时处理（流式输出需要更长时间）
+    # 等待报告完成，添加超时处理
     try:
-        report = await asyncio.wait_for(report_task, timeout=900)  # 15分钟超时
+        report = await asyncio.wait_for(report_task, timeout=360)  # 6分钟超时
     except asyncio.TimeoutError:
-        print(f"[AI报告] {ticker} 报告生成超时（900秒）")
+        print(f"[AI报告] {ticker} 报告生成超时（360秒）")
         raise Exception("AI报告生成超时，请稍后重试")
     except Exception as e:
         print(f"[AI报告] {ticker} 报告生成失败: {e}")
@@ -3078,15 +3078,15 @@ async def generate_ai_report(
     # 创建优化的 HTTP 客户端配置（流式输出需要更长超时）
     transport = httpx.HTTPTransport(
         proxy=None,
-        retries=3  # 自动重试3次
+        retries=2  # 自动重试2次
     )
     http_client = httpx.Client(
         transport=transport,
         timeout=httpx.Timeout(
-            900.0,  # 总超时900秒（15分钟）
-            connect=60.0,  # 连接超时60秒
-            read=600.0,  # 读取超时600秒（流式输出需要更长）
-            write=60.0  # 写入超时60秒
+            300.0,  # 总超时300秒（5分钟）
+            connect=30.0,  # 连接超时30秒
+            read=300.0,  # 读取超时300秒
+            write=30.0  # 写入超时30秒
         )
     )
     
@@ -3334,23 +3334,30 @@ async def generate_ai_report(
             
             for attempt in range(max_retries + 1):
                 try:
+                    print(f"[AI报告] 开始生成报告，尝试 {attempt + 1}/{max_retries + 1}")
                     chunks = []
+                    chunk_count = 0
                     stream = client.chat.completions.create(
                         model=APIConfig.SILICONFLOW_MODEL,
                         messages=[
                             {"role": "system", "content": "你是资深证券分析师。请基于数据生成专业、简洁的投资分析报告。"},
                             {"role": "user", "content": prompt}
                         ],
-                        max_tokens=4000,  # 减少token数量加快生成速度
+                        max_tokens=3000,  # 减少token数量加快生成速度
                         temperature=0.3,
-                        stream=True  # 启用流式输出
+                        stream=True,  # 启用流式输出
+                        timeout=300  # 5分钟超时
                     )
                     
                     for chunk in stream:
                         if chunk.choices and chunk.choices[0].delta.content:
                             chunks.append(chunk.choices[0].delta.content)
+                            chunk_count += 1
+                            if chunk_count % 50 == 0:
+                                print(f"[AI报告] 已接收 {chunk_count} 个chunk，当前长度: {sum(len(c) for c in chunks)}")
                     
                     result = "".join(chunks)
+                    print(f"[AI报告] 生成完成，总长度: {len(result)}")
                     if result and len(result) > 100:  # 确保有有效内容
                         return result
                     else:
@@ -3358,6 +3365,7 @@ async def generate_ai_report(
                         
                 except Exception as e:
                     last_error = e
+                    print(f"[AI报告] 生成失败: {e}")
                     if attempt < max_retries:
                         print(f"[AI报告] 流式输出失败，第{attempt + 1}次重试: {e}")
                         import time
