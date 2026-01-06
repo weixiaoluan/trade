@@ -1006,7 +1006,18 @@ export default function DashboardPage() {
   const reportsBySymbol = useMemo(() => {
     const map: Record<string, ReportSummary> = {};
     for (const r of reports) {
+      // 原始 symbol 作为 key
       map[r.symbol] = r;
+      // 同时添加点号和下划线两种格式的映射，确保能匹配到
+      // 例如：SPAX_PVT 和 SPAX.PVT 都能找到同一个报告
+      const symbolWithDot = r.symbol.replace(/_/g, '.');
+      const symbolWithUnderscore = r.symbol.replace(/\./g, '_');
+      if (symbolWithDot !== r.symbol) {
+        map[symbolWithDot] = r;
+      }
+      if (symbolWithUnderscore !== r.symbol) {
+        map[symbolWithUnderscore] = r;
+      }
     }
     return map;
   }, [reports]);
