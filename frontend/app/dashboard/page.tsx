@@ -203,6 +203,8 @@ export default function DashboardPage() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   
+  // 搜索状态
+  const [searchQuery, setSearchQuery] = useState("");
   // 移动端操作菜单
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
 
@@ -843,6 +845,15 @@ export default function DashboardPage() {
   const sortedWatchlist = useMemo(() => {
     let sorted = [...watchlist];
     
+    // 搜索过滤
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      sorted = sorted.filter(item => 
+        item.symbol.toLowerCase().includes(query) ||
+        (item.name && item.name.toLowerCase().includes(query))
+      );
+    }
+    
     sorted.sort((a, b) => (b.starred || 0) - (a.starred || 0));
     
     if (sortField && quotes) {
@@ -868,7 +879,7 @@ export default function DashboardPage() {
     }
     
     return sorted;
-  }, [watchlist, sortField, sortOrder, quotes]);
+  }, [watchlist, sortField, sortOrder, quotes, searchQuery]);
 
   const reportsBySymbol = useMemo(() => {
     const map: Record<string, ReportSummary> = {};
@@ -1850,11 +1861,33 @@ export default function DashboardPage() {
 
         {/* Toolbar - 移动端优化 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <h2 className="text-lg sm:text-xl font-semibold text-slate-100">我的自选</h2>
             <span className="text-xs sm:text-sm text-slate-500">
-              ({watchlist.length})
+              ({searchQuery ? `${sortedWatchlist.length}/${watchlist.length}` : watchlist.length})
             </span>
+            {/* 搜索框 */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1); // 搜索时重置到第一页
+                }}
+                placeholder="搜索代码/名称"
+                className="w-32 sm:w-40 pl-8 pr-8 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs sm:text-sm"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-white/[0.1] rounded"
+                >
+                  <X className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
