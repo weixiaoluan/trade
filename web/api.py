@@ -1455,6 +1455,21 @@ async def get_report_detail(symbol: str, authorization: str = Header(None)):
         raise HTTPException(status_code=500, detail=f"获取报告失败: {str(e)}")
 
 
+def clean_nan_values(obj):
+    """递归清理数据中的 NaN 和 Infinity 值，替换为 None"""
+    import math
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    elif isinstance(obj, dict):
+        return {k: clean_nan_values(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan_values(v) for v in obj]
+    else:
+        return obj
+
+
 @app.get("/api/share/report/{symbol}")
 async def get_shared_report(symbol: str):
     """获取公开分享的报告（无需登录）"""
@@ -1464,35 +1479,45 @@ async def get_shared_report(symbol: str):
     # 尝试两种格式查询（下划线格式和点号格式）
     original_symbol = restore_symbol_from_url(symbol)
     
-    with get_db() as conn:
-        cursor = conn.cursor()
-        # 查找最新的该标的报告（任意用户的），同时匹配两种格式
-        cursor.execute('''
-            SELECT id, symbol, name, report_data, created_at, username
-            FROM reports 
-            WHERE UPPER(symbol) = UPPER(?) OR UPPER(symbol) = UPPER(?)
-            ORDER BY created_at DESC 
-            LIMIT 1
-        ''', (symbol, original_symbol))
-        row = cursor.fetchone()
-        
-        if not row:
-            raise HTTPException(status_code=404, detail="报告不存在或已被删除")
-        
-        report = dict(row)
-        report['report_data'] = json.loads(report['report_data'])
-        
-        # 返回报告数据（隐藏用户名）
-        return {
-            "status": "success",
-            "report": {
-                "id": report['id'],
-                "symbol": report['symbol'],
-                "name": report['name'],
-                "data": report['report_data'],
-                "created_at": report['created_at']
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            # 查找最新的该标的报告（任意用户的），同时匹配两种格式
+            cursor.execute('''
+                SELECT id, symbol, name, report_data, created_at, username
+                FROM reports 
+                WHERE UPPER(symbol) = UPPER(?) OR UPPER(symbol) = UPPER(?)
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ''', (symbol, original_symbol))
+            row = cursor.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="报告不存在或已被删除")
+            
+            report = dict(row)
+            report_data = json.loads(report['report_data'])
+            # 清理 NaN 值
+            report_data = clean_nan_values(report_data)
+            
+            # 返回报告数据（隐藏用户名）
+            return {
+                "status": "success",
+                "report": {
+                    "id": report['id'],
+                    "symbol": report['symbol'],
+                    "name": report['name'],
+                    "data": report_data,
+                    "created_at": report['created_at']
+                }
             }
-        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[分享报告] 错误: {e}")
+        print(f"[分享报告] 堆栈: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"获取报告失败: {str(e)}")
 
 
 @app.delete("/api/reports/{symbol}")
