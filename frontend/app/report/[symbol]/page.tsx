@@ -81,8 +81,9 @@ export default function ReportPage() {
   // 获取分享链接
   const getShareUrl = useCallback(() => {
     if (typeof window === 'undefined') return '';
-    // 使用公开分享页面路径
-    return `${window.location.origin}/share/report/${encodeURIComponent(symbol)}`;
+    // 使用公开分享页面路径，将点号替换为下划线
+    const urlSymbol = symbol.replace(/\./g, '_');
+    return `${window.location.origin}/share/report/${encodeURIComponent(urlSymbol)}`;
   }, [symbol]);
   
   // 复制链接

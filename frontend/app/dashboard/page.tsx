@@ -1731,12 +1731,15 @@ export default function DashboardPage() {
       showPendingAlert();
       return;
     }
-    router.push(`/report/${encodeURIComponent(symbol)}`);
+    // 将点号替换为下划线，避免URL解析问题（如 SPAX.PVT -> SPAX_PVT）
+    const urlSymbol = symbol.replace(/\./g, '_');
+    router.push(`/report/${encodeURIComponent(urlSymbol)}`);
   }, [canUseFeatures, router, showPendingAlert]);
 
   // 预加载报告页面
   const prefetchReport = useCallback((symbol: string) => {
-    router.prefetch(`/report/${encodeURIComponent(symbol)}`);
+    const urlSymbol = symbol.replace(/\./g, '_');
+    router.prefetch(`/report/${encodeURIComponent(urlSymbol)}`);
   }, [router]);
 
   const openReminderModal = useCallback((symbol: string, name?: string) => {

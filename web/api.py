@@ -84,6 +84,24 @@ def get_beijing_now() -> datetime:
     return datetime.utcnow() + timedelta(hours=8)
 
 
+def normalize_symbol_for_url(symbol: str) -> str:
+    """规范化symbol用于URL路径，将点号替换为下划线，避免URL解析问题"""
+    if symbol:
+        return symbol.replace('.', '_')
+    return symbol
+
+
+def restore_symbol_from_url(symbol: str) -> str:
+    """从URL路径还原symbol，将下划线还原为点号"""
+    if symbol:
+        # 只还原特定模式的下划线（如 SPAX_PVT -> SPAX.PVT）
+        # 避免误还原本身就有下划线的symbol
+        import re
+        # 匹配 字母数字_字母数字 的模式（美股常见格式如 SPAX.PVT）
+        return re.sub(r'([A-Z0-9]+)_([A-Z]+)$', r'\1.\2', symbol, flags=re.IGNORECASE)
+    return symbol
+
+
 # 存储分析任务状态
 analysis_tasks: Dict[str, Dict[str, Any]] = {}
 
@@ -1405,7 +1423,14 @@ async def get_report_detail(symbol: str, authorization: str = Header(None)):
     
     # 统一转为大写，与保存时保持一致
     symbol = symbol.upper()
+    # symbol已经是URL规范化格式（点号已替换为下划线），直接使用
     report = get_user_report(user['username'], symbol)
+    
+    if not report:
+        # 尝试还原点号格式再查询一次（兼容旧数据）
+        original_symbol = restore_symbol_from_url(symbol)
+        if original_symbol != symbol:
+            report = get_user_report(user['username'], original_symbol)
     
     if not report:
         raise HTTPException(status_code=404, detail="未找到该标的的报告")
@@ -1421,16 +1446,20 @@ async def get_shared_report(symbol: str):
     """获取公开分享的报告（无需登录）"""
     from web.database import get_db
     
-    # 查找最新的该标的报告（任意用户的）
+    symbol = symbol.upper()
+    # 尝试两种格式查询（下划线格式和点号格式）
+    original_symbol = restore_symbol_from_url(symbol)
+    
     with get_db() as conn:
         cursor = conn.cursor()
+        # 查找最新的该标的报告（任意用户的），同时匹配两种格式
         cursor.execute('''
             SELECT id, symbol, name, report_data, created_at, username
             FROM reports 
-            WHERE UPPER(symbol) = UPPER(?) 
+            WHERE UPPER(symbol) = UPPER(?) OR UPPER(symbol) = UPPER(?)
             ORDER BY created_at DESC 
             LIMIT 1
-        ''', (symbol,))
+        ''', (symbol, original_symbol))
         row = cursor.fetchone()
         
         if not row:
@@ -1467,6 +1496,12 @@ async def delete_report(symbol: str, authorization: str = Header(None)):
     # 统一转为大写，与保存时保持一致
     symbol = symbol.upper()
     success = delete_user_report(user['username'], symbol)
+    
+    if not success:
+        # 尝试还原点号格式再删除一次（兼容旧数据）
+        original_symbol = restore_symbol_from_url(symbol)
+        if original_symbol != symbol:
+            success = delete_user_report(user['username'], original_symbol)
     
     if not success:
         raise HTTPException(status_code=404, detail="未找到该标的的报告")
@@ -1880,7 +1915,9 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             'levels': levels_dict
         }
         
-        save_user_report(username, original_symbol, report_data)
+        # 保存报告时使用规范化的symbol（点号替换为下划线）
+        save_symbol = normalize_symbol_for_url(original_symbol)
+        save_user_report(username, save_symbol, report_data)
         
         # 从报告中提取AI建议价格并更新到自选列表
         try:
