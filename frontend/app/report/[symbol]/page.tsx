@@ -1012,8 +1012,7 @@ export default function ReportPage() {
               {/* Report Content */}
               <div className="p-4 sm:p-6 md:p-8">
                 <div 
-                  className="markdown-content prose prose-invert prose-sm max-w-none overflow-y-auto scrollbar-thin" 
-                  style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '300px' }}
+                  className="markdown-content prose prose-invert prose-sm max-w-none"
                 >
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {result.report || '报告生成中...'}

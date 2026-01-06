@@ -1699,15 +1699,16 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
     original_symbol = ticker
     print(f"[分析开始] {ticker} 任务ID: {task_id}, 持有周期: {holding_period_cn}, 持仓: {user_position}, 成本: {user_cost_price}")
     
-    # 检查是否是场外基金
+    # 检查是否是场外基金 - 使用统一的识别函数
+    from tools.data_fetcher import is_cn_offexchange_fund, is_cn_onexchange_etf
+    
     is_otc_fund = False
     pure_code = ticker.replace('.SZ', '').replace('.SS', '').replace('.SH', '')
-    if pure_code.isdigit() and len(pure_code) == 6:
-        if pure_code.startswith(('00', '01', '02', '03', '04', '05', '06', '07', '08', '09')) and \
-           not pure_code.startswith(('000', '001', '002', '003')):
-            if not pure_code.startswith(('51', '15', '16', '58', '56')):
-                is_otc_fund = True
-                print(f"[分析] {ticker} 识别为场外基金，将使用基金净值数据进行分析")
+    if is_cn_offexchange_fund(pure_code):
+        is_otc_fund = True
+        print(f"[分析] {ticker} 识别为场外基金，将使用基金净值数据进行分析")
+    elif is_cn_onexchange_etf(pure_code):
+        print(f"[分析] {ticker} 识别为场内ETF/LOF")
     
     try:
         # === 初始化 ===

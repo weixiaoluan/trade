@@ -110,6 +110,52 @@ class QuantAgent:
         atr_signal = self._check_atr()
         signals.extend(atr_signal['signals'])
         
+        # ============================================
+        # 新增指标信号检查 (7-14)
+        # ============================================
+        
+        # 7. VWAP 成交量加权平均价
+        vwap_signal = self._check_vwap()
+        signals.extend(vwap_signal['signals'])
+        bullish_count += vwap_signal['bullish']
+        bearish_count += vwap_signal['bearish']
+        
+        # 8. MFI 资金流量指数
+        mfi_signal = self._check_mfi()
+        signals.extend(mfi_signal['signals'])
+        bullish_count += mfi_signal['bullish']
+        bearish_count += mfi_signal['bearish']
+        
+        # 9. 换手率
+        turnover_signal = self._check_turnover()
+        signals.extend(turnover_signal['signals'])
+        bullish_count += turnover_signal['bullish']
+        bearish_count += turnover_signal['bearish']
+        
+        # 10. BIAS 乖离率
+        bias_signal = self._check_bias()
+        signals.extend(bias_signal['signals'])
+        bullish_count += bias_signal['bullish']
+        bearish_count += bias_signal['bearish']
+        
+        # 11. DMI 趋向指标
+        dmi_signal = self._check_dmi()
+        signals.extend(dmi_signal['signals'])
+        bullish_count += dmi_signal['bullish']
+        bearish_count += dmi_signal['bearish']
+        
+        # 12. SAR 抛物线
+        sar_signal = self._check_sar()
+        signals.extend(sar_signal['signals'])
+        bullish_count += sar_signal['bullish']
+        bearish_count += sar_signal['bearish']
+        
+        # 13. Ichimoku 云图
+        ichimoku_signal = self._check_ichimoku()
+        signals.extend(ichimoku_signal['signals'])
+        bullish_count += ichimoku_signal['bullish']
+        bearish_count += ichimoku_signal['bearish']
+        
         # 计算综合评分 (0-100)
         total_signals = bullish_count + bearish_count
         if total_signals > 0:
@@ -290,6 +336,198 @@ class QuantAgent:
             print(f"ATR计算错误: {e}")
         
         return {"signals": signals, "bullish": 0, "bearish": 0}
+    
+    # ============================================
+    # 新增指标检查方法
+    # ============================================
+    
+    def _check_vwap(self) -> Dict:
+        """检查VWAP成交量加权平均价"""
+        signals = []
+        bullish = 0
+        bearish = 0
+        
+        try:
+            vwap = self.am.vwap()
+            close = self.am.close_array[-1]
+            deviation = (close - vwap) / vwap * 100 if vwap > 0 else 0
+            
+            if deviation > 2:
+                signals.append(f"价格高于VWAP {deviation:.1f}%")
+                bullish += 1
+            elif deviation < -2:
+                signals.append(f"价格低于VWAP {abs(deviation):.1f}%")
+                bearish += 1
+                
+        except Exception as e:
+            print(f"VWAP计算错误: {e}")
+        
+        return {"signals": signals, "bullish": bullish, "bearish": bearish}
+    
+    def _check_mfi(self) -> Dict:
+        """检查MFI资金流量指数"""
+        signals = []
+        bullish = 0
+        bearish = 0
+        
+        try:
+            mfi = self.am.mfi(14)
+            
+            if mfi > 80:
+                signals.append("MFI超买(资金过热)")
+                bearish += 1
+            elif mfi < 20:
+                signals.append("MFI超卖(资金枯竭)")
+                bullish += 1
+            elif mfi > 50:
+                signals.append("MFI显示资金流入")
+                bullish += 1
+            else:
+                signals.append("MFI显示资金流出")
+                bearish += 1
+                
+        except Exception as e:
+            print(f"MFI计算错误: {e}")
+        
+        return {"signals": signals, "bullish": bullish, "bearish": bearish}
+    
+    def _check_turnover(self) -> Dict:
+        """检查换手率"""
+        signals = []
+        bullish = 0
+        bearish = 0
+        
+        try:
+            turnover = self.am.turnover_rate(60)
+            
+            if turnover > 200:
+                signals.append(f"换手率异常放大({turnover:.0f}%)")
+                # 结合价格趋势判断
+                if self.am.close_array[-1] > self.am.close_array[-5]:
+                    bullish += 1
+                else:
+                    bearish += 1
+            elif turnover < 50:
+                signals.append(f"换手率较低({turnover:.0f}%)")
+                
+        except Exception as e:
+            print(f"换手率计算错误: {e}")
+        
+        return {"signals": signals, "bullish": bullish, "bearish": bearish}
+    
+    def _check_bias(self) -> Dict:
+        """检查BIAS乖离率"""
+        signals = []
+        bullish = 0
+        bearish = 0
+        
+        try:
+            bias6 = self.am.bias(6)
+            
+            if bias6 > 5:
+                signals.append(f"BIAS超买({bias6:.1f}%)")
+                bearish += 1
+            elif bias6 < -5:
+                signals.append(f"BIAS超卖({bias6:.1f}%)")
+                bullish += 1
+            elif bias6 > 2:
+                signals.append(f"BIAS偏多({bias6:.1f}%)")
+            elif bias6 < -2:
+                signals.append(f"BIAS偏空({bias6:.1f}%)")
+                
+        except Exception as e:
+            print(f"BIAS计算错误: {e}")
+        
+        return {"signals": signals, "bullish": bullish, "bearish": bearish}
+    
+    def _check_dmi(self) -> Dict:
+        """检查DMI趋向指标"""
+        signals = []
+        bullish = 0
+        bearish = 0
+        
+        try:
+            plus_di, minus_di, adx = self.am.dmi(14)
+            
+            if adx > 25:
+                if plus_di > minus_di:
+                    signals.append(f"DMI强势上涨(ADX={adx:.1f})")
+                    bullish += 1
+                else:
+                    signals.append(f"DMI强势下跌(ADX={adx:.1f})")
+                    bearish += 1
+            elif adx < 15:
+                signals.append(f"DMI显示震荡(ADX={adx:.1f})")
+            else:
+                if plus_di > minus_di:
+                    signals.append("DMI偏多")
+                else:
+                    signals.append("DMI偏空")
+                
+        except Exception as e:
+            print(f"DMI计算错误: {e}")
+        
+        return {"signals": signals, "bullish": bullish, "bearish": bearish}
+    
+    def _check_sar(self) -> Dict:
+        """检查SAR抛物线指标"""
+        signals = []
+        bullish = 0
+        bearish = 0
+        
+        try:
+            sar_value, trend = self.am.sar()
+            close = self.am.close_array[-1]
+            
+            if trend == 1:
+                signals.append(f"SAR上升趋势(止损:{sar_value:.2f})")
+                bullish += 1
+            else:
+                signals.append(f"SAR下降趋势(止损:{sar_value:.2f})")
+                bearish += 1
+                
+        except Exception as e:
+            print(f"SAR计算错误: {e}")
+        
+        return {"signals": signals, "bullish": bullish, "bearish": bearish}
+    
+    def _check_ichimoku(self) -> Dict:
+        """检查Ichimoku云图"""
+        signals = []
+        bullish = 0
+        bearish = 0
+        
+        try:
+            ichimoku = self.am.ichimoku()
+            close = self.am.close_array[-1]
+            
+            cloud_top = ichimoku['cloud_top']
+            cloud_bottom = ichimoku['cloud_bottom']
+            tenkan = ichimoku['tenkan_sen']
+            kijun = ichimoku['kijun_sen']
+            
+            # 价格与云层关系
+            if close > cloud_top:
+                signals.append("云图:价格在云上(强势)")
+                bullish += 1
+            elif close < cloud_bottom:
+                signals.append("云图:价格在云下(弱势)")
+                bearish += 1
+            else:
+                signals.append("云图:价格在云中(方向不明)")
+            
+            # 转换线与基准线关系
+            if tenkan > kijun:
+                signals.append("云图:转换线>基准线(看多)")
+                bullish += 1
+            else:
+                signals.append("云图:转换线<基准线(看空)")
+                bearish += 1
+                
+        except Exception as e:
+            print(f"Ichimoku计算错误: {e}")
+        
+        return {"signals": signals, "bullish": bullish, "bearish": bearish}
     
     def get_analysis(self) -> Dict:
         """获取当前分析结果"""
