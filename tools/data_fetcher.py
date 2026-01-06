@@ -1570,6 +1570,9 @@ def get_stock_data(
     Returns:
         JSON 格式的行情数据，包含 OHLCV
     """
+    # 还原下划线为点号（如 SPAX_PVT -> SPAX.PVT）用于API调用
+    ticker_for_api = ticker.replace('_', '.')
+    
     # 如果是中国场内ETF，使用东方财富API
     if is_cn_onexchange_etf(ticker):
         return get_cn_etf_data(ticker, period)
@@ -1581,7 +1584,8 @@ def get_stock_data(
         return get_cn_a_stock_data(ticker, period)
 
     try:
-        stock = yf.Ticker(ticker)
+        print(f"[数据获取] 使用yfinance获取 {ticker_for_api} 的数据")
+        stock = yf.Ticker(ticker_for_api)
         df = stock.history(period=period, interval=interval)
         
         if df.empty:
@@ -1649,6 +1653,8 @@ def get_stock_info(ticker: str) -> str:
         JSON 格式的基本信息，包含公司概况、行业、市值等
     """
     original_ticker = ticker
+    # 还原下划线为点号（如 SPAX_PVT -> SPAX.PVT）用于API调用
+    ticker_for_api = ticker.replace('_', '.')
     
     # 如果是中国LOF基金，使用专门的LOF接口
     if is_cn_lof(ticker):
@@ -1664,7 +1670,8 @@ def get_stock_info(ticker: str) -> str:
         return get_cn_a_stock_info(ticker)
     
     try:
-        stock = yf.Ticker(ticker)
+        print(f"[数据获取] 使用yfinance获取 {ticker_for_api} 的信息")
+        stock = yf.Ticker(ticker_for_api)
         info = stock.info
         
         if not info or not info.get("regularMarketPrice"):
