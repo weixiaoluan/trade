@@ -3180,6 +3180,9 @@ async def generate_ai_report(
 ## 一、标的概况
 用Markdown表格展示核心指标
 
+### 多周期表现
+展示5日/10日/20日/60日/120日/250日区间涨跌幅表格
+
 ## 二、AI深度研判
 ### 2.1 消息面与情绪分析
 简要分析近期消息、市场情绪、资金动向
@@ -3415,10 +3418,11 @@ def normalize_report_timestamp(report_text: str, completed_at: datetime) -> str:
 
 
 def normalize_multi_period_section(report_text: str, period_returns: dict) -> str:
-    """根据 period_returns 重写报告中的“多周期表现/区间涨跌”小节。
+    """根据 period_returns 重写报告中的"多周期表现/区间涨跌"小节。
 
     - 避免 LLM 生成一整行 "| 周期 | 日涨跌幅 ..." 的异常表格
     - 使用后端的真实收益率数据构建标准 Markdown 表格
+    - 将多周期表现放在"一、标的概况"之后，"二、AI深度研判"之前
     """
     try:
         import re
@@ -3431,14 +3435,13 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
             if isinstance(v, (int, float)):
                 return f"{v:+.2f}%"
             if isinstance(v, str) and v.strip():
-                # 如果已经带 % 就直接用
                 return v
             return "N/A"
 
         table_lines = [
             "### 多周期表现",
             "",
-            "12. **区间涨跌**:",
+            "**区间涨跌**:",
             "",
             "| 周期 | 涨跌幅 |",
             "|------|--------|",
@@ -3452,13 +3455,21 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
         ]
         new_block = "\n".join(table_lines)
 
-        # 用正则找到原有 “### 多周期表现” 小节并整体替换
-        pattern = r"### 多周期表现[\s\S]*?(?=\n## |\Z)"
-        if re.search(pattern, report_text):
-            report_text = re.sub(pattern, new_block, report_text)
+        # 先删除原有的"### 多周期表现"小节（可能在任意位置）
+        pattern = r"### 多周期表现[\s\S]*?(?=\n## |\n### |\Z)"
+        report_text = re.sub(pattern, "", report_text)
+        
+        # 将多周期表现插入到"## 二、AI深度研判"之前
+        pattern_insert = r"(## 二、AI深度研判)"
+        if re.search(pattern_insert, report_text):
+            report_text = re.sub(pattern_insert, new_block + "\n" + r"\1", report_text)
         else:
-            # 如果原文没有该小节，则在报告后面追加
-            report_text = report_text.rstrip() + "\n\n" + new_block
+            # 如果找不到"二、AI深度研判"，尝试在"一、标的概况"后面插入
+            pattern_after_overview = r"(## 一、标的概况[\s\S]*?)(\n## )"
+            if re.search(pattern_after_overview, report_text):
+                report_text = re.sub(pattern_after_overview, r"\1\n\n" + new_block + r"\2", report_text)
+            else:
+                report_text = report_text.rstrip() + "\n\n" + new_block
 
         return report_text
     except Exception:
