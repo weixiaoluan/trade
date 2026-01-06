@@ -45,6 +45,21 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 import { API_BASE } from "@/lib/config";
 
+// 判断是否是美股，返回对应的货币符号
+const getCurrencySymbol = (symbol: string): string => {
+  if (!symbol) return "¥";
+  // 移除可能的后缀
+  const code = symbol.replace(/\.(SH|SZ|HK|sh|sz|hk)$/i, '');
+  // 如果是纯数字，是中国股票
+  if (/^\d+$/.test(code)) return "¥";
+  // 如果包含 .HK 后缀，是港股
+  if (symbol.toUpperCase().includes('.HK')) return "HK$";
+  // 美股代码通常是字母或字母+数字组合
+  const codeNoDot = code.replace(/[._]/g, '');
+  if (/^[A-Za-z]/.test(codeNoDot)) return "$";
+  return "¥";
+};
+
 interface UserInfo {
   username: string;
   phone?: string;
@@ -2305,7 +2320,7 @@ export default function DashboardPage() {
                             </div>
                             <div className="min-w-[70px]">
                               <div className="text-[10px] text-slate-500 mb-0.5">成本</div>
-                              <span className="font-mono text-sm text-slate-200">{item.cost_price ? `¥${item.cost_price.toFixed(3)}` : "-"}</span>
+                              <span className="font-mono text-sm text-slate-200">{item.cost_price ? `${getCurrencySymbol(item.symbol)}${item.cost_price.toFixed(3)}` : "-"}</span>
                             </div>
                             <div className="min-w-[70px]">
                               <div className="text-[10px] text-slate-500 mb-0.5">盈亏</div>
@@ -2358,7 +2373,7 @@ export default function DashboardPage() {
                               <div className="text-[10px] text-emerald-400/70 mb-0.5">建议买入价/量</div>
                               <div className="flex flex-col">
                                 <span className="font-mono text-sm font-semibold text-emerald-400">
-                                  {item.ai_buy_price ? `¥${item.ai_buy_price.toFixed(3)}` : "-"}
+                                  {item.ai_buy_price ? `${getCurrencySymbol(item.symbol)}${item.ai_buy_price.toFixed(3)}` : "-"}
                                 </span>
                                 <span className="font-mono text-xs text-emerald-400/70">
                                   {item.ai_buy_quantity ? `${item.ai_buy_quantity.toLocaleString()}股` : "-"}
@@ -2369,7 +2384,7 @@ export default function DashboardPage() {
                               <div className="text-[10px] text-rose-400/70 mb-0.5">建议卖出价/量</div>
                               <div className="flex flex-col">
                                 <span className="font-mono text-sm font-semibold text-rose-400">
-                                  {item.ai_sell_price ? `¥${item.ai_sell_price.toFixed(3)}` : "-"}
+                                  {item.ai_sell_price ? `${getCurrencySymbol(item.symbol)}${item.ai_sell_price.toFixed(3)}` : "-"}
                                 </span>
                                 <span className="font-mono text-xs text-rose-400/70">
                                   {item.ai_sell_quantity ? `${item.ai_sell_quantity.toLocaleString()}股` : "-"}
@@ -2522,7 +2537,7 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="w-24 flex-shrink-0 text-right">
-                        <span className="font-mono text-base text-slate-100">{item.cost_price ? `¥${item.cost_price.toFixed(3)}` : "-"}</span>
+                        <span className="font-mono text-base text-slate-100">{item.cost_price ? `${getCurrencySymbol(item.symbol)}${item.cost_price.toFixed(3)}` : "-"}</span>
                       </div>
 
                       {/* 持仓盈亏 */}
@@ -2575,7 +2590,7 @@ export default function DashboardPage() {
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
                           <span className="font-mono text-base font-semibold text-emerald-400">
-                            {item.ai_buy_price ? `¥${item.ai_buy_price.toFixed(3)}` : "-"}
+                            {item.ai_buy_price ? `${getCurrencySymbol(item.symbol)}${item.ai_buy_price.toFixed(3)}` : "-"}
                           </span>
                           <span className="font-mono text-sm text-emerald-400/70">
                             {item.ai_buy_quantity ? `${item.ai_buy_quantity.toLocaleString()}股` : "-"}
@@ -2587,7 +2602,7 @@ export default function DashboardPage() {
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
                           <span className="font-mono text-base font-semibold text-rose-400">
-                            {item.ai_sell_price ? `¥${item.ai_sell_price.toFixed(3)}` : "-"}
+                            {item.ai_sell_price ? `${getCurrencySymbol(item.symbol)}${item.ai_sell_price.toFixed(3)}` : "-"}
                           </span>
                           <span className="font-mono text-sm text-rose-400/70">
                             {item.ai_sell_quantity ? `${item.ai_sell_quantity.toLocaleString()}股` : "-"}
@@ -3019,8 +3034,8 @@ export default function DashboardPage() {
                           </div>
                           {(reminder.buy_price || reminder.sell_price) && (
                             <div className="text-[10px] text-slate-500 mt-1">
-                              {reminder.buy_price && <span className="mr-2">买入价: ¥{reminder.buy_price}</span>}
-                              {reminder.sell_price && <span>卖出价: ¥{reminder.sell_price}</span>}
+                              {reminder.buy_price && <span className="mr-2">买入价: {getCurrencySymbol(reminder.symbol)}{reminder.buy_price}</span>}
+                              {reminder.sell_price && <span>卖出价: {getCurrencySymbol(reminder.symbol)}{reminder.sell_price}</span>}
                             </div>
                           )}
                         </div>
@@ -3495,16 +3510,16 @@ export default function DashboardPage() {
                       <div className="text-sm text-slate-300 mb-2">{log.message}</div>
                       <div className="flex flex-wrap gap-3 text-xs">
                         {log.current_price && (
-                          <span className="text-slate-400">当前价: <span className="text-white">¥{log.current_price.toFixed(3)}</span></span>
+                          <span className="text-slate-400">当前价: <span className="text-white">{getCurrencySymbol(log.symbol)}{log.current_price.toFixed(3)}</span></span>
                         )}
                         {log.buy_price && (
-                          <span className="text-emerald-400/70">买入价: ¥{log.buy_price.toFixed(3)}</span>
+                          <span className="text-emerald-400/70">买入价: {getCurrencySymbol(log.symbol)}{log.buy_price.toFixed(3)}</span>
                         )}
                         {log.buy_quantity && (
                           <span className="text-emerald-400/70">买入量: {log.buy_quantity}股</span>
                         )}
                         {log.sell_price && (
-                          <span className="text-rose-400/70">卖出价: ¥{log.sell_price.toFixed(3)}</span>
+                          <span className="text-rose-400/70">卖出价: {getCurrencySymbol(log.symbol)}{log.sell_price.toFixed(3)}</span>
                         )}
                         {log.sell_quantity && (
                           <span className="text-rose-400/70">卖出量: {log.sell_quantity}股</span>

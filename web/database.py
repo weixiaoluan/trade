@@ -618,11 +618,20 @@ def db_get_user_report(username: str, symbol: str) -> Optional[Dict]:
     """获取用户某个证券的报告"""
     with get_db() as conn:
         cursor = conn.cursor()
+        # 同时查询下划线格式和点号格式（兼容新旧数据）
+        # 例如：SPAX_PVT 和 SPAX.PVT
+        symbol_with_dot = symbol.replace('_', '.')
+        symbol_with_underscore = symbol.replace('.', '_')
         cursor.execute('''
             SELECT id, symbol, name, report_data, created_at 
-            FROM reports WHERE username = ? AND symbol = ? 
+            FROM reports 
+            WHERE username = ? AND (
+                UPPER(symbol) = UPPER(?) OR 
+                UPPER(symbol) = UPPER(?) OR 
+                UPPER(symbol) = UPPER(?)
+            )
             ORDER BY created_at DESC LIMIT 1
-        ''', (username, symbol))
+        ''', (username, symbol, symbol_with_dot, symbol_with_underscore))
         row = cursor.fetchone()
         if row:
             report = dict(row)
@@ -635,7 +644,17 @@ def db_delete_report(username: str, symbol: str) -> bool:
     """删除报告"""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM reports WHERE username = ? AND symbol = ?', (username, symbol))
+        # 同时删除下划线格式和点号格式（兼容新旧数据）
+        symbol_with_dot = symbol.replace('_', '.')
+        symbol_with_underscore = symbol.replace('.', '_')
+        cursor.execute('''
+            DELETE FROM reports 
+            WHERE username = ? AND (
+                UPPER(symbol) = UPPER(?) OR 
+                UPPER(symbol) = UPPER(?) OR 
+                UPPER(symbol) = UPPER(?)
+            )
+        ''', (username, symbol, symbol_with_dot, symbol_with_underscore))
         return cursor.rowcount > 0
 
 
