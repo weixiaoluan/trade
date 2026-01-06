@@ -1803,6 +1803,15 @@ export default function DashboardPage() {
 
           {user && (
             <div className="flex items-center gap-2">
+              {/* AI 优选按钮 */}
+              <button
+                onClick={handleOpenAiPicks}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded-lg text-xs sm:text-sm hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
+                title="AI 优选"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span className="hidden sm:inline">AI 优选</span>
+              </button>
               {/* 设置按钮 */}
               <button
                 onClick={() => setShowSettingsModal(true)}
@@ -3391,21 +3400,6 @@ export default function DashboardPage() {
                   )}
                   保存设置
                 </button>
-              </div>
-
-              {/* AI 优选入口 */}
-              <div className="mt-4 pt-4 border-t border-white/[0.06]">
-                <button
-                  onClick={() => {
-                    setShowSettingsModal(false);
-                    handleOpenAiPicks();
-                  }}
-                  className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded-xl text-sm sm:text-base flex items-center justify-center gap-2 hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  AI 优选
-                </button>
-                <p className="text-[10px] text-slate-500 mt-2 text-center">查看管理员推荐的优质标的</p>
               </div>
             </motion.div>
           </motion.div>
