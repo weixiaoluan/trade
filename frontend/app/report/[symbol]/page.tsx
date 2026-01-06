@@ -64,7 +64,8 @@ const ReportSkeleton = memo(() => (
 export default function ReportPage() {
   const router = useRouter();
   const params = useParams();
-  const symbol = params.symbol as string;
+  // 解码URL中的symbol参数，处理特殊字符如 SPAX.PVT
+  const symbol = decodeURIComponent(params.symbol as string);
 
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<any>(null);

@@ -3455,9 +3455,18 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
         ]
         new_block = "\n".join(table_lines)
 
-        # 先删除原有的"### 多周期表现"小节（可能在任意位置）
-        pattern = r"### 多周期表现[\s\S]*?(?=\n## |\n### |\Z)"
-        report_text = re.sub(pattern, "", report_text)
+        # 删除所有"多周期表现"相关内容（可能有多种格式）
+        # 匹配 ### 多周期表现 或 **多周期表现** 或 多周期表现 开头的段落
+        patterns_to_remove = [
+            r"#{1,3}\s*多周期表现[\s\S]*?(?=\n## |\n### |\n\*\*[^多]|\Z)",  # ### 多周期表现
+            r"\*\*多周期表现\*\*[\s\S]*?(?=\n## |\n### |\n\*\*[^区]|\Z)",  # **多周期表现**
+            r"多周期表现\s*\n+\s*区间涨跌[\s\S]*?(?=\n## |\n### |\Z)",  # 多周期表现 区间涨跌
+        ]
+        for pattern in patterns_to_remove:
+            report_text = re.sub(pattern, "", report_text)
+        
+        # 清理可能残留的空行
+        report_text = re.sub(r'\n{3,}', '\n\n', report_text)
         
         # 将多周期表现插入到"## 二、AI深度研判"之前
         pattern_insert = r"(## 二、AI深度研判)"
