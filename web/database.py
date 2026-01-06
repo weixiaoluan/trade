@@ -233,6 +233,11 @@ def migrate_database():
             print("迁移: 添加 ai_recommendation 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_recommendation TEXT")
         
+        # 检查 watchlist 表是否有 from_ai_pick 字段（标记是否来自 AI 优选）
+        if 'from_ai_pick' not in watchlist_columns:
+            print("迁移: 添加 from_ai_pick 字段到 watchlist 表")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN from_ai_pick INTEGER DEFAULT 0")
+        
         # 检查 users 表是否有 pushplus_token 字段
         cursor.execute("PRAGMA table_info(users)")
         user_columns = [col[1] for col in cursor.fetchall()]
@@ -430,15 +435,15 @@ def db_get_user_watchlist(username: str) -> List[Dict]:
 
 def db_add_to_watchlist(username: str, symbol: str, name: str = None, 
                         type_: str = None, position: float = None, 
-                        cost_price: float = None) -> bool:
+                        cost_price: float = None, from_ai_pick: int = 0) -> bool:
     """添加到自选"""
     with get_db() as conn:
         cursor = conn.cursor()
         try:
             cursor.execute('''
-                INSERT INTO watchlist (username, symbol, name, type, position, cost_price, added_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (username, symbol, name, type_, position, cost_price, datetime.now().isoformat()))
+                INSERT INTO watchlist (username, symbol, name, type, position, cost_price, from_ai_pick, added_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (username, symbol, name, type_, position, cost_price, from_ai_pick, datetime.now().isoformat()))
             return True
         except sqlite3.IntegrityError:
             return False

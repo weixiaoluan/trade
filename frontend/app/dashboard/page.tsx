@@ -68,6 +68,7 @@ interface WatchlistItem {
   ai_price_updated_at?: string;
   last_alert_at?: string;
   holding_period?: string;
+  from_ai_pick?: number;
 }
 
 interface TaskStatus {
@@ -663,7 +664,7 @@ export default function DashboardPage() {
 
     const items = availableAiPicks
       .filter(p => selectedAiPicks.has(p.symbol))
-      .map(p => ({ symbol: p.symbol, name: p.name, type: p.type }));
+      .map(p => ({ symbol: p.symbol, name: p.name, type: p.type, from_ai_pick: 1 }));
 
     setLoading(true);
     try {
@@ -1369,12 +1370,19 @@ export default function DashboardPage() {
       return;
     }
 
+    // 检查是否正在分析中
+    const task = tasksRef.current[symbol];
+    if (task && (task.status === "running" || task.status === "pending")) {
+      showAlertModal("正在分析中", `${symbol} 正在分析中，请等待分析完成`, "warning");
+      return;
+    }
+
     // 弹窗选择持有周期
     setPendingAnalysisSymbols([symbol]);
     setIsBatchAnalysis(false);
     setHoldingPeriod("short");
     setShowHoldingPeriodModal(true);
-  }, [canUseFeatures, showPendingAlert]);
+  }, [canUseFeatures, showPendingAlert, showAlertModal]);
 
   // 实际执行单个分析
   const executeAnalyzeSingle = useCallback(async (symbol: string, period: string) => {
@@ -1463,12 +1471,28 @@ export default function DashboardPage() {
       return;
     }
     
+    // 过滤掉正在分析中的标的
+    const symbolsToAnalyze = Array.from(selectedItems).filter(symbol => {
+      const task = tasksRef.current[symbol];
+      return !(task && (task.status === "running" || task.status === "pending"));
+    });
+    
+    if (symbolsToAnalyze.length === 0) {
+      showAlertModal("全部在分析中", "所选标的都在分析中，请等待分析完成", "warning");
+      return;
+    }
+    
+    const skippedCount = selectedItems.size - symbolsToAnalyze.length;
+    if (skippedCount > 0) {
+      showAlertModal("部分跳过", `已跳过 ${skippedCount} 个正在分析中的标的，将分析剩余 ${symbolsToAnalyze.length} 个`, "info");
+    }
+    
     // 弹窗选择持有周期
-    setPendingAnalysisSymbols(Array.from(selectedItems));
+    setPendingAnalysisSymbols(symbolsToAnalyze);
     setIsBatchAnalysis(true);
     setHoldingPeriod("short");
     setShowHoldingPeriodModal(true);
-  }, [canUseFeatures, selectedItems, showPendingAlert]);
+  }, [canUseFeatures, selectedItems, showPendingAlert, showAlertModal]);
 
   // 批量提醒
   const handleBatchReminder = useCallback(() => {
@@ -2197,6 +2221,9 @@ export default function DashboardPage() {
                 const isRunning = task?.status === "running" && !isTaskTimeout && !isReportNewer;
                 const isPending = task?.status === "pending" && !isReportNewer;
                 const isCompleted = task?.status === "completed" || isReportNewer;
+                
+                // 是否正在分析中（用于禁用分析按钮）
+                const isAnalyzing = isRunning || isPending;
 
                 return (
                   <div
@@ -2222,6 +2249,13 @@ export default function DashboardPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-mono text-sm font-semibold text-slate-100">{item.symbol}</span>
+                            {/* AI 优选标识 */}
+                            {item.from_ai_pick === 1 && (
+                              <span className="px-1.5 py-0.5 text-[10px] bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded flex items-center gap-0.5">
+                                <Sparkles className="w-3 h-3" />
+                                AI
+                              </span>
+                            )}
                             <button
                               onClick={() => handleToggleStar(item.symbol)}
                               className={`p-1.5 rounded-lg touch-target ${item.starred ? "text-amber-400 bg-amber-500/10" : "text-slate-500 bg-white/[0.05]"}`}
@@ -2437,6 +2471,13 @@ export default function DashboardPage() {
                       <div className="w-40 flex-shrink-0">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-base font-bold text-slate-50 truncate">{item.symbol}</span>
+                          {/* AI 优选标识 */}
+                          {item.from_ai_pick === 1 && (
+                            <span className="px-1.5 py-0.5 text-[10px] bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded flex items-center gap-0.5 whitespace-nowrap">
+                              <Sparkles className="w-3 h-3" />
+                              AI优选
+                            </span>
+                          )}
                           <button
                             onClick={() => handleToggleStar(item.symbol)}
                             className={`p-0.5 ${item.starred ? "text-amber-400" : "text-slate-600 hover:text-amber-400"}`}

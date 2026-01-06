@@ -77,6 +77,7 @@ class WatchlistItem(BaseModel):
     added_at: Optional[str] = None
     position: Optional[float] = None  # 持仓数量
     cost_price: Optional[float] = None  # 持仓成本价
+    from_ai_pick: Optional[int] = 0  # 是否来自 AI 优选
 
 
 class ReminderItem(BaseModel):
@@ -233,7 +234,8 @@ def add_to_watchlist(username: str, item: Dict) -> bool:
         item.get('name'),
         item.get('type'),
         item.get('position'),
-        item.get('cost_price')
+        item.get('cost_price'),
+        item.get('from_ai_pick', 0)
     )
 
 
