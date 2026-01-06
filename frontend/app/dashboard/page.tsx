@@ -933,14 +933,29 @@ export default function DashboardPage() {
     const positionVal = addPosition && parseFloat(addPosition) > 0 ? parseFloat(addPosition) : undefined;
     const costPriceVal = addCostPrice && parseFloat(addCostPrice) > 0 ? parseFloat(addCostPrice) : undefined;
 
-    // 检查是否已存在
-    const alreadyExists = watchlist.some(item => item.symbol === symbolToAdd);
-    if (alreadyExists) {
-      showAlertModal("已存在", `${symbolToAdd} 已在自选列表中`, "warning");
-      return;
+    // 保存当前的 AI 优选状态
+    const shouldAddAsAiPick = addAsAiPick && user?.role === 'admin';
+
+    // 检查是否已存在于自选列表
+    const existsInWatchlist = watchlist.some(item => item.symbol === symbolToAdd);
+    // 检查是否已存在于 AI 优选列表
+    const existsInAiPicks = aiPicks.some(item => item.symbol === symbolToAdd);
+
+    // 如果勾选了 AI 优选，需要检查两个列表
+    if (shouldAddAsAiPick) {
+      if (existsInWatchlist && existsInAiPicks) {
+        showAlertModal("已存在", `${symbolToAdd} 已在自选列表和 AI 优选列表中，不能重复添加`, "warning");
+        return;
+      }
+    } else {
+      // 没勾选 AI 优选，只检查自选列表
+      if (existsInWatchlist) {
+        showAlertModal("已存在", `${symbolToAdd} 已在自选列表中`, "warning");
+        return;
+      }
     }
 
-    // 乐观更新：立即添加到列表
+    // 乐观更新：如果自选列表不存在，立即添加到列表
     const optimisticItem: WatchlistItem = {
       symbol: symbolToAdd,
       name: symbolToAdd,
@@ -950,11 +965,10 @@ export default function DashboardPage() {
       cost_price: costPriceVal,
     };
     
-    // 保存当前的 AI 优选状态
-    const shouldAddAsAiPick = addAsAiPick && user?.role === 'admin';
-    
     flushSync(() => {
-      setWatchlist(prev => [optimisticItem, ...prev]);
+      if (!existsInWatchlist) {
+        setWatchlist(prev => [optimisticItem, ...prev]);
+      }
       setAddSymbol("");
       setAddPosition("");
       setAddCostPrice("");
@@ -964,46 +978,90 @@ export default function DashboardPage() {
       }
     });
 
-    // 继续添加模式：立即显示成功提示
-    if (!closeAfterAdd) {
-      showAlertModal("添加成功", `${symbolToAdd} 已添加到自选，可继续添加下一个`, "success");
-    }
+    // 记录添加结果
+    let watchlistAdded = false;
+    let aiPicksAdded = false;
+    let addedName = symbolToAdd;
 
-    // 后台异步添加
-    try {
-      const payload: any = { symbol: symbolToAdd };
-      if (positionVal) payload.position = positionVal;
-      if (costPriceVal) payload.cost_price = costPriceVal;
+    // 添加到自选列表（如果不存在）
+    if (!existsInWatchlist) {
+      try {
+        const payload: any = { symbol: symbolToAdd };
+        if (positionVal) payload.position = positionVal;
+        if (costPriceVal) payload.cost_price = costPriceVal;
 
-      const response = await fetch(`${API_BASE}/api/watchlist`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
-        },
-        body: JSON.stringify(payload),
-      });
+        const response = await fetch(`${API_BASE}/api/watchlist`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify(payload),
+        });
 
-      const data = await response.json();
-      if (response.ok && data.status === "success") {
-        // 刷新获取完整数据（包括名称等）
-        fetchWatchlist();
-        
-        // 如果勾选了 AI 优选，同时添加到 AI 优选
-        if (shouldAddAsAiPick) {
-          handleAddToAiPicks(symbolToAdd, data.name || symbolToAdd, 'stock');
+        const data = await response.json();
+        if (response.ok && data.status === "success") {
+          watchlistAdded = true;
+          addedName = data.name || symbolToAdd;
+          fetchWatchlist();
+        } else {
+          // 添加失败，回滚
+          setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
         }
-      } else {
-        // 添加失败，回滚
+      } catch (error) {
+        // 网络错误，回滚
         setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
-        showAlertModal("添加失败", data.message || "添加失败", "error");
       }
-    } catch (error) {
-      // 网络错误，回滚
-      setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
-      showAlertModal("添加失败", "网络错误，请检查网络连接", "error");
     }
-  }, [addCostPrice, addPosition, addSymbol, addAsAiPick, user, canUseFeatures, fetchWatchlist, getToken, showPendingAlert, showAlertModal, watchlist, handleAddToAiPicks]);
+
+    // 添加到 AI 优选列表（如果勾选了且不存在）
+    if (shouldAddAsAiPick && !existsInAiPicks) {
+      try {
+        const response = await fetch(`${API_BASE}/api/ai-picks`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ symbol: symbolToAdd, name: addedName, type: 'stock' }),
+        });
+
+        if (response.ok) {
+          aiPicksAdded = true;
+          // 刷新 AI 优选列表
+          fetchAiPicks();
+        }
+      } catch (error) {
+        // 静默失败
+      }
+    }
+
+    // 显示结果提示
+    if (shouldAddAsAiPick) {
+      if (existsInWatchlist && aiPicksAdded) {
+        showAlertModal("添加成功", `${symbolToAdd} 已存在于自选列表，已添加到 AI 优选列表`, "success");
+      } else if (watchlistAdded && existsInAiPicks) {
+        showAlertModal("添加成功", `${symbolToAdd} 已添加到自选列表，AI 优选列表已存在`, "success");
+      } else if (watchlistAdded && aiPicksAdded) {
+        showAlertModal("添加成功", `${symbolToAdd} 已添加到自选列表和 AI 优选列表`, "success");
+      } else if (watchlistAdded) {
+        showAlertModal("部分成功", `${symbolToAdd} 已添加到自选列表，AI 优选添加失败`, "warning");
+      } else if (aiPicksAdded) {
+        showAlertModal("部分成功", `${symbolToAdd} 自选添加失败，已添加到 AI 优选列表`, "warning");
+      } else {
+        showAlertModal("添加失败", "网络错误，请稍后重试", "error");
+      }
+    } else {
+      // 没勾选 AI 优选，只提示自选结果
+      if (!closeAfterAdd) {
+        if (watchlistAdded) {
+          showAlertModal("添加成功", `${symbolToAdd} 已添加到自选，可继续添加下一个`, "success");
+        } else {
+          showAlertModal("添加失败", "网络错误，请稍后重试", "error");
+        }
+      }
+    }
+  }, [addCostPrice, addPosition, addSymbol, addAsAiPick, user, canUseFeatures, fetchWatchlist, fetchAiPicks, getToken, showPendingAlert, showAlertModal, watchlist, aiPicks]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
