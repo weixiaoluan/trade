@@ -1055,7 +1055,10 @@ async def batch_delete_watchlist_items(
 # ============================================
 
 @app.get("/api/ai-picks")
-async def get_ai_picks(authorization: str = Header(None)):
+async def get_ai_picks(
+    background_tasks: BackgroundTasks,
+    authorization: str = Header(None)
+):
     """获取 AI 优选列表（所有已审核用户可见）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
@@ -1073,9 +1076,44 @@ async def get_ai_picks(authorization: str = Header(None)):
     from web.database import db_get_ai_picks
     picks = db_get_ai_picks()
     
+    # 检查是否有需要更新名称的标的（名称为空或等于代码）
+    for pick in picks:
+        if not pick.get('name') or pick.get('name') == pick.get('symbol'):
+            background_tasks.add_task(update_ai_pick_name_and_type, pick['symbol'])
+    
     return {
         "status": "success",
         "picks": picks
+    }
+
+
+@app.post("/api/ai-picks/refresh")
+async def refresh_ai_picks(
+    background_tasks: BackgroundTasks,
+    authorization: str = Header(None)
+):
+    """刷新所有 AI 优选标的的名称和类型（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限操作")
+    
+    from web.database import db_get_ai_picks
+    picks = db_get_ai_picks()
+    
+    for pick in picks:
+        background_tasks.add_task(update_ai_pick_name_and_type, pick['symbol'])
+    
+    return {
+        "status": "success",
+        "message": f"已开始刷新 {len(picks)} 个标的的信息"
     }
 
 
