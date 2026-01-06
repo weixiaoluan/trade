@@ -1940,15 +1940,15 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             if report:
                 print(f"[AI价格] 开始从报告中提取建议价格和数量...")
                 
-                # 匹配多种格式的建议买入价
+                # 匹配多种格式的建议买入价（支持 $ 和 ¥）
                 buy_patterns = [
-                    r'\*\*建议买入价\*\*\s*\|\s*¥?([\d.]+)',
-                    r'\|\s*\*\*建议买入价\*\*\s*\|\s*¥?([\d.]+)',
-                    r'\|\s*建议买入价\s*\|\s*¥?([\d.]+)',
-                    r'建议买入价[：:]\s*¥?([\d.]+)',
-                    r'建议买入[：:]\s*¥?([\d.]+)',
-                    r'买入价[：:]\s*¥?([\d.]+)',
-                    r'买入价位[：:]\s*¥?([\d.]+)',
+                    r'\*\*建议买入价\*\*\s*\|\s*[$¥]?([\d.]+)',
+                    r'\|\s*\*\*建议买入价\*\*\s*\|\s*[$¥]?([\d.]+)',
+                    r'\|\s*建议买入价\s*\|\s*[$¥]?([\d.]+)',
+                    r'建议买入价[：:]\s*[$¥]?([\d.]+)',
+                    r'建议买入[：:]\s*[$¥]?([\d.]+)',
+                    r'买入价[：:]\s*[$¥]?([\d.]+)',
+                    r'买入价位[：:]\s*[$¥]?([\d.]+)',
                 ]
                 for pattern in buy_patterns:
                     buy_match = re.search(pattern, report)
@@ -1960,15 +1960,15 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                         except:
                             pass
                 
-                # 匹配多种格式的建议卖出价
+                # 匹配多种格式的建议卖出价（支持 $ 和 ¥）
                 sell_patterns = [
-                    r'\*\*建议卖出价\*\*\s*\|\s*¥?([\d.]+)',
-                    r'\|\s*\*\*建议卖出价\*\*\s*\|\s*¥?([\d.]+)',
-                    r'\|\s*建议卖出价\s*\|\s*¥?([\d.]+)',
-                    r'建议卖出价[：:]\s*¥?([\d.]+)',
-                    r'建议卖出[：:]\s*¥?([\d.]+)',
-                    r'卖出价[：:]\s*¥?([\d.]+)',
-                    r'卖出价位[：:]\s*¥?([\d.]+)',
+                    r'\*\*建议卖出价\*\*\s*\|\s*[$¥]?([\d.]+)',
+                    r'\|\s*\*\*建议卖出价\*\*\s*\|\s*[$¥]?([\d.]+)',
+                    r'\|\s*建议卖出价\s*\|\s*[$¥]?([\d.]+)',
+                    r'建议卖出价[：:]\s*[$¥]?([\d.]+)',
+                    r'建议卖出[：:]\s*[$¥]?([\d.]+)',
+                    r'卖出价[：:]\s*[$¥]?([\d.]+)',
+                    r'卖出价位[：:]\s*[$¥]?([\d.]+)',
                 ]
                 for pattern in sell_patterns:
                     sell_match = re.search(pattern, report)
@@ -1980,12 +1980,12 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                         except:
                             pass
                 
-                # 提取建议买入数量 - 从表格行中提取
+                # 提取建议买入数量 - 从表格行中提取（支持 $ 和 ¥）
                 buy_qty_patterns = [
-                    r'\*\*建议买入价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'\|\s*\*\*建议买入价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'\|\s*建议买入价\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'建议买入[^|]*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\*\*建议买入价\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*\*\*建议买入价\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*建议买入价\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'建议买入[^|]*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
                     r'买入数量[：:]\s*([\d,]+)\s*(?:股|份)?',
                     r'建议买入.*?([\d,]{3,})\s*(?:股|份)',
                 ]
@@ -2001,12 +2001,12 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                         except:
                             pass
                 
-                # 提取建议卖出数量 - 从表格行中提取
+                # 提取建议卖出数量 - 从表格行中提取（支持 $ 和 ¥）
                 sell_qty_patterns = [
-                    r'\*\*建议卖出价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'\|\s*\*\*建议卖出价\*\*\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'\|\s*建议卖出价\s*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'建议卖出[^|]*\|\s*¥?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\*\*建议卖出价\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*\*\*建议卖出价\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*建议卖出价\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'建议卖出[^|]*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
                     r'卖出数量[：:]\s*([\d,]+)\s*(?:股|份)?',
                     r'建议卖出.*?([\d,]{3,})\s*(?:股|份)',
                 ]
@@ -3114,18 +3114,35 @@ async def generate_ai_report(
         day_change_str = f"{day_change_pct:+.2f}"
     else:
         day_change_str = str(summary.get("period_change_pct", "N/A"))
+    
+    # 根据股票类型确定货币符号
+    from tools.data_fetcher import is_us_stock, get_currency_symbol
+    currency_symbol = get_currency_symbol(ticker)
+    
     market_cap_display = valuation.get("market_cap_str")
     if not market_cap_display:
         market_cap_value = valuation.get("market_cap")
         if isinstance(market_cap_value, (int, float)) and market_cap_value > 0:
-            if market_cap_value >= 1e12:
-                market_cap_display = f"¥{market_cap_value/1e12:.2f}万亿"
-            elif market_cap_value >= 1e8:
-                market_cap_display = f"¥{market_cap_value/1e8:.2f}亿"
-            elif market_cap_value >= 1e4:
-                market_cap_display = f"¥{market_cap_value/1e4:.2f}万"
+            if is_us_stock(ticker):
+                # 美股用美元和B/M单位
+                if market_cap_value >= 1e12:
+                    market_cap_display = f"${market_cap_value/1e12:.2f}T"
+                elif market_cap_value >= 1e9:
+                    market_cap_display = f"${market_cap_value/1e9:.2f}B"
+                elif market_cap_value >= 1e6:
+                    market_cap_display = f"${market_cap_value/1e6:.2f}M"
+                else:
+                    market_cap_display = f"${market_cap_value:.0f}"
             else:
-                market_cap_display = f"¥{market_cap_value:.0f}"
+                # 中国股票用人民币和亿/万单位
+                if market_cap_value >= 1e12:
+                    market_cap_display = f"¥{market_cap_value/1e12:.2f}万亿"
+                elif market_cap_value >= 1e8:
+                    market_cap_display = f"¥{market_cap_value/1e8:.2f}亿"
+                elif market_cap_value >= 1e4:
+                    market_cap_display = f"¥{market_cap_value/1e4:.2f}万"
+                else:
+                    market_cap_display = f"¥{market_cap_value:.0f}"
         else:
             market_cap_display = "未披露"
     
@@ -3204,7 +3221,7 @@ async def generate_ai_report(
     # 构建持仓信息提示（只有持仓和成本价都有值时才显示）
     position_hint = ""
     if user_position and user_cost_price:
-        position_hint = f"\n4. 用户持仓: {user_position}股，成本价: ¥{user_cost_price}，请据此给出买入/卖出数量建议"
+        position_hint = f"\n4. 用户持仓: {user_position}股，成本价: {currency_symbol}{user_cost_price}，请据此给出买入/卖出数量建议"
     
     prompt = f"""**重要提示**: 
 1. 当前日期: {report_date} {report_time}
@@ -3292,11 +3309,11 @@ async def generate_ai_report(
 ## 五、建议买卖价格（重要）
 | 类型 | 价格 | 数量 | 说明 |
 |------|------|------|------|
-| **建议买入价** | ¥X.XXX | XXX股 | 基于支撑位 |
-| **建议卖出价** | ¥X.XXX | XXX股 | 基于阻力位 |
-| **止损价** | ¥X.XXX | - | 止损位 |
+| **建议买入价** | {currency_symbol}X.XXX | XXX股 | 基于支撑位 |
+| **建议卖出价** | {currency_symbol}X.XXX | XXX股 | 基于阻力位 |
+| **止损价** | {currency_symbol}X.XXX | - | 止损位 |
 
-{f"用户持仓: {user_position}股，成本: ¥{user_cost_price}" if user_position and user_cost_price else ""}
+{f"用户持仓: {user_position}股，成本: " + currency_symbol + f"{user_cost_price}" if user_position and user_cost_price else ""}
 
 ## 六、操作建议与风险提示
 给出{holding_period_cn}具体建议和主要风险

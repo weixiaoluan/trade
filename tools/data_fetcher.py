@@ -1020,6 +1020,47 @@ def is_cn_a_stock(ticker: str) -> bool:
     return code.startswith(('6', '0', '3'))
 
 
+def is_us_stock(ticker: str) -> bool:
+    """
+    判断是否为美股代码
+    
+    Args:
+        ticker: 股票代码
+    
+    Returns:
+        是否为美股
+    """
+    # 移除可能的后缀
+    code = ticker.replace('.SH', '').replace('.SZ', '').replace('.HK', '').replace('.sh', '').replace('.sz', '').replace('.hk', '')
+    # 如果是纯数字，不是美股
+    if code.isdigit():
+        return False
+    # 如果包含 .HK 后缀，是港股不是美股
+    if '.HK' in ticker.upper():
+        return False
+    # 美股代码通常是1-5个字母，或字母+数字组合（如 BRK.A, SPAX.PVT）
+    # 去掉点号后检查
+    code_no_dot = code.replace('.', '').replace('_', '')
+    if code_no_dot.isalpha() or (code_no_dot[0].isalpha() and len(code_no_dot) <= 10):
+        return True
+    return False
+
+
+def get_currency_symbol(ticker: str) -> str:
+    """
+    根据股票代码返回对应的货币符号
+    
+    Args:
+        ticker: 股票代码
+    
+    Returns:
+        货币符号 ($ 或 ¥)
+    """
+    if is_us_stock(ticker):
+        return "$"
+    return "¥"
+
+
 def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
     """
     使用东方财富API获取中国A股的历史行情数据
