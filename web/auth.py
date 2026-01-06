@@ -305,17 +305,34 @@ def get_user_reports(username: str) -> list:
     return result
 
 
+def clean_nan_values(obj):
+    """递归清理数据中的 NaN 和 Infinity 值，替换为 None"""
+    import math
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    elif isinstance(obj, dict):
+        return {k: clean_nan_values(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan_values(v) for v in obj]
+    else:
+        return obj
+
+
 def get_user_report(username: str, symbol: str) -> Optional[Dict]:
     """获取用户某个标的的报告"""
     report = db_get_user_report(username, symbol)
     if report:
+        # 清理报告数据中的 NaN 值，避免 JSON 序列化错误
+        report_data = clean_nan_values(report['report_data'])
         return {
             'id': report['id'],
             'symbol': report['symbol'],
             'name': report.get('name', report['symbol']),
             'created_at': report['created_at'],
             'status': 'completed',
-            'data': report['report_data']
+            'data': report_data
         }
     return None
 
