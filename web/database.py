@@ -426,7 +426,8 @@ def db_get_user_watchlist(username: str) -> List[Dict]:
                    COALESCE(starred, 0) as starred,
                    ai_buy_price, ai_sell_price, ai_price_updated_at, last_alert_at,
                    COALESCE(holding_period, 'swing') as holding_period,
-                   ai_buy_quantity, ai_sell_quantity, ai_recommendation
+                   ai_buy_quantity, ai_sell_quantity, ai_recommendation,
+                   COALESCE(from_ai_pick, 0) as from_ai_pick
             FROM watchlist WHERE username = ? 
             ORDER BY starred DESC, added_at DESC
         ''', (username,))
