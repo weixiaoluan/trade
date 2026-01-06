@@ -540,14 +540,14 @@ class QuantAgent:
         }
     
     def _get_recommendation(self) -> str:
-        """获取操作建议"""
+        """获取技术面评级"""
         if self.signal_score >= 80:
-            return "强力买入"
+            return "强势"
         elif self.signal_score >= 60:
-            return "买入"
+            return "偏强"
         elif self.signal_score >= 40:
-            return "持有"
+            return "中性"
         elif self.signal_score >= 20:
-            return "减持"
+            return "偏弱"
         else:
-            return "卖出"
+            return "弱势"

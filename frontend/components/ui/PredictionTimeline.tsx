@@ -92,9 +92,9 @@ export function PredictionTimeline({ predictions = defaultPredictions, onHoverHo
           </div>
           <div>
             <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
-              多周期趋势预测
+              多周期技术分析
             </h3>
-            <p className="text-[9px] sm:text-[10px] text-slate-500 font-mono mt-0.5">AI概率模型</p>
+            <p className="text-[9px] sm:text-[10px] text-slate-500 font-mono mt-0.5">AI技术指标模型</p>
           </div>
         </div>
       </div>

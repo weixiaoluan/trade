@@ -1949,12 +1949,12 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             "atr_pct": atr_data.get("percentage"),
         }
         
-        reco_map = {"strong_buy": "强力买入", "buy": "建议买入", "hold": "持有观望", "sell": "建议减持", "strong_sell": "强力卖出"}
+        reco_map = {"strong_buy": "强势", "buy": "偏强", "hold": "中性", "sell": "偏弱", "strong_sell": "弱势"}
         regime_map = {"trending": "趋势市", "ranging": "震荡市", "squeeze": "窄幅整理", "unknown": "待判定"}
         vol_map = {"high": "高波动", "medium": "中等波动", "low": "低波动"}
         
         score_text = f"{quant_score:.1f}" if isinstance(quant_score, (int, float)) else "N/A"
-        ai_summary = f"量化评分 {score_text} 分，{regime_map.get(market_regime, '待判定')}，{vol_map.get(volatility_state, '中等波动')}。综合建议：{reco_map.get(quant_reco, '观望')}。"
+        ai_summary = f"量化评分 {score_text} 分，{regime_map.get(market_regime, '待判定')}，{vol_map.get(volatility_state, '中等波动')}。技术面评级：{reco_map.get(quant_reco, '中性')}。"
         
         completed_at = get_beijing_now()
         report = normalize_report_timestamp(report, completed_at)
@@ -2128,53 +2128,41 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             if isinstance(ai_sell_price, str):
                 ai_sell_price = None
             
-            # 从报告中提取AI建议（四个字的建议：建议买入/建议卖出/持有观望等）
+            # 从报告中提取技术面评级（强势/偏强/中性/偏弱/弱势）
             ai_recommendation = None
             if report:
-                # 匹配总结评级部分的建议
+                # 匹配总结评级部分的评级
                 reco_patterns = [
-                    r'综合评级[：:]\s*\*?\*?(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)',
-                    r'总结评级[：:]\s*\*?\*?(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)',
-                    r'评级[：:]\s*\*?\*?(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)',
-                    r'建议[：:]\s*\*?\*?(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)',
-                    r'\*\*(强力买入|建议买入|买入观望|持有观望|建议减持|建议卖出|强力卖出)\*\*',
-                    r'操作策略[：:]\s*\*?\*?(买入|持有|卖出|观望)',
+                    r'综合评级[：:]\s*\*?\*?(强势|偏强|中性|偏弱|弱势)',
+                    r'总结评级[：:]\s*\*?\*?(强势|偏强|中性|偏弱|弱势)',
+                    r'技术面评级[：:]\s*\*?\*?(强势|偏强|中性|偏弱|弱势)',
+                    r'评级[：:]\s*\*?\*?(强势|偏强|中性|偏弱|弱势)',
+                    r'\*\*(强势|偏强|中性|偏弱|弱势)\*\*',
                 ]
                 for pattern in reco_patterns:
                     reco_match = re.search(pattern, report)
                     if reco_match:
                         ai_recommendation = reco_match.group(1)
-                        # 将两个字的建议转换为四个字
-                        if ai_recommendation == '买入':
-                            ai_recommendation = '建议买入'
-                        elif ai_recommendation == '卖出':
-                            ai_recommendation = '建议卖出'
-                        elif ai_recommendation == '持有':
-                            ai_recommendation = '持有观望'
-                        elif ai_recommendation == '观望':
-                            ai_recommendation = '持有观望'
-                        elif ai_recommendation == '减持':
-                            ai_recommendation = '建议减持'
-                        print(f"[AI建议] 从报告中提取到建议: {ai_recommendation}")
+                        print(f"[技术评级] 从报告中提取到评级: {ai_recommendation}")
                         break
                 
-                # 如果没有匹配到，尝试从量化建议获取
+                # 如果没有匹配到，尝试从量化评级获取
                 if not ai_recommendation:
-                    # 量化建议映射为四个字
+                    # 量化评级映射
                     quant_reco_map = {
-                        'strong_buy': '强力买入',
-                        'buy': '建议买入',
-                        'hold': '持有观望',
-                        'sell': '建议卖出',
-                        'strong_sell': '强力卖出',
+                        'strong_buy': '强势',
+                        'buy': '偏强',
+                        'hold': '中性',
+                        'sell': '偏弱',
+                        'strong_sell': '弱势',
                     }
                     ai_recommendation = quant_reco_map.get(quant_reco, None)
                     if ai_recommendation:
-                        print(f"[AI建议] 从量化分析获取建议: {ai_recommendation}")
+                        print(f"[技术评级] 从量化分析获取评级: {ai_recommendation}")
             
             if ai_buy_price or ai_sell_price or ai_recommendation:
                 db_update_watchlist_ai_prices(username, original_symbol, ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity, ai_recommendation)
-                print(f"[AI价格] 已更新 {original_symbol}: 建议={ai_recommendation}, 买入价={ai_buy_price}, 卖出价={ai_sell_price}, 买入量={ai_buy_quantity}, 卖出量={ai_sell_quantity}")
+                print(f"[AI价格] 已更新 {original_symbol}: 评级={ai_recommendation}, 参考低位={ai_buy_price}, 参考高位={ai_sell_price}")
                 
                 # 将AI建议价格添加到report_data中，便于前端获取
                 report_data['ai_buy_price'] = ai_buy_price
@@ -2564,11 +2552,11 @@ async def run_full_analysis(task_id: str, ticker: str):
         }
 
         reco_map = {
-            "strong_buy": "强力买入",
-            "buy": "建议买入",
-            "hold": "持有观望",
-            "sell": "建议减持",
-            "strong_sell": "强力卖出",
+            "strong_buy": "强势",
+            "buy": "偏强",
+            "hold": "中性",
+            "sell": "偏弱",
+            "strong_sell": "弱势",
         }
         regime_map = {
             "trending": "趋势市",
@@ -2594,13 +2582,13 @@ async def run_full_analysis(task_id: str, ticker: str):
         
         regime_cn = regime_map.get(market_regime, "待判定")
         vol_cn = vol_map.get(volatility_state, "波动适中")
-        reco_cn = reco_map.get(quant_reco, "观望")
+        reco_cn = reco_map.get(quant_reco, "中性")
         bullish_signals = trend_analysis.get("bullish_signals", 0) if isinstance(trend_analysis, dict) else 0
         bearish_signals = trend_analysis.get("bearish_signals", 0) if isinstance(trend_analysis, dict) else 0
         
         ai_summary = (
             f"量化评分 {score_text} 分，当前处于{regime_cn}，{vol_cn}环境。"
-            f"多头信号 {bullish_signals} 个、空头信号 {bearish_signals} 个，综合建议：{reco_cn}。"
+            f"多头信号 {bullish_signals} 个、空头信号 {bearish_signals} 个，技术面评级：{reco_cn}。"
         )
         
         short_term_view = ""
@@ -2944,7 +2932,7 @@ async def generate_ai_report_with_predictions(
     
     regime_map = {"trending": "趋势市", "ranging": "震荡市", "squeeze": "窄幅整理", "unknown": "待判定"}
     vol_map = {"high": "高波动", "medium": "中等波动", "low": "低波动"}
-    reco_map = {"strong_buy": "强力买入", "buy": "建议买入", "hold": "持有观望", "sell": "建议减持", "strong_sell": "强力卖出"}
+    reco_map = {"strong_buy": "强势", "buy": "偏强", "hold": "中性", "sell": "偏弱", "strong_sell": "弱势"}
     
     # 获取基本面数据
     valuation = stock_info.get("valuation", {})
@@ -3219,11 +3207,11 @@ async def generate_ai_report(
     quant_reco_code = quant_analysis.get("recommendation", "hold")
 
     reco_map = {
-        "strong_buy": "强力买入",
-        "buy": "买入",
-        "hold": "持有",
-        "sell": "减持",
-        "strong_sell": "卖出",
+        "strong_buy": "强势",
+        "buy": "偏强",
+        "hold": "中性",
+        "sell": "偏弱",
+        "strong_sell": "弱势",
     }
     regime_map = {
         "trending": "趋势市",
@@ -3257,25 +3245,25 @@ async def generate_ai_report(
         period_focus = """
 **短线交易分析重点（1-5天）**：
 - 关注日内和日线级别的技术信号
-- 建议买入价应接近当日支撑位，建议卖出价应接近短期阻力位"""
-        price_guidance = "短线建议买入价应在当前价格下方1-3%的支撑位附近，建议卖出价应在当前价格上方2-5%的阻力位附近"
+- 参考低位应接近当日支撑位，参考高位应接近短期阻力位"""
+        price_guidance = "短线参考低位应在当前价格下方1-3%的支撑位附近，参考高位应在当前价格上方2-5%的阻力位附近"
     elif holding_period == 'long':
         period_focus = """
 **中长线投资分析重点（1月以上）**：
 - 关注周线、月线级别的趋势方向
-- 建议买入价应在重要支撑位，建议卖出价应在长期阻力位"""
-        price_guidance = "中长线建议买入价应在当前价格下方5-15%的重要支撑位，建议卖出价应在当前价格上方10-30%的长期目标位"
+- 参考低位应在重要支撑位，参考高位应在长期阻力位"""
+        price_guidance = "中长线参考低位应在当前价格下方5-15%的重要支撑位，参考高位应在当前价格上方10-30%的长期目标位"
     else:  # swing
         period_focus = """
 **波段操作分析重点（1-4周）**：
 - 关注日线和周线级别的波段机会
-- 建议买入价应在波段低点附近，建议卖出价应在波段高点附近"""
-        price_guidance = "波段建议买入价应在当前价格下方3-8%的支撑位，建议卖出价应在当前价格上方5-15%的阻力位"
+- 参考低位应在波段低点附近，参考高位应在波段高点附近"""
+        price_guidance = "波段参考低位应在当前价格下方3-8%的支撑位，参考高位应在当前价格上方5-15%的阻力位"
     
     # 构建持仓信息提示（只有持仓和成本价都有值时才显示）
     position_hint = ""
     if user_position and user_cost_price:
-        position_hint = f"\n4. 用户持仓: {user_position}股，成本价: {currency_symbol}{user_cost_price}，请据此给出买入/卖出数量建议"
+        position_hint = f"\n4. 用户持仓: {user_position}股，成本价: {currency_symbol}{user_cost_price}，请据此给出参考数量"
     
     prompt = f"""**重要提示**: 
 1. 当前日期: {report_date} {report_time}

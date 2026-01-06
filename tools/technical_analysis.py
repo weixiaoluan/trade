@@ -1373,13 +1373,13 @@ def analyze_trend(indicators_json: str) -> str:
             recommendation = "sell"
 
         recommendation_cn_map = {
-            "strong_buy": "强力买入",
-            "buy": "买入",
-            "hold": "持有",
-            "sell": "减持",
-            "strong_sell": "卖出",
+            "strong_buy": "强势",
+            "buy": "偏强",
+            "hold": "中性",
+            "sell": "偏弱",
+            "strong_sell": "弱势",
         }
-        recommendation_cn = recommendation_cn_map.get(recommendation, "持有")
+        recommendation_cn = recommendation_cn_map.get(recommendation, "中性")
 
         trend_direction = "bullish" if score > 50 else "bearish"
         trend_strength = adx_data.get("trend_strength", "moderate")

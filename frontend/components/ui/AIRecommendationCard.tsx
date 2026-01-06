@@ -24,10 +24,11 @@ interface AIRecommendationCardProps {
   riskLevel?: 'low' | 'medium' | 'high';
 }
 
+// 技术面评级配置 - 仅表示技术指标状态，不构成投资建议
 const recommendationConfig = {
   strong_buy: {
-    label: '强力买入',
-    labelEn: 'STRONG BUY',
+    label: '强势',
+    labelEn: 'STRONG',
     icon: TrendingUp,
     accentColor: 'bg-gradient-to-b from-emerald-500 to-emerald-600',
     bgTint: 'bg-emerald-500/5',
@@ -35,8 +36,8 @@ const recommendationConfig = {
     badgeColor: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
   },
   buy: {
-    label: '建议买入',
-    labelEn: 'BUY',
+    label: '偏强',
+    labelEn: 'BULLISH',
     icon: ThumbsUp,
     accentColor: 'bg-gradient-to-b from-emerald-500 to-teal-600',
     bgTint: 'bg-emerald-500/5',
@@ -44,8 +45,8 @@ const recommendationConfig = {
     badgeColor: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
   },
   hold: {
-    label: '持有观望',
-    labelEn: 'HOLD',
+    label: '中性',
+    labelEn: 'NEUTRAL',
     icon: Minus,
     accentColor: 'bg-gradient-to-b from-amber-500 to-amber-600',
     bgTint: 'bg-amber-500/5',
@@ -53,8 +54,8 @@ const recommendationConfig = {
     badgeColor: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
   },
   sell: {
-    label: '建议减持',
-    labelEn: 'SELL',
+    label: '偏弱',
+    labelEn: 'BEARISH',
     icon: ThumbsDown,
     accentColor: 'bg-gradient-to-b from-rose-500 to-rose-600',
     bgTint: 'bg-rose-500/5',
@@ -62,8 +63,8 @@ const recommendationConfig = {
     badgeColor: 'bg-rose-500/10 border-rose-500/20 text-rose-400',
   },
   strong_sell: {
-    label: '强力卖出',
-    labelEn: 'STRONG SELL',
+    label: '弱势',
+    labelEn: 'WEAK',
     icon: TrendingDown,
     accentColor: 'bg-gradient-to-b from-rose-500 to-red-600',
     bgTint: 'bg-rose-500/5',
