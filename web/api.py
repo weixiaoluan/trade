@@ -1421,29 +1421,38 @@ async def get_report_detail(symbol: str, authorization: str = Header(None)):
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    # 统一转为大写，与保存时保持一致
-    symbol = symbol.upper()
-    print(f"[报告查询] 原始symbol: {symbol}")
-    
-    # symbol已经是URL规范化格式（点号已替换为下划线），直接使用
-    report = get_user_report(user['username'], symbol)
-    print(f"[报告查询] 使用 {symbol} 查询结果: {'找到' if report else '未找到'}")
-    
-    if not report:
-        # 尝试还原点号格式再查询一次（兼容旧数据）
-        original_symbol = restore_symbol_from_url(symbol)
-        print(f"[报告查询] 还原后symbol: {original_symbol}")
-        if original_symbol != symbol:
-            report = get_user_report(user['username'], original_symbol)
-            print(f"[报告查询] 使用 {original_symbol} 查询结果: {'找到' if report else '未找到'}")
-    
-    if not report:
-        raise HTTPException(status_code=404, detail="未找到该标的的报告")
-    
-    return {
-        "status": "success",
-        "report": report
-    }
+    try:
+        # 统一转为大写，与保存时保持一致
+        symbol = symbol.upper()
+        print(f"[报告查询] 原始symbol: {symbol}")
+        
+        # symbol已经是URL规范化格式（点号已替换为下划线），直接使用
+        report = get_user_report(user['username'], symbol)
+        print(f"[报告查询] 使用 {symbol} 查询结果: {'找到' if report else '未找到'}")
+        
+        if not report:
+            # 尝试还原点号格式再查询一次（兼容旧数据）
+            original_symbol = restore_symbol_from_url(symbol)
+            print(f"[报告查询] 还原后symbol: {original_symbol}")
+            if original_symbol != symbol:
+                report = get_user_report(user['username'], original_symbol)
+                print(f"[报告查询] 使用 {original_symbol} 查询结果: {'找到' if report else '未找到'}")
+        
+        if not report:
+            raise HTTPException(status_code=404, detail="未找到该标的的报告")
+        
+        print(f"[报告查询] 返回报告数据，ID: {report.get('id')}")
+        return {
+            "status": "success",
+            "report": report
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[报告查询] 错误: {e}")
+        print(f"[报告查询] 堆栈: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"获取报告失败: {str(e)}")
 
 
 @app.get("/api/share/report/{symbol}")
