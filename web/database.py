@@ -271,6 +271,21 @@ def migrate_database():
             print("迁移: 添加 holding_period 字段到 reminders 表")
             cursor.execute("ALTER TABLE reminders ADD COLUMN holding_period TEXT DEFAULT 'swing'")
         
+        # 创建 AI 优选表（如果不存在）
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_picks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL UNIQUE,
+                name TEXT,
+                type TEXT,
+                added_by TEXT NOT NULL,
+                added_at TEXT NOT NULL,
+                FOREIGN KEY (added_by) REFERENCES users(username)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_picks_symbol ON ai_picks(symbol)')
+        print("迁移: AI 优选表已创建/检查完成")
+        
         conn.commit()
         print("数据库迁移完成")
 
@@ -910,6 +925,57 @@ def db_get_all_reminders() -> Dict[str, List[Dict]]:
             result[username].append(reminder)
         
         return result
+
+
+# ============================================
+# AI 优选管理
+# ============================================
+
+def db_get_ai_picks() -> List[Dict]:
+    """获取所有 AI 优选标的"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT symbol, name, type, added_by, added_at 
+            FROM ai_picks 
+            ORDER BY added_at DESC
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_add_ai_pick(symbol: str, name: str, type_: str, added_by: str) -> bool:
+    """添加 AI 优选标的"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO ai_picks (symbol, name, type, added_by, added_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (symbol.upper(), name, type_, added_by, datetime.now().isoformat()))
+            return True
+        except sqlite3.IntegrityError:
+            # 已存在，更新信息
+            cursor.execute('''
+                UPDATE ai_picks SET name = ?, type = ?, added_by = ?, added_at = ?
+                WHERE symbol = ?
+            ''', (name, type_, added_by, datetime.now().isoformat(), symbol.upper()))
+            return True
+
+
+def db_remove_ai_pick(symbol: str) -> bool:
+    """移除 AI 优选标的"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM ai_picks WHERE symbol = ?', (symbol.upper(),))
+        return cursor.rowcount > 0
+
+
+def db_is_ai_pick(symbol: str) -> bool:
+    """检查是否是 AI 优选标的"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT 1 FROM ai_picks WHERE symbol = ?', (symbol.upper(),))
+        return cursor.fetchone() is not None
 
 
 # ============================================

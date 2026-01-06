@@ -1051,6 +1051,127 @@ async def batch_delete_watchlist_items(
 
 
 # ============================================
+# AI 优选 API
+# ============================================
+
+@app.get("/api/ai-picks")
+async def get_ai_picks(authorization: str = Header(None)):
+    """获取 AI 优选列表（所有已审核用户可见）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    # 只有已审核用户可以查看
+    if not is_approved(user):
+        raise HTTPException(status_code=403, detail="账户待审核，暂无权限查看")
+    
+    from web.database import db_get_ai_picks
+    picks = db_get_ai_picks()
+    
+    return {
+        "status": "success",
+        "picks": picks
+    }
+
+
+class AiPickItem(BaseModel):
+    """AI 优选项"""
+    symbol: str
+    name: str = ""
+    type: str = "stock"
+
+
+@app.post("/api/ai-picks")
+async def add_ai_pick(
+    item: AiPickItem,
+    authorization: str = Header(None)
+):
+    """添加 AI 优选（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限操作")
+    
+    from web.database import db_add_ai_pick
+    success = db_add_ai_pick(item.symbol, item.name, item.type, user['username'])
+    
+    if success:
+        return {"status": "success", "message": f"{item.symbol} 已添加到 AI 优选"}
+    else:
+        return {"status": "error", "message": "添加失败"}
+
+
+@app.post("/api/ai-picks/batch")
+async def batch_add_ai_picks(
+    items: List[AiPickItem],
+    authorization: str = Header(None)
+):
+    """批量添加 AI 优选（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限操作")
+    
+    from web.database import db_add_ai_pick
+    added = []
+    for item in items:
+        if db_add_ai_pick(item.symbol, item.name, item.type, user['username']):
+            added.append(item.symbol)
+    
+    return {
+        "status": "success",
+        "added": added,
+        "message": f"成功添加 {len(added)} 个标的到 AI 优选"
+    }
+
+
+@app.delete("/api/ai-picks/{symbol}")
+async def remove_ai_pick(
+    symbol: str,
+    authorization: str = Header(None)
+):
+    """移除 AI 优选（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限操作")
+    
+    from web.database import db_remove_ai_pick
+    success = db_remove_ai_pick(symbol)
+    
+    if success:
+        return {"status": "success", "message": f"{symbol} 已从 AI 优选移除"}
+    else:
+        raise HTTPException(status_code=404, detail="未找到该标的")
+
+
+# ============================================
 # 分析报告 API
 # ============================================
 
@@ -1384,6 +1505,16 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
     original_symbol = ticker
     print(f"[分析开始] {ticker} 任务ID: {task_id}, 持有周期: {holding_period_cn}, 持仓: {user_position}, 成本: {user_cost_price}")
     
+    # 检查是否是场外基金
+    is_otc_fund = False
+    pure_code = ticker.replace('.SZ', '').replace('.SS', '').replace('.SH', '')
+    if pure_code.isdigit() and len(pure_code) == 6:
+        if pure_code.startswith(('00', '01', '02', '03', '04', '05', '06', '07', '08', '09')) and \
+           not pure_code.startswith(('000', '001', '002', '003')):
+            if not pure_code.startswith(('51', '15', '16', '58', '56')):
+                is_otc_fund = True
+                print(f"[分析] {ticker} 识别为场外基金，将使用基金净值数据进行分析")
+    
     try:
         # === 初始化 ===
         update_analysis_task(username, original_symbol, {
@@ -1392,42 +1523,56 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             'current_step': '初始化分析环境'
         })
         
-        # 检查是否是场外基金
-        pure_code = ticker.replace('.SZ', '').replace('.SS', '').replace('.SH', '')
-        if pure_code.isdigit() and len(pure_code) == 6:
-            if pure_code.startswith(('00', '01', '02', '03', '04', '05', '06', '07', '08', '09')) and \
-               not pure_code.startswith(('000', '001', '002', '003')):
-                if not pure_code.startswith(('51', '15', '16', '58', '56')):
-                    raise Exception(f"{ticker} 是场外基金，暂不支持技术分析。")
-        
         # === 阶段1：数据获取（5-15%）===
         update_analysis_task(username, original_symbol, {
             'progress': 5,
             'current_step': '识别证券代码'
         })
         
-        search_result = await asyncio.to_thread(search_ticker, ticker)
-        search_dict = json.loads(search_result)
-        if search_dict.get("status") == "success":
-            ticker = search_dict.get("ticker", ticker)
-        
-        update_analysis_task(username, original_symbol, {
-            'progress': 8,
-            'current_step': '获取行情和基本面数据'
-        })
-        
-        # 并行获取数据
-        stock_data_task = asyncio.create_task(asyncio.to_thread(get_stock_data, ticker, "2y", "1d"))
-        stock_info_task = asyncio.create_task(asyncio.to_thread(get_stock_info, ticker))
-        
-        stock_data, stock_info = await asyncio.gather(stock_data_task, stock_info_task)
-        stock_data_dict = json.loads(stock_data)
-        stock_info_dict = json.loads(stock_info)
-        
-        if stock_data_dict.get("status") != "success":
-            raise Exception(f"无法获取 {ticker} 的行情数据")
-        
-        print(f"[分析] {ticker} 数据获取完成 耗时{time.time()-start_time:.1f}s")
+        # 场外基金使用专门的数据获取方法
+        if is_otc_fund:
+            from tools.data_fetcher import get_cn_fund_data, get_cn_fund_info
+            
+            update_analysis_task(username, original_symbol, {
+                'progress': 8,
+                'current_step': '获取基金净值数据'
+            })
+            
+            # 获取基金数据
+            stock_data = await asyncio.to_thread(get_cn_fund_data, pure_code, "2y")
+            stock_info = await asyncio.to_thread(get_cn_fund_info, pure_code)
+            
+            stock_data_dict = json.loads(stock_data)
+            stock_info_dict = json.loads(stock_info)
+            
+            if stock_data_dict.get("status") != "success":
+                raise Exception(f"无法获取 {ticker} 的基金净值数据")
+            
+            print(f"[分析] {ticker} 基金数据获取完成 耗时{time.time()-start_time:.1f}s")
+        else:
+            # 非场外基金使用原有逻辑
+            search_result = await asyncio.to_thread(search_ticker, ticker)
+            search_dict = json.loads(search_result)
+            if search_dict.get("status") == "success":
+                ticker = search_dict.get("ticker", ticker)
+            
+            update_analysis_task(username, original_symbol, {
+                'progress': 8,
+                'current_step': '获取行情和基本面数据'
+            })
+            
+            # 并行获取数据
+            stock_data_task = asyncio.create_task(asyncio.to_thread(get_stock_data, ticker, "2y", "1d"))
+            stock_info_task = asyncio.create_task(asyncio.to_thread(get_stock_info, ticker))
+            
+            stock_data, stock_info = await asyncio.gather(stock_data_task, stock_info_task)
+            stock_data_dict = json.loads(stock_data)
+            stock_info_dict = json.loads(stock_info)
+            
+            if stock_data_dict.get("status") != "success":
+                raise Exception(f"无法获取 {ticker} 的行情数据")
+            
+            print(f"[分析] {ticker} 数据获取完成 耗时{time.time()-start_time:.1f}s")
         
         # === 阶段2：量化分析（15-25%）===
         update_analysis_task(username, original_symbol, {

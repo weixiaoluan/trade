@@ -36,6 +36,8 @@ import {
   ExternalLink,
   AlertTriangle,
   Edit3,
+  Sparkles,
+  Share2,
 } from "lucide-react";
 import { UserHeader } from "@/components/ui/UserHeader";
 import { AlertModal } from "@/components/ui/AlertModal";
@@ -240,6 +242,13 @@ export default function DashboardPage() {
   const [editPosition, setEditPosition] = useState<string>("");
   const [editCostPrice, setEditCostPrice] = useState<string>("");
   const [editHoldingPeriod, setEditHoldingPeriod] = useState<string>("swing");
+
+  // AI 优选相关状态
+  const [showAiPicksModal, setShowAiPicksModal] = useState(false);
+  const [aiPicks, setAiPicks] = useState<Array<{ symbol: string; name: string; type: string; added_by: string; added_at: string }>>([]);
+  const [aiPicksLoading, setAiPicksLoading] = useState(false);
+  const [selectedAiPicks, setSelectedAiPicks] = useState<Set<string>>(new Set());
+  const [addAsAiPick, setAddAsAiPick] = useState(false);  // 添加自选时是否同时添加为AI优选
 
   const getToken = useCallback(() => localStorage.getItem("token"), []);
 
@@ -590,6 +599,138 @@ export default function DashboardPage() {
     }
   }, [getToken, wechatOpenId, showAlertModal, fetchUserSettings]);
 
+  // 获取 AI 优选列表
+  const fetchAiPicks = useCallback(async () => {
+    setAiPicksLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/ai-picks`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAiPicks(data.picks || []);
+      }
+    } catch (error) {
+      console.error("获取 AI 优选失败:", error);
+    } finally {
+      setAiPicksLoading(false);
+    }
+  }, [getToken]);
+
+  // 打开 AI 优选弹窗 - 定义在后面（需要 canUseFeatures）
+  const handleOpenAiPicksRef = useRef<() => void>(() => {});
+
+  // 切换 AI 优选选中状态
+  const toggleAiPickSelect = useCallback((symbol: string) => {
+    setSelectedAiPicks(prev => {
+      const next = new Set(prev);
+      if (next.has(symbol)) {
+        next.delete(symbol);
+      } else {
+        next.add(symbol);
+      }
+      return next;
+    });
+  }, []);
+
+  // 全选/取消全选 AI 优选
+  const toggleSelectAllAiPicks = useCallback(() => {
+    setSelectedAiPicks(prev => {
+      if (prev.size === aiPicks.length) {
+        return new Set();
+      }
+      return new Set(aiPicks.map(p => p.symbol));
+    });
+  }, [aiPicks]);
+
+  // 添加选中的 AI 优选到自选
+  const handleAddAiPicksToWatchlist = useCallback(async () => {
+    if (selectedAiPicks.size === 0) {
+      showAlertModal("请选择标的", "请至少选择一个标的添加到自选", "warning");
+      return;
+    }
+
+    const items = aiPicks
+      .filter(p => selectedAiPicks.has(p.symbol))
+      .map(p => ({ symbol: p.symbol, name: p.name, type: p.type }));
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/watchlist/batch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify(items),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setShowAiPicksModal(false);
+        setSelectedAiPicks(new Set());
+        fetchWatchlist();
+        
+        if (data.skipped && data.skipped.length > 0) {
+          showAlertModal(
+            "部分标的已存在",
+            `已跳过 ${data.skipped.length} 个已存在的标的，成功添加 ${data.added?.length || 0} 个`,
+            "info"
+          );
+        } else {
+          showAlertModal("添加成功", `成功添加 ${data.added?.length || 0} 个标的到自选`, "success");
+        }
+      }
+    } catch (error) {
+      showAlertModal("添加失败", "网络错误，请稍后重试", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedAiPicks, aiPicks, getToken, fetchWatchlist, showAlertModal]);
+
+  // 添加标的为 AI 优选（管理员）
+  const handleAddToAiPicks = useCallback(async (symbol: string, name: string, type: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/ai-picks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ symbol, name, type }),
+      });
+
+      if (response.ok) {
+        showAlertModal("添加成功", `${symbol} 已添加到 AI 优选`, "success");
+      } else {
+        const data = await response.json();
+        showAlertModal("添加失败", data.detail || "添加失败", "error");
+      }
+    } catch (error) {
+      showAlertModal("添加失败", "网络错误，请稍后重试", "error");
+    }
+  }, [getToken, showAlertModal]);
+
+  // 从 AI 优选移除（管理员）
+  const handleRemoveFromAiPicks = useCallback(async (symbol: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/ai-picks/${encodeURIComponent(symbol)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+
+      if (response.ok) {
+        showAlertModal("移除成功", `${symbol} 已从 AI 优选移除`, "success");
+        fetchAiPicks();
+      } else {
+        const data = await response.json();
+        showAlertModal("移除失败", data.detail || "移除失败", "error");
+      }
+    } catch (error) {
+      showAlertModal("移除失败", "网络错误，请稍后重试", "error");
+    }
+  }, [getToken, showAlertModal, fetchAiPicks]);
+
   const hasActiveTasks = useMemo(() => {
     return Object.values(tasks).some((t) => t.status === "running" || t.status === "pending");
   }, [tasks]);
@@ -665,6 +806,22 @@ export default function DashboardPage() {
       "warning"
     );
   }, [showAlertModal]);
+
+  // 打开 AI 优选弹窗
+  const handleOpenAiPicks = useCallback(() => {
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      return;
+    }
+    setSelectedAiPicks(new Set());
+    fetchAiPicks();
+    setShowAiPicksModal(true);
+  }, [canUseFeatures, showPendingAlert, fetchAiPicks]);
+
+  // 更新 ref
+  useEffect(() => {
+    handleOpenAiPicksRef.current = handleOpenAiPicks;
+  }, [handleOpenAiPicks]);
 
   const checkPermissionAndRun = (callback: () => void) => {
     if (!canUseFeatures()) {
@@ -782,6 +939,9 @@ export default function DashboardPage() {
       cost_price: costPriceVal,
     };
     
+    // 保存当前的 AI 优选状态
+    const shouldAddAsAiPick = addAsAiPick && user?.role === 'admin';
+    
     flushSync(() => {
       setWatchlist(prev => [optimisticItem, ...prev]);
       setAddSymbol("");
@@ -789,6 +949,7 @@ export default function DashboardPage() {
       setAddCostPrice("");
       if (closeAfterAdd) {
         setShowAddModal(false);
+        setAddAsAiPick(false);
       }
     });
 
@@ -816,6 +977,11 @@ export default function DashboardPage() {
       if (response.ok && data.status === "success") {
         // 刷新获取完整数据（包括名称等）
         fetchWatchlist();
+        
+        // 如果勾选了 AI 优选，同时添加到 AI 优选
+        if (shouldAddAsAiPick) {
+          handleAddToAiPicks(symbolToAdd, data.name || symbolToAdd, 'stock');
+        }
       } else {
         // 添加失败，回滚
         setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
@@ -826,7 +992,7 @@ export default function DashboardPage() {
       setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
       showAlertModal("添加失败", "网络错误，请检查网络连接", "error");
     }
-  }, [addCostPrice, addPosition, addSymbol, canUseFeatures, fetchWatchlist, getToken, showPendingAlert, showAlertModal, watchlist]);
+  }, [addCostPrice, addPosition, addSymbol, addAsAiPick, user, canUseFeatures, fetchWatchlist, getToken, showPendingAlert, showAlertModal, watchlist, handleAddToAiPicks]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -2381,6 +2547,27 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* 管理员：AI 优选勾选框 */}
+              {user?.role === 'admin' && (
+                <div className="mb-4">
+                  <label 
+                    className="flex items-center gap-2 cursor-pointer p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl hover:bg-amber-500/15 transition-all"
+                    onClick={() => setAddAsAiPick(!addAsAiPick)}
+                  >
+                    <div className="text-amber-400">
+                      {addAsAiPick ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <span className="text-sm font-medium text-amber-400">同时添加为 AI 优选</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5">共享给所有已审核用户查看</p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
               <div className="flex gap-3 mb-4">
                 <button
                   onClick={() => handleAddSymbol(true)}
@@ -3205,6 +3392,21 @@ export default function DashboardPage() {
                   保存设置
                 </button>
               </div>
+
+              {/* AI 优选入口 */}
+              <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                <button
+                  onClick={() => {
+                    setShowSettingsModal(false);
+                    handleOpenAiPicks();
+                  }}
+                  className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded-xl text-sm sm:text-base flex items-center justify-center gap-2 hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  AI 优选
+                </button>
+                <p className="text-[10px] text-slate-500 mt-2 text-center">查看管理员推荐的优质标的</p>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -3409,6 +3611,137 @@ export default function DashboardPage() {
         confirmText="立即分析"
         cancelText="稍后再说"
       />
+
+      {/* AI 优选弹窗 */}
+      <AnimatePresence>
+        {showAiPicksModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
+            onClick={() => setShowAiPicksModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-lg sm:mx-4 max-h-[85vh] overflow-hidden flex flex-col safe-area-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  AI 优选
+                </h3>
+                <button onClick={() => setShowAiPicksModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <p className="text-slate-500 text-xs sm:text-sm mb-4">
+                管理员精选的优质标的，可批量添加到自选列表
+              </p>
+
+              {aiPicksLoading ? (
+                <div className="flex-1 flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+                </div>
+              ) : aiPicks.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-500">
+                  <Sparkles className="w-12 h-12 mb-3 opacity-30" />
+                  <p>暂无 AI 优选标的</p>
+                </div>
+              ) : (
+                <>
+                  {/* 全选/已选数量 */}
+                  <div className="flex items-center justify-between mb-3 pb-3 border-b border-white/[0.06]">
+                    <button
+                      onClick={toggleSelectAllAiPicks}
+                      className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200"
+                    >
+                      {selectedAiPicks.size === aiPicks.length ? (
+                        <CheckSquare className="w-4 h-4 text-amber-400" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                      全选
+                    </button>
+                    <span className="text-xs text-slate-500">
+                      已选 {selectedAiPicks.size}/{aiPicks.length}
+                    </span>
+                  </div>
+
+                  {/* 列表 */}
+                  <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+                    {aiPicks.map((pick) => (
+                      <div
+                        key={pick.symbol}
+                        className={`p-3 rounded-xl transition-all cursor-pointer ${
+                          selectedAiPicks.has(pick.symbol)
+                            ? "bg-amber-500/10 border border-amber-500/20"
+                            : "bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.04]"
+                        }`}
+                        onClick={() => toggleAiPickSelect(pick.symbol)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="text-slate-300">
+                            {selectedAiPicks.has(pick.symbol) ? (
+                              <CheckSquare className="w-5 h-5 text-amber-400" />
+                            ) : (
+                              <Square className="w-5 h-5" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-semibold text-white text-sm">{pick.symbol}</span>
+                              {pick.type && (
+                                <span className="px-1.5 py-0.5 text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded">
+                                  {pick.type === "stock" ? "股票" : pick.type === "etf" ? "ETF" : "基金"}
+                                </span>
+                              )}
+                            </div>
+                            {pick.name && (
+                              <div className="text-xs text-slate-500 truncate mt-0.5">{pick.name}</div>
+                            )}
+                          </div>
+                          {/* 管理员可以删除 */}
+                          {user?.role === 'admin' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveFromAiPicks(pick.symbol);
+                              }}
+                              className="p-1.5 hover:bg-rose-500/20 rounded-lg text-slate-500 hover:text-rose-400 transition-all"
+                              title="从 AI 优选移除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 添加按钮 */}
+                  <button
+                    onClick={handleAddAiPicksToWatchlist}
+                    disabled={loading || selectedAiPicks.size === 0}
+                    className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base flex items-center justify-center gap-2 font-medium"
+                  >
+                    {loading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Plus className="w-4 h-4" />
+                    )}
+                    添加到自选 ({selectedAiPicks.size})
+                  </button>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

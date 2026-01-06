@@ -135,19 +135,20 @@ html, body {
 }
 
 .markdown-content h1 {
-  @apply text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 mt-6 sm:mt-8 flex items-center gap-2;
+  @apply text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 mt-6 sm:mt-8 flex items-center gap-2 whitespace-nowrap;
 }
 
 .markdown-content h2 {
-  @apply text-base sm:text-lg font-semibold text-indigo-200 mb-3 sm:mb-4 mt-6 sm:mt-8 flex items-center gap-2 border-b border-white/5 pb-2;
+  @apply text-base sm:text-lg font-semibold text-indigo-200 mb-3 sm:mb-4 mt-6 sm:mt-8 flex items-center gap-2 border-b border-white/5 pb-2 whitespace-nowrap;
 }
 
 .markdown-content h3 {
-  @apply text-sm sm:text-base font-medium text-slate-200 mb-2 sm:mb-3 mt-4 sm:mt-6;
+  @apply text-sm sm:text-base font-medium text-slate-200 mb-2 sm:mb-3 mt-4 sm:mt-6 whitespace-nowrap;
 }
 
 .markdown-content p {
-  @apply text-slate-300 mb-3 sm:mb-4 leading-6 sm:leading-7;
+  @apply text-slate-300 mb-3 sm:mb-4 leading-6 sm:leading-7 whitespace-pre-wrap;
+  word-break: keep-all;
 }
 
 .markdown-content ul {
