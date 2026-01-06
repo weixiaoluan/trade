@@ -83,11 +83,11 @@ export default function LoginPage() {
           </div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
             <span className="bg-gradient-to-r from-slate-100 via-indigo-200 to-slate-100 bg-clip-text text-transparent">
-              证券AI智能分析引擎
+              证券数据研究工具
             </span>
           </h1>
           <p className="text-slate-500 mt-2 text-sm">
-            基于 Multi-Agent AI 的量化分析系统
+            个人学习研究用 · 技术指标计算与可视化
           </p>
         </div>
 
@@ -185,11 +185,21 @@ export default function LoginPage() {
               </Link>
             </p>
           </div>
+          
+          {/* 免责声明提示 */}
+          <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <p className="text-amber-300/80 text-xs text-center leading-relaxed">
+              ⚠️ 本工具仅供个人学习研究，不构成投资建议。
+              <Link href="/disclaimer" className="underline hover:text-amber-200 ml-1">
+                查看完整声明
+              </Link>
+            </p>
+          </div>
         </div>
 
         {/* Footer */}
         <p className="text-center text-slate-600 text-xs mt-8">
-          © 2025 AI-Trade · 基于 DeepSeek + AutoGen 构建
+          个人学习研究工具 · 仅供参考
         </p>
       </div>
     </div>

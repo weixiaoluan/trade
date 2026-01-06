@@ -3346,7 +3346,7 @@ async def generate_ai_report(
 综合分时/日K/周K/月K研判趋势方向
 
 ### 2.3 综合结论
-当前最佳操作策略和核心逻辑
+当前技术面分析结论和核心逻辑
 
 ## 三、技术指标分析
 分析MACD、RSI、KDJ、布林带等关键指标状态
@@ -3354,22 +3354,25 @@ async def generate_ai_report(
 ## 四、支撑阻力位
 列出关键支撑位和阻力位
 
-## 五、建议买卖价格（重要）
+## 五、参考价位（仅供研究参考）
 | 类型 | 价格 | 数量 | 说明 |
 |------|------|------|------|
-| **建议买入价** | {currency_symbol}X.XXX | XXX股 | 基于支撑位 |
-| **建议卖出价** | {currency_symbol}X.XXX | XXX股 | 基于阻力位 |
-| **止损价** | {currency_symbol}X.XXX | - | 止损位 |
+| **参考买入价** | {currency_symbol}X.XXX | XXX股 | 基于支撑位计算 |
+| **参考卖出价** | {currency_symbol}X.XXX | XXX股 | 基于阻力位计算 |
+| **参考止损价** | {currency_symbol}X.XXX | - | 技术止损位 |
 
 {f"用户持仓: {user_position}股，成本: " + currency_symbol + f"{user_cost_price}" if user_position and user_cost_price else ""}
 
-## 六、操作建议与风险提示
-给出{holding_period_cn}具体建议和主要风险
+## 六、技术面总结与风险提示
+给出{holding_period_cn}技术面分析总结和主要风险因素
 
-## 七、总结评级
-综合评级（强力买入/买入/持有/减持/卖出）
+## 七、综合评级
+技术面综合评级（强势/偏强/中性/偏弱/弱势）
 
-**要求**：必须给出具体的建议买入价和卖出价数字（精确到小数点后3位）
+**要求**：必须给出具体的参考买入价和卖出价数字（精确到小数点后3位）
+
+---
+**重要声明**：本分析报告由AI基于公开数据和技术指标自动生成，仅供个人学习研究参考，不构成任何投资建议。投资有风险，决策需谨慎。
 """
     try:
         import re

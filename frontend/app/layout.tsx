@@ -10,8 +10,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: '证券AI智能分析引擎',
-  description: '基于 Multi-Agent AI 的量化分析系统，覆盖全球股票、ETF、基金',
+  title: '证券数据研究工具 - 个人学习研究用',
+  description: '个人学习研究用的证券数据分析工具，基于公开数据的技术指标计算与可视化，仅供学习交流，不构成任何投资建议',
   icons: {
     icon: '/favicon.svg?v=2',
   },

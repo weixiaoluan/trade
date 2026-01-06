@@ -357,9 +357,9 @@ export default function ShareReportPage() {
           </div>
 
           {/* 底部提示 */}
-          <div className="text-center py-4">
-            <p className="text-xs text-slate-500">
-              本报告由 AI 多智能体系统生成，仅供参考
+          <div className="text-center py-4 bg-amber-500/5 rounded-lg mx-4 mb-4">
+            <p className="text-[10px] text-amber-300/70 px-2">
+              ⚠️ 本工具仅供个人学习研究，不构成投资建议
             </p>
           </div>
         </div>
@@ -505,10 +505,15 @@ export default function ShareReportPage() {
         </div>
 
         {/* 底部提示 */}
-        <div className="text-center py-8 border-t border-white/[0.06] mt-8">
-          <p className="text-sm text-slate-500">
-            本报告由 AI 多智能体系统生成，仅供参考，不构成投资建议。投资有风险，入市需谨慎。
-          </p>
+        <div className="text-center py-8 border-t border-white/[0.06] mt-8 bg-amber-500/5">
+          <div className="text-xs sm:text-sm text-amber-300/80 space-y-2 max-w-2xl mx-auto px-4">
+            <p className="font-medium">⚠️ 重要声明</p>
+            <p className="text-slate-500 leading-relaxed">
+              本工具为个人学习研究用途，所有分析内容均基于公开数据和技术指标自动生成，仅供学习交流参考。
+              本工具不具备证券投资咨询资质，所有内容不构成任何投资建议、推荐或指导。
+              投资有风险，任何投资决策请咨询持牌专业人士并自行承担风险。
+            </p>
+          </div>
         </div>
       </div>
     </div>

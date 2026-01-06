@@ -149,11 +149,11 @@ export default function RegisterPage() {
           </div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
             <span className="bg-gradient-to-r from-slate-100 via-indigo-200 to-slate-100 bg-clip-text text-transparent">
-              证券AI智能分析引擎
+              证券数据研究工具
             </span>
           </h1>
           <p className="text-slate-500 mt-2 text-sm">
-            基于 Multi-Agent AI 的量化分析系统
+            个人学习研究用 · 技术指标计算与可视化
           </p>
         </div>
 
@@ -162,6 +162,13 @@ export default function RegisterPage() {
           <h2 className="text-xl font-semibold text-slate-100 text-center mb-6">
             注册账号
           </h2>
+          
+          {/* 免责声明 */}
+          <div className="mb-6 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <p className="text-amber-300/90 text-xs leading-relaxed">
+              ⚠️ 本工具仅供个人学习研究使用，所有数据分析结果不构成任何投资建议。注册即表示您已阅读并同意此声明。
+            </p>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Username */}
