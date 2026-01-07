@@ -2150,6 +2150,31 @@ export default function DashboardPage() {
               <option value="swing" className="bg-slate-800">波段</option>
               <option value="long" className="bg-slate-800">中长线</option>
             </select>
+            {/* 排序选择 */}
+            <select
+              value={sortField ? `${sortField}_${sortOrder}` : "default"}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "default") {
+                  setSortField(null);
+                  setSortOrder("desc");
+                } else {
+                  const [field, order] = val.split("_");
+                  setSortField(field);
+                  setSortOrder(order as "asc" | "desc");
+                }
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs sm:text-sm cursor-pointer"
+            >
+              <option value="default" className="bg-slate-800">默认排序</option>
+              <option value="change_percent_desc" className="bg-slate-800">涨跌幅↓</option>
+              <option value="change_percent_asc" className="bg-slate-800">涨跌幅↑</option>
+              <option value="ai_buy_price_asc" className="bg-slate-800">参考低位(近→远)</option>
+              <option value="ai_buy_price_desc" className="bg-slate-800">参考低位(远→近)</option>
+              <option value="ai_sell_price_asc" className="bg-slate-800">参考高位(近→远)</option>
+              <option value="ai_sell_price_desc" className="bg-slate-800">参考高位(远→近)</option>
+            </select>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
