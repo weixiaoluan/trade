@@ -349,6 +349,9 @@ export default function ShareReportPage() {
             <p className="text-[10px] text-amber-300/70 px-2">
               ⚠️ 本工具仅供个人学习研究，不构成投资建议
             </p>
+            <p className="text-[10px] text-rose-400/70 px-2 mt-1">
+              🚫 严禁转发、截图保存或分享
+            </p>
           </div>
         </div>
       </div>
@@ -461,7 +464,7 @@ export default function ShareReportPage() {
           {/* 详细报告 */}
           <div className="lg:col-span-3">
             <div className="glass-card rounded-xl border border-white/[0.06] overflow-hidden">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-5 py-4 border-b border-white/[0.06] bg-white/[0.02] gap-2 sm:gap-0">
+              <div className="flex flex-col items-center justify-center px-5 py-4 border-b border-white/[0.06] bg-white/[0.02] gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
                     <FileText className="w-4 h-4 text-indigo-400" />
@@ -471,10 +474,11 @@ export default function ShareReportPage() {
                     <span className="text-[10px] uppercase tracking-wider text-slate-500">AI QUANTITATIVE ANALYSIS</span>
                   </div>
                 </div>
-                {/* 免责声明 */}
-                <div className="text-[10px] sm:text-xs text-amber-400/80 leading-relaxed max-w-xl">
+                {/* 免责声明 - 居中显示 */}
+                <div className="text-[10px] sm:text-xs text-amber-400/80 leading-relaxed text-center max-w-2xl">
                   <span className="font-medium">⚠️ 免责声明：</span>
                   <span className="text-slate-400">本报告由AI技术生成，数据来源于公开市场信息，仅供个人技术分析参考与学习交流之用。报告内容不构成任何具体的投资操作建议，使用者应独立判断并对投资决策负全部责任。</span>
+                  <span className="text-rose-400 font-medium"> 🚫 严禁转发、截图保存或分享本页面任何内容。</span>
                 </div>
               </div>
               <div className="p-6 md:p-8">
@@ -496,6 +500,9 @@ export default function ShareReportPage() {
               本工具为个人学习研究用途，所有分析内容均基于公开数据和技术指标自动生成，仅供学习交流参考。
               本工具不具备证券投资咨询资质，所有内容不构成任何投资建议、推荐或指导。
               投资有风险，任何投资决策请咨询持牌专业人士并自行承担风险。
+            </p>
+            <p className="text-rose-400 font-medium">
+              🚫 严禁转发、截图保存或分享本网站上的任何内容
             </p>
           </div>
         </div>

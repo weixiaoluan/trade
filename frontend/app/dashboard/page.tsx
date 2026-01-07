@@ -2989,6 +2989,7 @@ export default function DashboardPage() {
               <div className="mb-4 p-2.5 bg-amber-500/5 border border-amber-500/20 rounded-lg">
                 <p className="text-amber-400/80 text-[10px] sm:text-xs leading-relaxed">
                   ⚠️ 本功能仅用于从图片中提取证券代码，便于添加到研究列表。识别结果不代表任何投资建议或推荐。
+                  <span className="text-rose-400"> 🚫 严禁转发、截图保存或分享。</span>
                 </p>
               </div>
 
