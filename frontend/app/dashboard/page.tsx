@@ -972,6 +972,26 @@ export default function DashboardPage() {
     }
   }, [sortField, sortOrder]);
 
+  // 报告映射表 - 需要在 sortedWatchlist 之前定义，因为排序需要用到
+  const reportsBySymbol = useMemo(() => {
+    const map: Record<string, ReportSummary> = {};
+    for (const r of reports) {
+      // 原始 symbol 作为 key
+      map[r.symbol] = r;
+      // 同时添加点号和下划线两种格式的映射，确保能匹配到
+      // 例如：SPAX_PVT 和 SPAX.PVT 都能找到同一个报告
+      const symbolWithDot = r.symbol.replace(/_/g, '.');
+      const symbolWithUnderscore = r.symbol.replace(/\./g, '_');
+      if (symbolWithDot !== r.symbol) {
+        map[symbolWithDot] = r;
+      }
+      if (symbolWithUnderscore !== r.symbol) {
+        map[symbolWithUnderscore] = r;
+      }
+    }
+    return map;
+  }, [reports]);
+
   const sortedWatchlist = useMemo(() => {
     let sorted = [...watchlist];
     
@@ -1025,6 +1045,12 @@ export default function DashboardPage() {
           // 计算差距（绝对值）
           aVal = aSellPrice > 0 && aPrice > 0 ? Math.abs(aPrice - aSellPrice) : Infinity;
           bVal = bSellPrice > 0 && bPrice > 0 ? Math.abs(bPrice - bSellPrice) : Infinity;
+        } else if (sortField === "report_time") {
+          // 报告更新时间排序
+          const aReport = reportsBySymbol[a.symbol] || reportsBySymbol[a.symbol.replace(/\./g, '_')] || reportsBySymbol[a.symbol.replace(/_/g, '.')];
+          const bReport = reportsBySymbol[b.symbol] || reportsBySymbol[b.symbol.replace(/\./g, '_')] || reportsBySymbol[b.symbol.replace(/_/g, '.')];
+          aVal = aReport?.created_at ? new Date(aReport.created_at).getTime() : 0;
+          bVal = bReport?.created_at ? new Date(bReport.created_at).getTime() : 0;
         }
         
         return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
@@ -1032,26 +1058,7 @@ export default function DashboardPage() {
     }
     
     return sorted;
-  }, [watchlist, sortField, sortOrder, quotes, searchQuery, periodFilter]);
-
-  const reportsBySymbol = useMemo(() => {
-    const map: Record<string, ReportSummary> = {};
-    for (const r of reports) {
-      // 原始 symbol 作为 key
-      map[r.symbol] = r;
-      // 同时添加点号和下划线两种格式的映射，确保能匹配到
-      // 例如：SPAX_PVT 和 SPAX.PVT 都能找到同一个报告
-      const symbolWithDot = r.symbol.replace(/_/g, '.');
-      const symbolWithUnderscore = r.symbol.replace(/\./g, '_');
-      if (symbolWithDot !== r.symbol) {
-        map[symbolWithDot] = r;
-      }
-      if (symbolWithUnderscore !== r.symbol) {
-        map[symbolWithUnderscore] = r;
-      }
-    }
-    return map;
-  }, [reports]);
+  }, [watchlist, sortField, sortOrder, quotes, searchQuery, periodFilter, reportsBySymbol]);
 
   const reminderCountBySymbol = useMemo(() => {
     const map: Record<string, number> = {};
@@ -2173,6 +2180,8 @@ export default function DashboardPage() {
               <option value="ai_buy_price:desc" className="bg-slate-800">参考低位(远→近)</option>
               <option value="ai_sell_price:asc" className="bg-slate-800">参考高位(近→远)</option>
               <option value="ai_sell_price:desc" className="bg-slate-800">参考高位(远→近)</option>
+              <option value="report_time:desc" className="bg-slate-800">报告时间(新→旧)</option>
+              <option value="report_time:asc" className="bg-slate-800">报告时间(旧→新)</option>
             </select>
           </div>
 

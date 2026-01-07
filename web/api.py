@@ -3570,8 +3570,6 @@ async def generate_ai_report(
 ---
 
 **报告生成时间**: {current_date_str} {current_time_str} | **数据来源**: 量化系统 + AI多智能体分析
-
-*本报告由量化引擎(基于vnpy架构)与AI Agent深度联动生成，整合了硬数据分析与软判断评估。*
 """
         
         if "报告生成时间" not in report_text and "报告日期" not in report_text:
@@ -3641,8 +3639,7 @@ def normalize_report_timestamp(report_text: str, completed_at: datetime) -> str:
         if "报告生成时间" not in report_text and "报告日期" not in report_text:
             footer = (
                 f"\n\n---\n\n"
-                f"**报告生成时间**: {date_str} {time_str} | **数据来源**: 量化系统 + AI多智能体分析\n\n"
-                f"*本报告由量化引擎(基于vnpy架构)与AI Agent深度联动生成，整合了硬数据分析与软判断评估。*"
+                f"**报告生成时间**: {date_str} {time_str} | **数据来源**: 量化系统 + AI多智能体分析"
             )
             report_text += footer
 
