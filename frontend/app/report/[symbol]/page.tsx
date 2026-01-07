@@ -892,16 +892,6 @@ export default function ReportPage() {
             )}
           </div>
 
-          {/* Prediction Timeline */}
-          <div className="lg:col-span-3 animate-slideUp" style={{ animationDelay: '0.2s' }}>
-            <div className="glass-card rounded-xl p-3 sm:p-5 border border-white/[0.06]">
-              <PredictionTimeline
-                predictions={result.predictions}
-                onHoverHorizon={setActiveHorizon}
-              />
-            </div>
-          </div>
-
           {/* Analysis Report */}
           <div
             className="lg:col-span-3 animate-slideUp"

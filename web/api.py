@@ -3407,9 +3407,9 @@ async def generate_ai_report(
 ## 五、参考价位（仅供研究参考）
 | 类型 | 价格 | 数量 | 说明 |
 |------|------|------|------|
-| **参考买入价** | {currency_symbol}X.XXX | XXX股 | 基于支撑位计算 |
-| **参考卖出价** | {currency_symbol}X.XXX | XXX股 | 基于阻力位计算 |
-| **参考止损价** | {currency_symbol}X.XXX | - | 技术止损位 |
+| **参考低位（支撑位）** | {currency_symbol}X.XXX | XXX股 | 基于技术支撑位计算 |
+| **参考高位（阻力位）** | {currency_symbol}X.XXX | XXX股 | 基于技术阻力位计算 |
+| **风险控制位** | {currency_symbol}X.XXX | - | 技术风险控制参考 |
 
 {f"用户持仓: {user_position}股，成本: " + currency_symbol + f"{user_cost_price}" if user_position and user_cost_price else ""}
 
@@ -3419,7 +3419,7 @@ async def generate_ai_report(
 ## 七、综合评级
 技术面综合评级（强势/偏强/中性/偏弱/弱势）
 
-**要求**：必须给出具体的参考买入价和卖出价数字（精确到小数点后3位）
+**要求**：必须给出具体的参考低位和参考高位数字（精确到小数点后3位）
 
 ---
 **重要声明**：本分析报告由AI基于公开数据和技术指标自动生成，仅供个人学习研究参考，不构成任何投资建议。投资有风险，决策需谨慎。
@@ -3777,7 +3777,7 @@ async def create_reminder(
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    # 检查是否有对应的AI报告，从报告中获取买入卖出价
+    # 检查是否有对应的AI报告，从报告中获取参考价位
     report = get_user_report(user['username'], reminder.symbol)
     has_report = report is not None
     
@@ -3839,7 +3839,7 @@ async def batch_create_reminders(
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
-    # 为每个标的获取AI分析报告中的买入卖出价
+    # 为每个标的获取AI分析报告中的参考价位
     results = []
     symbols_without_report = []
     
@@ -3847,7 +3847,7 @@ async def batch_create_reminders(
         report = get_user_report(user['username'], symbol)
         if report and report.get('data'):
             report_data = report['data']
-            # 从报告中提取买入卖出价
+            # 从报告中提取参考价位
             buy_price = None
             sell_price = None
             
@@ -4380,19 +4380,19 @@ async def check_price_triggers():
                         
                         current_price = quote['current_price']
                         
-                        # 检查买入触发
+                        # 检查触及参考低位
                         if buy_price and (reminder_type in ['buy', 'both']):
                             if current_price <= buy_price and last_notified_type != 'buy':
-                                msg = f"【买入提醒】{reminder.get('name', symbol)} 当前价 {current_price}，已触发买入价 {buy_price}"
+                                msg = f"【触及参考低位】{reminder.get('name', symbol)} 当前价 {current_price}，已触及参考低位 {buy_price}（仅供研究参考）"
                                 send_sms_notification(phone, msg)
                                 db_update_reminder(username, reminder_id,
                                                  last_notified_type='buy',
                                                  last_notified_at=now.isoformat())
                         
-                        # 检查卖出触发
+                        # 检查触及参考高位
                         if sell_price and (reminder_type in ['sell', 'both']):
                             if current_price >= sell_price and last_notified_type != 'sell':
-                                msg = f"【卖出提醒】{reminder.get('name', symbol)} 当前价 {current_price}，已触发卖出价 {sell_price}"
+                                msg = f"【触及参考高位】{reminder.get('name', symbol)} 当前价 {current_price}，已触及参考高位 {sell_price}（仅供研究参考）"
                                 send_sms_notification(phone, msg)
                                 db_update_reminder(username, reminder_id,
                                                  last_notified_type='sell',

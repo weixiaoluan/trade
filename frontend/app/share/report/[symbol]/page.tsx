@@ -331,16 +331,6 @@ export default function ShareReportPage() {
             atrPct={result.atrPct}
           />
 
-          {/* 预测时间线 */}
-          {result.predictions && result.predictions.length > 0 && (
-            <div className="glass-card rounded-xl p-4 border border-white/[0.06]">
-              <PredictionTimeline
-                predictions={result.predictions}
-                onHoverHorizon={setActiveHorizon}
-              />
-            </div>
-          )}
-
           {/* 详细报告 */}
           <div className="glass-card rounded-xl border border-white/[0.06] overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06] bg-white/[0.02]">

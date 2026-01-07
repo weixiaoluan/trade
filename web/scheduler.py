@@ -74,14 +74,14 @@ def send_sms_alert(phone: str, symbol: str, alert_type: str,
     try:
         from web.api import send_price_alert_notification
         
-        action = "买入" if alert_type == "buy" else "卖出"
+        action = "触及参考低位" if alert_type == "buy" else "触及参考高位"
         
         # 如果没有 AI 分析内容，生成默认内容
         if not ai_summary:
             if alert_type == "buy":
-                ai_summary = f"根据AI智能分析，{name or symbol}当前价格已触及设定的买入价位。技术指标显示短期存在反弹机会，建议关注成交量变化，把握买入时机。请结合自身风险承受能力，谨慎决策。"
+                ai_summary = f"根据AI技术分析，{name or symbol}当前价格已触及参考低位（支撑位）。技术指标显示该价位附近存在支撑，仅供学习研究参考，不构成任何投资建议。"
             else:
-                ai_summary = f"根据AI智能分析，{name or symbol}当前价格已触及设定的卖出价位。技术指标显示短期可能面临回调压力，建议适时获利了结，注意控制风险。请结合自身风险承受能力，谨慎决策。"
+                ai_summary = f"根据AI技术分析，{name or symbol}当前价格已触及参考高位（阻力位）。技术指标显示该价位附近存在阻力，仅供学习研究参考，不构成任何投资建议。"
         
         logger.info(f"发送价格提醒: {username} - {name or symbol} - {action} - 当前价格: {current_price}, 目标价: {target_price}")
         
@@ -142,7 +142,7 @@ def get_ai_price_targets(username: str, symbol: str) -> Dict:
         quant = report_data.get('quant_analysis', {})
         support_resistance = quant.get('support_resistance', {})
         
-        # 支撑位作为买入价，阻力位作为卖出价
+        # 支撑位作为参考低位，阻力位作为参考高位
         buy_price = None
         sell_price = None
         

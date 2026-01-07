@@ -95,8 +95,8 @@ class ReminderItem(BaseModel):
     ai_analysis_time: str = "09:30"  # AI分析时间 HH:MM
     ai_analysis_weekday: Optional[int] = None  # AI分析周几
     ai_analysis_day_of_month: Optional[int] = None  # AI分析日期
-    buy_price: Optional[float] = None  # AI分析的买入价
-    sell_price: Optional[float] = None  # AI分析的卖出价
+    buy_price: Optional[float] = None  # AI分析的参考低位
+    sell_price: Optional[float] = None  # AI分析的参考高位
     enabled: bool = True
     created_at: Optional[str] = None
     last_notified_type: Optional[str] = None  # 最后触发类型
