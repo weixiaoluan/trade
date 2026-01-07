@@ -527,6 +527,9 @@ def start_scheduler():
     # 每30秒检查一次自选列表AI建议价格（交易时间内）
     schedule.every(30).seconds.do(check_watchlist_price_alerts)
     
+    # 每天23:59清空AI优选（保留当天的）
+    schedule.every().day.at("23:59").do(clear_ai_picks_daily)
+    
     # 在后台线程运行
     def run_schedule():
         while True:
@@ -537,6 +540,16 @@ def start_scheduler():
     scheduler_thread.start()
     
     logger.info("定时任务调度器已启动（包含自选列表实时监控）")
+
+
+def clear_ai_picks_daily():
+    """每日清空AI优选列表（保留当天添加的）"""
+    try:
+        from web.database import db_clear_ai_picks_daily
+        deleted_count = db_clear_ai_picks_daily()
+        logger.info(f"[AI优选] 每日清理完成，删除 {deleted_count} 条非今日数据")
+    except Exception as e:
+        logger.error(f"[AI优选] 每日清理失败: {e}")
 
 
 # ============================================

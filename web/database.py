@@ -251,6 +251,11 @@ def migrate_database():
             print("迁移: 添加 wechat_openid 字段到 users 表")
             cursor.execute("ALTER TABLE users ADD COLUMN wechat_openid TEXT")
         
+        # 检查 users 表是否有 can_view_ai_picks 字段 (AI优选查看权限)
+        if 'can_view_ai_picks' not in user_columns:
+            print("迁移: 添加 can_view_ai_picks 字段到 users 表")
+            cursor.execute("ALTER TABLE users ADD COLUMN can_view_ai_picks INTEGER DEFAULT 0")
+        
         # 检查 reminders 表是否有 AI 分析相关字段
         cursor.execute("PRAGMA table_info(reminders)")
         reminder_columns = [col[1] for col in cursor.fetchall()]
@@ -1126,6 +1131,56 @@ def db_dismiss_all_ai_picks(username: str) -> int:
             except sqlite3.IntegrityError:
                 pass
         return count
+
+
+def db_clear_ai_picks_daily():
+    """每日清空AI优选列表（保留当天添加的）"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # 获取今天的日期（北京时间）
+        from datetime import timezone, timedelta
+        beijing_tz = timezone(timedelta(hours=8))
+        today = datetime.now(beijing_tz).strftime('%Y-%m-%d')
+        
+        # 删除非今天添加的AI优选
+        cursor.execute('''
+            DELETE FROM ai_picks 
+            WHERE date(added_at) < date(?)
+        ''', (today,))
+        deleted_count = cursor.rowcount
+        
+        # 同时清空用户已处理记录（因为原始数据已删除）
+        cursor.execute('''
+            DELETE FROM user_dismissed_ai_picks 
+            WHERE symbol NOT IN (SELECT symbol FROM ai_picks)
+        ''')
+        
+        print(f"[AI优选清理] 已删除 {deleted_count} 条非今日数据")
+        return deleted_count
+
+
+def db_get_user_ai_picks_permission(username: str) -> bool:
+    """检查用户是否有AI优选查看权限"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT can_view_ai_picks, role FROM users WHERE username = ?', (username,))
+        row = cursor.fetchone()
+        if row:
+            # 管理员始终有权限
+            if row['role'] == 'admin':
+                return True
+            return row['can_view_ai_picks'] == 1
+        return False
+
+
+def db_set_user_ai_picks_permission(username: str, can_view: bool) -> bool:
+    """设置用户AI优选查看权限"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE users SET can_view_ai_picks = ? WHERE username = ?
+        ''', (1 if can_view else 0, username))
+        return cursor.rowcount > 0
 
 
 # ============================================

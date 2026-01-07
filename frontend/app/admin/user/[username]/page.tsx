@@ -17,6 +17,7 @@ interface UserDetail {
   status: string;
   wechat_openid: string;
   created_at: string;
+  can_view_ai_picks?: number;
 }
 
 interface WatchlistItem {
@@ -348,6 +349,37 @@ export default function UserDetailPage() {
                 <p className="text-sm text-slate-300 font-mono">
                   {userDetail.wechat_openid || "未配置"}
                 </p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-xs text-slate-500 mb-1">AI优选权限</p>
+                <button
+                  onClick={async () => {
+                    const token = getToken();
+                    if (!token) return;
+                    try {
+                      const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(username)}/ai-picks-permission`, {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ can_view: !userDetail.can_view_ai_picks }),
+                      });
+                      if (response.ok) {
+                        fetchUserDetail();
+                      }
+                    } catch (error) {
+                      console.error("设置权限失败:", error);
+                    }
+                  }}
+                  className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                    userDetail.can_view_ai_picks 
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" 
+                      : "bg-slate-500/20 text-slate-400 border border-slate-500/30"
+                  }`}
+                >
+                  {userDetail.can_view_ai_picks ? "✓ 已开通" : "未开通"}
+                </button>
               </div>
             </div>
           )}

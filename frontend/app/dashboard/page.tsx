@@ -629,6 +629,7 @@ export default function DashboardPage() {
   }, [getToken, wechatOpenId, showAlertModal, fetchUserSettings]);
 
   // 获取 AI 优选列表
+  const [aiPicksPermissionDenied, setAiPicksPermissionDenied] = useState(false);
   const fetchAiPicks = useCallback(async () => {
     setAiPicksLoading(true);
     try {
@@ -638,6 +639,11 @@ export default function DashboardPage() {
       if (response.ok) {
         const data = await response.json();
         setAiPicks(data.picks || []);
+        setAiPicksPermissionDenied(false);
+      } else if (response.status === 403) {
+        // 无权限
+        setAiPicks([]);
+        setAiPicksPermissionDenied(true);
       }
     } catch (error) {
       console.error("获取 AI 优选失败:", error);
@@ -2056,21 +2062,23 @@ export default function DashboardPage() {
 
           {user && (
             <div className="flex items-center gap-2">
-              {/* AI 优选按钮 */}
-              <button
-                onClick={handleOpenAiPicks}
-                className="relative flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded-lg text-xs sm:text-sm hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
-                title="AI 优选"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span className="hidden sm:inline">AI 优选</span>
-                {/* 新增数量角标 */}
-                {newAiPicksCount > 0 && (
-                  <span className="absolute -top-3 -right-3 min-w-[24px] h-6 px-1.5 bg-red-500 text-white text-sm font-bold rounded-full flex items-center justify-center shadow-lg animate-pulse">
-                    +{newAiPicksCount > 99 ? '99' : newAiPicksCount}
-                  </span>
-                )}
-              </button>
+              {/* AI 优选按钮 - 无权限时隐藏 */}
+              {!aiPicksPermissionDenied && (
+                <button
+                  onClick={handleOpenAiPicks}
+                  className="relative flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded-lg text-xs sm:text-sm hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
+                  title="AI 优选"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span className="hidden sm:inline">AI 优选</span>
+                  {/* 新增数量角标 */}
+                  {newAiPicksCount > 0 && (
+                    <span className="absolute -top-3 -right-3 min-w-[24px] h-6 px-1.5 bg-red-500 text-white text-sm font-bold rounded-full flex items-center justify-center shadow-lg animate-pulse">
+                      +{newAiPicksCount > 99 ? '99' : newAiPicksCount}
+                    </span>
+                  )}
+                </button>
+              )}
               {/* 设置按钮 */}
               <button
                 onClick={() => setShowSettingsModal(true)}
@@ -2152,14 +2160,16 @@ export default function DashboardPage() {
             </select>
             {/* 排序选择 */}
             <select
-              value={sortField ? `${sortField}_${sortOrder}` : "default"}
+              value={sortField ? `${sortField}:${sortOrder}` : "default"}
               onChange={(e) => {
                 const val = e.target.value;
                 if (val === "default") {
                   setSortField(null);
                   setSortOrder("desc");
                 } else {
-                  const [field, order] = val.split("_");
+                  const lastColonIndex = val.lastIndexOf(":");
+                  const field = val.substring(0, lastColonIndex);
+                  const order = val.substring(lastColonIndex + 1);
                   setSortField(field);
                   setSortOrder(order as "asc" | "desc");
                 }
@@ -2168,12 +2178,12 @@ export default function DashboardPage() {
               className="px-2 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs sm:text-sm cursor-pointer"
             >
               <option value="default" className="bg-slate-800">默认排序</option>
-              <option value="change_percent_desc" className="bg-slate-800">涨跌幅↓</option>
-              <option value="change_percent_asc" className="bg-slate-800">涨跌幅↑</option>
-              <option value="ai_buy_price_asc" className="bg-slate-800">参考低位(近→远)</option>
-              <option value="ai_buy_price_desc" className="bg-slate-800">参考低位(远→近)</option>
-              <option value="ai_sell_price_asc" className="bg-slate-800">参考高位(近→远)</option>
-              <option value="ai_sell_price_desc" className="bg-slate-800">参考高位(远→近)</option>
+              <option value="change_percent:desc" className="bg-slate-800">涨跌幅↓</option>
+              <option value="change_percent:asc" className="bg-slate-800">涨跌幅↑</option>
+              <option value="ai_buy_price:asc" className="bg-slate-800">参考低位(近→远)</option>
+              <option value="ai_buy_price:desc" className="bg-slate-800">参考低位(远→近)</option>
+              <option value="ai_sell_price:asc" className="bg-slate-800">参考高位(近→远)</option>
+              <option value="ai_sell_price:desc" className="bg-slate-800">参考高位(远→近)</option>
             </select>
           </div>
 
@@ -4062,9 +4072,16 @@ export default function DashboardPage() {
                                 </span>
                               )}
                             </div>
-                            {pick.name && pick.name !== pick.symbol && (
-                              <div className="text-xs text-slate-500 truncate mt-0.5">{pick.name}</div>
-                            )}
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {pick.name && pick.name !== pick.symbol && (
+                                <span className="text-xs text-slate-500 truncate">{pick.name}</span>
+                              )}
+                              {pick.added_at && (
+                                <span className="text-[10px] text-slate-600 flex-shrink-0">
+                                  {new Date(pick.added_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           {/* 删除按钮 - 管理员全局删除，普通用户仅隐藏 */}
                           <button

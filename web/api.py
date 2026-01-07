@@ -425,7 +425,8 @@ async def admin_get_user_detail(username: str, authorization: str = Header(None)
             "role": target_user.get('role', 'user'),
             "status": target_user.get('status', 'pending'),
             "wechat_openid": target_user.get('wechat_openid', ''),
-            "created_at": target_user['created_at']
+            "created_at": target_user['created_at'],
+            "can_view_ai_picks": target_user.get('can_view_ai_picks', 0)
         },
         "watchlist": watchlist,
         "reminders": reminders,
@@ -502,6 +503,39 @@ async def admin_delete_user(username: str, authorization: str = Header(None)):
         return {"status": "success", "message": f"用户 {username} 已删除"}
     else:
         raise HTTPException(status_code=500, detail="删除失败")
+
+
+@app.post("/api/admin/users/{username}/ai-picks-permission")
+async def admin_set_ai_picks_permission(
+    username: str, 
+    data: dict,
+    authorization: str = Header(None)
+):
+    """设置用户AI优选查看权限（仅管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="无权限访问")
+    
+    target_user = db_get_user_by_username(username)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    can_view = data.get('can_view', False)
+    from web.database import db_set_user_ai_picks_permission
+    success = db_set_user_ai_picks_permission(username, can_view)
+    
+    if success:
+        return {"status": "success", "message": f"已{'开通' if can_view else '关闭'}用户 {username} 的AI优选权限"}
+    else:
+        raise HTTPException(status_code=500, detail="设置失败")
 
 
 # ============================================
@@ -1083,7 +1117,7 @@ async def get_ai_picks(
     background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
-    """获取 AI 优选列表（用户看到的是排除已处理的，管理员看到全部）"""
+    """获取 AI 优选列表（需要权限）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1096,6 +1130,11 @@ async def get_ai_picks(
     # 只有已审核用户可以查看
     if not is_approved(user):
         raise HTTPException(status_code=403, detail="账户待审核，暂无权限查看")
+    
+    # 检查AI优选权限（管理员始终有权限）
+    from web.database import db_get_user_ai_picks_permission
+    if not is_admin(user) and not db_get_user_ai_picks_permission(user['username']):
+        raise HTTPException(status_code=403, detail="暂无AI优选查看权限，请联系管理员开通")
     
     # 管理员看到全部，普通用户看到排除已处理的
     if is_admin(user):
