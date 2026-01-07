@@ -225,7 +225,7 @@ async def register(request: RegisterRequest):
 
 
 @app.post("/api/auth/login")
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, req: Request = None):
     """用户登录 - 支持用户名或手机号登录"""
     try:
         # 先尝试用户名查找
@@ -243,6 +243,12 @@ async def login(request: LoginRequest):
         
         # 创建会话
         token = create_session(user['username'])
+        
+        # 记录登录活动
+        from web.database import db_add_user_activity
+        ip_address = req.client.host if req and req.client else None
+        user_agent = req.headers.get("user-agent", "") if req else None
+        db_add_user_activity(user['username'], 'login', '用户登录', ip_address, user_agent)
         
         return {
             "status": "success",
@@ -417,6 +423,10 @@ async def admin_get_user_detail(username: str, authorization: str = Header(None)
         'created_at': r['created_at']
     } for r in reports]
     
+    # 获取用户操作记录
+    from web.database import db_get_user_activities
+    activities = db_get_user_activities(username, limit=100)
+    
     return {
         "status": "success",
         "user": {
@@ -430,7 +440,8 @@ async def admin_get_user_detail(username: str, authorization: str = Header(None)
         },
         "watchlist": watchlist,
         "reminders": reminders,
-        "reports": reports_summary
+        "reports": reports_summary,
+        "activities": activities
     }
 
 
@@ -680,6 +691,10 @@ async def add_watchlist_item(
     success = add_to_watchlist(user['username'], item_data)
     
     if success:
+        # 记录添加自选活动
+        from web.database import db_add_user_activity
+        db_add_user_activity(user['username'], 'add_watchlist', f'添加自选: {symbol}')
+        
         # 后台异步获取名称和更精确的类型
         background_tasks.add_task(update_watchlist_name_and_type, user['username'], symbol)
         return {"status": "success", "message": "添加成功", "name": item_data.get('name', '')}
@@ -1644,6 +1659,10 @@ async def start_background_analysis(
     
     # 创建任务记录
     create_analysis_task(username, symbol, task_id)
+    
+    # 记录分析活动
+    from web.database import db_add_user_activity
+    db_add_user_activity(username, 'start_analysis', f'启动分析: {symbol}')
     
     # 使用线程启动后台任务，完全脱离当前请求
     import threading

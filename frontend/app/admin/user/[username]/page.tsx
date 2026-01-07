@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { 
   Bot, Shield, ArrowLeft, User, Phone, Clock, 
   FileText, Bell, Star, Trash2, Save, X, Loader2,
-  Check, AlertCircle, Edit3
+  Check, AlertCircle, Edit3, Activity
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE } from "@/lib/config";
@@ -47,6 +47,14 @@ interface ReportItem {
   created_at: string;
 }
 
+interface ActivityItem {
+  id: number;
+  action_type: string;
+  action_detail?: string;
+  ip_address?: string;
+  created_at: string;
+}
+
 export default function UserDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -58,6 +66,7 @@ export default function UserDetailPage() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [reports, setReports] = useState<ReportItem[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
 
   // 编辑状态
   const [editMode, setEditMode] = useState(false);
@@ -89,6 +98,7 @@ export default function UserDetailPage() {
         setWatchlist(data.watchlist || []);
         setReminders(data.reminders || []);
         setReports(data.reports || []);
+        setActivities(data.activities || []);
         
         // 初始化编辑字段
         setEditUsername(data.user.username);
@@ -489,6 +499,44 @@ export default function UserDetailPage() {
             </div>
           ) : (
             <div className="py-8 text-center text-slate-500">暂无报告</div>
+          )}
+        </div>
+
+        {/* 操作记录 */}
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden mt-6">
+          <div className="px-6 py-4 border-b border-white/[0.06]">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Activity className="w-5 h-5 text-violet-400" />
+              操作记录 ({activities.length})
+            </h2>
+          </div>
+          {activities.length > 0 ? (
+            <div className="divide-y divide-white/[0.06] max-h-96 overflow-y-auto">
+              {activities.map((activity) => (
+                <div key={activity.id} className="px-6 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-0.5 text-xs rounded ${
+                      activity.action_type === 'login' ? 'bg-emerald-500/20 text-emerald-400' :
+                      activity.action_type === 'add_watchlist' ? 'bg-indigo-500/20 text-indigo-400' :
+                      activity.action_type === 'start_analysis' ? 'bg-amber-500/20 text-amber-400' :
+                      'bg-slate-500/20 text-slate-400'
+                    }`}>
+                      {activity.action_type === 'login' ? '登录' :
+                       activity.action_type === 'add_watchlist' ? '添加自选' :
+                       activity.action_type === 'start_analysis' ? '启动分析' :
+                       activity.action_type}
+                    </span>
+                    <span className="text-sm text-slate-300">{activity.action_detail || '-'}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-500">
+                    {activity.ip_address && <span>{activity.ip_address}</span>}
+                    <span>{new Date(activity.created_at).toLocaleString("zh-CN")}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-slate-500">暂无操作记录</div>
           )}
         </div>
       </main>

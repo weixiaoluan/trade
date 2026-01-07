@@ -310,6 +310,23 @@ def migrate_database():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_dismissed_ai_picks ON user_dismissed_ai_picks(username, symbol)')
         print("迁移: 用户已处理 AI 优选表已创建/检查完成")
         
+        # 创建用户操作记录表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_activity_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                action_detail TEXT,
+                ip_address TEXT,
+                user_agent TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_activity_logs_username ON user_activity_logs(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_activity_logs_created_at ON user_activity_logs(created_at)')
+        print("迁移: 用户操作记录表已创建/检查完成")
+        
         conn.commit()
         print("数据库迁移完成")
 
@@ -757,13 +774,8 @@ def db_get_user_reminders(username: str) -> List[Dict]:
     """获取用户所有提醒"""
     with get_db() as conn:
         cursor = conn.cursor()
-        # 由于历史数据可能存在编码问题，尝试多种匹配方式
         cursor.execute('SELECT * FROM reminders WHERE username = ?', (username,))
         results = cursor.fetchall()
-        if not results:
-            # 如果没找到，尝试获取所有提醒（单用户系统的临时方案）
-            cursor.execute('SELECT * FROM reminders')
-            results = cursor.fetchall()
         return [dict(row) for row in results]
 
 
@@ -1181,6 +1193,40 @@ def db_set_user_ai_picks_permission(username: str, can_view: bool) -> bool:
             UPDATE users SET can_view_ai_picks = ? WHERE username = ?
         ''', (1 if can_view else 0, username))
         return cursor.rowcount > 0
+
+
+# ============================================
+# 用户操作记录
+# ============================================
+
+def db_add_user_activity(username: str, action_type: str, action_detail: str = None,
+                         ip_address: str = None, user_agent: str = None) -> int:
+    """添加用户操作记录"""
+    from datetime import timezone, timedelta
+    beijing_tz = timezone(timedelta(hours=8))
+    created_at = datetime.now(beijing_tz).isoformat()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO user_activity_logs (username, action_type, action_detail, ip_address, user_agent, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (username, action_type, action_detail, ip_address, user_agent, created_at))
+        return cursor.lastrowid
+
+
+def db_get_user_activities(username: str, limit: int = 50) -> List[Dict]:
+    """获取用户操作记录"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, action_type, action_detail, ip_address, created_at
+            FROM user_activity_logs 
+            WHERE username = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (username, limit))
+        return [dict(row) for row in cursor.fetchall()]
 
 
 # ============================================

@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Bot, Shield, Users, Check, X, ArrowLeft, 
-  Crown, Clock, UserCheck, UserX, Eye
+  Crown, Clock, UserCheck, UserX, Eye, Trash2, Loader2
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { API_BASE } from "@/lib/config";
 
@@ -24,6 +25,11 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  
+  // 注销确认弹窗
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteUsername, setDeleteUsername] = useState<string>("");
+  const [deleting, setDeleting] = useState(false);
 
   const getToken = () => {
     if (typeof window !== "undefined") {
@@ -124,6 +130,36 @@ export default function AdminPage() {
     }
   };
 
+  // 注销用户
+  const handleDelete = async () => {
+    const token = getToken();
+    if (!token || !deleteUsername) return;
+
+    setDeleting(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(deleteUsername)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        fetchUsers();
+        setShowDeleteConfirm(false);
+        setDeleteUsername("");
+      }
+    } catch (error) {
+      console.error("注销失败:", error);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // 打开注销确认弹窗
+  const openDeleteConfirm = (username: string) => {
+    setDeleteUsername(username);
+    setShowDeleteConfirm(true);
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "approved":
@@ -138,6 +174,13 @@ export default function AdminPage() {
           <span className="px-2 py-1 text-xs bg-rose-500/20 text-rose-400 rounded-full flex items-center gap-1">
             <UserX className="w-3 h-3" />
             已拒绝
+          </span>
+        );
+      case "deleted":
+        return (
+          <span className="px-2 py-1 text-xs bg-slate-500/20 text-slate-400 rounded-full flex items-center gap-1">
+            <Trash2 className="w-3 h-3" />
+            已注销
           </span>
         );
       default:
@@ -299,7 +342,7 @@ export default function AdminPage() {
                       {new Date(user.created_at).toLocaleString("zh-CN", { hour12: false })}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {user.role !== "admin" && (
+                      {user.role !== "admin" && user.status !== "deleted" && (
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => router.push(`/admin/user/${encodeURIComponent(user.username)}`)}
@@ -322,12 +365,19 @@ export default function AdminPage() {
                             <button
                               onClick={() => handleReject(user.username)}
                               disabled={actionLoading === user.username}
-                              className="p-2 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 transition-all disabled:opacity-50"
+                              className="p-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-all disabled:opacity-50"
                               title="拒绝"
                             >
                               <X className="w-4 h-4" />
                             </button>
                           )}
+                          <button
+                            onClick={() => openDeleteConfirm(user.username)}
+                            className="p-2 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 transition-all"
+                            title="注销用户"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       )}
                     </td>
@@ -338,6 +388,54 @@ export default function AdminPage() {
           </div>
         </div>
       </main>
+
+      {/* 注销确认弹窗 */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-md mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-rose-500/20 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-rose-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">确认注销用户</h3>
+              </div>
+              <p className="text-slate-400 mb-6">
+                确定要注销用户 <span className="text-white font-medium">{deleteUsername}</span> 吗？
+                此操作将删除该用户的所有数据，包括自选列表、提醒设置和分析报告，且无法恢复。
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-2.5 bg-white/[0.05] text-slate-300 rounded-xl"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  确认注销
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
