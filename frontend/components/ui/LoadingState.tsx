@@ -122,7 +122,7 @@ export function LoadingState({ progress = 0, currentStep }: LoadingStateProps) {
             {currentStep || currentStage.text}
           </p>
           <p className="text-slate-500 text-sm">
-            多智能体协同分析中，请稍候...
+            数据分析处理中，请稍候...
           </p>
         </motion.div>
       </AnimatePresence>

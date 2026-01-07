@@ -288,7 +288,7 @@ class FusionAnalysisEngine:
         after_hours_result: Optional[Dict],
         market_status: Dict
     ) -> str:
-        """生成最终操作建议"""
+        """生成技术面状态描述（仅供学习研究参考，不构成投资建议）"""
         advice_parts = []
         
         # 1. 基于融合评分
@@ -299,25 +299,25 @@ class FusionAnalysisEngine:
         if is_aligned:
             advice_parts.append(f"✅ 量化信号与市场情绪一致，{confidence}置信度")
         else:
-            advice_parts.append(f"⚠️ 量化信号与市场情绪分歧，建议谨慎")
+            advice_parts.append(f"⚠️ 量化信号与市场情绪分歧，需谨慎观察")
         
-        # 2. 操作建议
+        # 2. 技术面状态描述（不构成投资建议）
         if fusion_score >= 75:
-            advice_parts.append("📈 建议：积极买入，但控制仓位")
+            advice_parts.append("📈 技术面状态：强势，多项指标看多")
         elif fusion_score >= 60:
-            advice_parts.append("📊 建议：适度建仓或加仓")
+            advice_parts.append("📊 技术面状态：偏强，整体偏多")
         elif fusion_score >= 40:
-            advice_parts.append("🔄 建议：持有观望，等待更明确信号")
+            advice_parts.append("🔄 技术面状态：中性，等待更明确信号")
         elif fusion_score >= 25:
-            advice_parts.append("📉 建议：减仓或对冲")
+            advice_parts.append("📉 技术面状态：偏弱，整体偏空")
         else:
-            advice_parts.append("🚨 建议：强力卖出，规避风险")
+            advice_parts.append("🚨 技术面状态：弱势，多项指标看空")
         
         # 3. 盘后特殊提示
         if market_status['is_after_hours'] and after_hours_result:
             if after_hours_result['is_significant']:
                 advice_parts.append(
-                    f"🌙 盘后警告：{after_hours_result['movement_type']}，"
+                    f"🌙 盘后提示：{after_hours_result['movement_type']}，"
                     f"{after_hours_result['recommendation']}"
                 )
             else:
@@ -326,17 +326,17 @@ class FusionAnalysisEngine:
         return " | ".join(advice_parts)
     
     def _map_score_to_recommendation(self, score: float) -> str:
-        """评分映射为建议"""
+        """评分映射为技术面评级"""
         if score >= 80:
-            return "strong_buy"
+            return "strong_buy"  # 强势
         elif score >= 60:
-            return "buy"
+            return "buy"  # 偏强
         elif score >= 40:
-            return "hold"
+            return "hold"  # 中性
         elif score >= 20:
-            return "sell"
+            return "sell"  # 偏弱
         else:
-            return "strong_sell"
+            return "strong_sell"  # 弱势
     
     def _explain_cross_validation(
         self,

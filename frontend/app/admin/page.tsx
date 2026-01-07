@@ -414,7 +414,7 @@ export default function AdminPage() {
               </div>
               <p className="text-slate-400 mb-6">
                 确定要注销用户 <span className="text-white font-medium">{deleteUsername}</span> 吗？
-                此操作将删除该用户的所有数据，包括自选列表、提醒设置和分析报告，且无法恢复。
+                此操作将删除该用户的所有数据，包括自选列表和分析报告，且无法恢复。
               </p>
               <div className="flex gap-3">
                 <button

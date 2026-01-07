@@ -383,7 +383,7 @@ export default function ShareReportPage() {
                   <span className="font-mono font-bold text-indigo-400 text-lg">{result.ticker}</span>
                   <span className="text-base text-slate-300">{result.name}</span>
                 </div>
-                <p className="text-xs text-slate-500">AI 智能分析报告 {createdAt && `· ${createdAt}`}</p>
+                <p className="text-xs text-slate-500">技术分析报告 {createdAt && `· ${createdAt}`}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -489,7 +489,7 @@ export default function ShareReportPage() {
                   <FileText className="w-4 h-4 text-indigo-400" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">智能研报</h3>
+                  <h3 className="text-sm font-bold text-white">技术研报</h3>
                   <span className="text-[10px] uppercase tracking-wider text-slate-500">AI QUANTITATIVE ANALYSIS</span>
                 </div>
               </div>

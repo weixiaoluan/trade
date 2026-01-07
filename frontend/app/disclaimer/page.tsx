@@ -105,7 +105,7 @@ export default function DisclaimerPage() {
               <h2 className="text-lg font-semibold text-slate-200 mb-3">八、账户管理</h2>
               <div className="space-y-2 pl-4 border-l-2 border-indigo-500/30">
                 <p>1. 管理员有权对违规用户进行警告、限制功能或注销账户处理。</p>
-                <p>2. 账户注销后，该账户下的所有数据（包括自选列表、分析报告、提醒设置等）将被永久删除且无法恢复。</p>
+                <p>2. 账户注销后，该账户下的所有数据（包括自选列表、分析报告等）将被永久删除且无法恢复。</p>
                 <p>3. 用户可主动申请注销账户，注销后数据同样将被永久删除。</p>
               </div>
             </section>

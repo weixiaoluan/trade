@@ -281,7 +281,7 @@ def migrate_database():
             print("迁移: 添加 holding_period 字段到 reminders 表")
             cursor.execute("ALTER TABLE reminders ADD COLUMN holding_period TEXT DEFAULT 'swing'")
         
-        # 创建 AI 优选表（如果不存在）
+        # 创建研究列表表（如果不存在）
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS ai_picks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -294,9 +294,9 @@ def migrate_database():
             )
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_picks_symbol ON ai_picks(symbol)')
-        print("迁移: AI 优选表已创建/检查完成")
+        print("迁移: 研究列表表已创建/检查完成")
         
-        # 创建用户已处理的 AI 优选表（用户添加到自选或手动删除的标的）
+        # 创建用户已处理的研究列表表（用户添加到自选或手动删除的标的）
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_dismissed_ai_picks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -308,7 +308,7 @@ def migrate_database():
             )
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_dismissed_ai_picks ON user_dismissed_ai_picks(username, symbol)')
-        print("迁移: 用户已处理 AI 优选表已创建/检查完成")
+        print("迁移: 用户已处理研究列表表已创建/检查完成")
         
         # 创建用户操作记录表
         cursor.execute('''
@@ -1011,11 +1011,11 @@ def db_get_all_reminders() -> Dict[str, List[Dict]]:
 
 
 # ============================================
-# AI 优选管理
+# 研究列表管理
 # ============================================
 
 def db_get_ai_picks() -> List[Dict]:
-    """获取所有 AI 优选标的"""
+    """获取所有研究列表标的"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -1027,7 +1027,7 @@ def db_get_ai_picks() -> List[Dict]:
 
 
 def db_add_ai_pick(symbol: str, name: str, type_: str, added_by: str) -> bool:
-    """添加 AI 优选标的"""
+    """添加研究列表标的"""
     with get_db() as conn:
         cursor = conn.cursor()
         try:
@@ -1046,7 +1046,7 @@ def db_add_ai_pick(symbol: str, name: str, type_: str, added_by: str) -> bool:
 
 
 def db_remove_ai_pick(symbol: str) -> bool:
-    """移除 AI 优选标的"""
+    """移除研究列表标的"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('DELETE FROM ai_picks WHERE symbol = ?', (symbol.upper(),))
@@ -1054,7 +1054,7 @@ def db_remove_ai_pick(symbol: str) -> bool:
 
 
 def db_update_ai_pick(symbol: str, name: str = None, type_: str = None) -> bool:
-    """更新 AI 优选标的的名称和类型"""
+    """更新研究列表标的的名称和类型"""
     with get_db() as conn:
         cursor = conn.cursor()
         updates = []
@@ -1079,7 +1079,7 @@ def db_update_ai_pick(symbol: str, name: str = None, type_: str = None) -> bool:
 
 
 def db_is_ai_pick(symbol: str) -> bool:
-    """检查是否是 AI 优选标的"""
+    """检查是否是研究列表标的"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('SELECT 1 FROM ai_picks WHERE symbol = ?', (symbol.upper(),))
@@ -1087,7 +1087,7 @@ def db_is_ai_pick(symbol: str) -> bool:
 
 
 def db_get_ai_picks_for_user(username: str) -> List[Dict]:
-    """获取用户可见的 AI 优选标的（排除已处理的）"""
+    """获取用户可见的研究列表标的（排除已处理的）"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -1102,7 +1102,7 @@ def db_get_ai_picks_for_user(username: str) -> List[Dict]:
 
 
 def db_dismiss_ai_pick(username: str, symbol: str) -> bool:
-    """用户标记 AI 优选标的为已处理（添加到自选或手动删除）"""
+    """用户标记研究列表标的为已处理（添加到自选或手动删除）"""
     with get_db() as conn:
         cursor = conn.cursor()
         try:
@@ -1117,7 +1117,7 @@ def db_dismiss_ai_pick(username: str, symbol: str) -> bool:
 
 
 def db_dismiss_ai_picks_batch(username: str, symbols: List[str]) -> int:
-    """批量标记 AI 优选标的为已处理"""
+    """批量标记研究列表标的为已处理"""
     with get_db() as conn:
         cursor = conn.cursor()
         count = 0
@@ -1134,10 +1134,10 @@ def db_dismiss_ai_picks_batch(username: str, symbols: List[str]) -> int:
 
 
 def db_dismiss_all_ai_picks(username: str) -> int:
-    """用户清空所有 AI 优选（标记所有当前的为已处理）"""
+    """用户清空所有研究列表（标记所有当前的为已处理）"""
     with get_db() as conn:
         cursor = conn.cursor()
-        # 获取所有当前的 AI 优选
+        # 获取所有当前的研究列表
         cursor.execute('SELECT symbol FROM ai_picks')
         symbols = [row['symbol'] for row in cursor.fetchall()]
         
@@ -1155,7 +1155,7 @@ def db_dismiss_all_ai_picks(username: str) -> int:
 
 
 def db_clear_ai_picks_daily():
-    """每日清空AI优选列表（保留当天添加的）"""
+    """每日清空研究列表（保留当天添加的）"""
     with get_db() as conn:
         cursor = conn.cursor()
         # 获取今天的日期（北京时间）
@@ -1163,7 +1163,7 @@ def db_clear_ai_picks_daily():
         beijing_tz = timezone(timedelta(hours=8))
         today = datetime.now(beijing_tz).strftime('%Y-%m-%d')
         
-        # 删除非今天添加的AI优选
+        # 删除非今天添加的研究列表标的
         cursor.execute('''
             DELETE FROM ai_picks 
             WHERE date(added_at) < date(?)
@@ -1176,12 +1176,12 @@ def db_clear_ai_picks_daily():
             WHERE symbol NOT IN (SELECT symbol FROM ai_picks)
         ''')
         
-        print(f"[AI优选清理] 已删除 {deleted_count} 条非今日数据")
+        print(f"[研究列表清理] 已删除 {deleted_count} 条非今日数据")
         return deleted_count
 
 
 def db_get_user_ai_picks_permission(username: str) -> bool:
-    """检查用户是否有AI优选查看权限"""
+    """检查用户是否有研究列表查看权限"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('SELECT can_view_ai_picks, role FROM users WHERE username = ?', (username,))
@@ -1195,7 +1195,7 @@ def db_get_user_ai_picks_permission(username: str) -> bool:
 
 
 def db_set_user_ai_picks_permission(username: str, can_view: bool) -> bool:
-    """设置用户AI优选查看权限"""
+    """设置用户研究列表查看权限"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''

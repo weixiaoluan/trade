@@ -139,22 +139,22 @@ class AfterHoursDetector:
         mean_change: float,
         volatility_ratio: float
     ) -> str:
-        """生成操作建议"""
+        """生成盘后状态描述（仅供参考，不构成投资建议）"""
         if not is_significant:
-            return "盘后微弱波动，统计学不显著，建议观望等待次日开盘"
+            return "盘后微弱波动，统计学不显著，可等待次日开盘观察"
         
         if movement_type == "noise":
-            return "波动较小，可能为随机噪音，暂不调整仓位"
+            return "波动较小，可能为随机噪音"
         
         if movement_type == "abnormal_volatility":
-            return f"盘后波动异常放大（{volatility_ratio:.1f}倍），需关注突发消息，考虑设置预警"
+            return f"盘后波动异常放大（{volatility_ratio:.1f}倍），需关注是否有突发消息"
         
         if movement_type == "directional_move":
             direction = "上涨" if mean_change > 0 else "下跌"
-            return f"盘后出现{direction}趋势，可能有重大信息，建议次日开盘密切关注"
+            return f"盘后出现{direction}趋势，可能有重大信息，次日开盘需关注"
         
         if movement_type == "volume_driven":
-            return "盘后成交量异常，可能存在大单交易，需评估流动性风险"
+            return "盘后成交量异常，可能存在大单交易，需评估流动性"
         
         return "需进一步观察"
     

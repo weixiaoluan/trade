@@ -75,7 +75,7 @@ function NotifyContent() {
           <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
             <Bot className="w-5 h-5 text-indigo-400" />
           </div>
-          <span className="text-lg font-semibold text-white">AI智能投研</span>
+          <span className="text-lg font-semibold text-white">数据分析学习</span>
         </div>
         
         {/* 主卡片 */}
@@ -92,7 +92,7 @@ function NotifyContent() {
               </div>
               <div>
                 <h1 className={`text-xl font-bold ${isBuy ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {isBuy ? '买入' : '卖出'}提醒
+                  触及{isBuy ? '参考低位' : '参考高位'}
                 </h1>
                 <div className="flex items-center gap-1.5 text-slate-400 text-sm mt-1">
                   <Clock className="w-3.5 h-3.5" />
@@ -123,34 +123,34 @@ function NotifyContent() {
               </div>
             )}
             
-            {/* 触发信号 */}
+            {/* 价格提醒 */}
             <div className={`rounded-xl p-4 border ${isBuy ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20'}`}>
               <div className="flex items-start gap-3">
                 <AlertTriangle className={`w-5 h-5 mt-0.5 ${isBuy ? 'text-emerald-400' : 'text-rose-400'}`} />
                 <div>
                   <p className={`font-semibold ${isBuy ? 'text-emerald-300' : 'text-rose-300'}`}>
-                    触发{isBuy ? '买入' : '卖出'}信号
+                    触及{isBuy ? '参考低位' : '参考高位'}
                   </p>
                   <p className="text-slate-300 mt-1">
-                    已触发AI分析的{isBuy ? '买入' : '卖出'}价格 
+                    当前价格已触及技术分析的{isBuy ? '参考低位（支撑位）' : '参考高位（阻力位）'} 
                     <span className={`font-mono font-bold ml-1 ${isBuy ? 'text-emerald-400' : 'text-rose-400'}`}>
                       ¥{extractedTarget}
                     </span>
                   </p>
-                  <p className={`mt-2 font-medium ${isBuy ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    请尽快{isBuy ? '买入' : '卖出'}！
+                  <p className="mt-2 text-slate-400 text-sm">
+                    请自行判断是否进行操作，本提醒不构成任何投资建议。
                   </p>
                 </div>
               </div>
             </div>
             
-            {/* AI 分析原因 */}
+            {/* 技术分析说明 */}
             {extractedAi && (
               <div className="bg-indigo-500/10 rounded-xl p-4 border-l-2 border-indigo-500">
                 <div className="flex items-center gap-2 mb-3">
                   <Bot className="w-4 h-4 text-indigo-400" />
                   <span className="font-semibold text-indigo-300 text-sm">
-                    AI分析{isBuy ? '买入' : '卖出'}原因
+                    技术分析说明
                   </span>
                 </div>
                 <p className="text-slate-300 leading-relaxed text-sm">
@@ -188,7 +188,7 @@ function NotifyContent() {
           {/* 底部 */}
           <div className="px-5 py-4 bg-slate-900/50 border-t border-white/5">
             <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>AI智能投研 · 投资提醒</span>
+              <span>数据分析学习 · 价格提醒</span>
               <span>仅供参考，投资有风险</span>
             </div>
           </div>
@@ -196,7 +196,7 @@ function NotifyContent() {
         
         {/* 免责声明 */}
         <p className="text-center text-slate-600 text-xs mt-6 px-4">
-          本提醒由AI智能分析生成，不构成投资建议。投资有风险，入市需谨慎。
+          本提醒由数据分析系统生成，仅供学习研究参考，不构成任何投资建议。投资有风险，入市需谨慎。
         </p>
       </div>
     </div>

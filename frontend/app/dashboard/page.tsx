@@ -263,20 +263,20 @@ export default function DashboardPage() {
   const [editCostPrice, setEditCostPrice] = useState<string>("");
   const [editHoldingPeriod, setEditHoldingPeriod] = useState<string>("swing");
 
-  // AI 优选相关状态
+  // 研究列表相关状态
   const [showAiPicksModal, setShowAiPicksModal] = useState(false);
   const [aiPicks, setAiPicks] = useState<Array<{ symbol: string; name: string; type: string; added_by: string; added_at: string }>>([]);
   const [aiPicksLoading, setAiPicksLoading] = useState(false);
   const [selectedAiPicks, setSelectedAiPicks] = useState<Set<string>>(new Set());
-  const [addAsAiPick, setAddAsAiPick] = useState(false);  // 添加自选时是否同时添加为AI优选
+  const [addAsAiPick, setAddAsAiPick] = useState(false);  // 添加自选时是否同时添加到研究列表
 
-  // 计算用户还没有添加到自选的 AI 优选标的
+  // 计算用户还没有添加到自选的研究列表标的
   const availableAiPicks = useMemo(() => {
     const watchlistSymbols = new Set(watchlist.map(item => item.symbol.toUpperCase()));
     return aiPicks.filter(pick => !watchlistSymbols.has(pick.symbol.toUpperCase()));
   }, [aiPicks, watchlist]);
 
-  // 新增的 AI 优选数量（用于角标显示）
+  // 新增的研究列表数量（用于角标显示）
   const newAiPicksCount = availableAiPicks.length;
 
   const getToken = useCallback(() => localStorage.getItem("token"), []);
@@ -628,7 +628,7 @@ export default function DashboardPage() {
     }
   }, [getToken, wechatOpenId, showAlertModal, fetchUserSettings]);
 
-  // 获取 AI 优选列表
+  // 获取研究列表
   const [aiPicksPermissionDenied, setAiPicksPermissionDenied] = useState(false);
   const fetchAiPicks = useCallback(async () => {
     setAiPicksLoading(true);
@@ -646,16 +646,16 @@ export default function DashboardPage() {
         setAiPicksPermissionDenied(true);
       }
     } catch (error) {
-      console.error("获取 AI 优选失败:", error);
+      console.error("获取研究列表失败:", error);
     } finally {
       setAiPicksLoading(false);
     }
   }, [getToken]);
 
-  // 打开 AI 优选弹窗 - 定义在后面（需要 canUseFeatures）
+  // 打开研究列表弹窗 - 定义在后面（需要 canUseFeatures）
   const handleOpenAiPicksRef = useRef<() => void>(() => {});
 
-  // 切换 AI 优选选中状态
+  // 切换研究列表选中状态
   const toggleAiPickSelect = useCallback((symbol: string) => {
     setSelectedAiPicks(prev => {
       const next = new Set(prev);
@@ -668,7 +668,7 @@ export default function DashboardPage() {
     });
   }, []);
 
-  // 全选/取消全选 AI 优选（只针对可用的，即用户还没添加到自选的）
+  // 全选/取消全选研究列表（只针对可用的，即用户还没添加到自选的）
   const toggleSelectAllAiPicks = useCallback(() => {
     setSelectedAiPicks(prev => {
       if (prev.size === availableAiPicks.length) {
@@ -678,7 +678,7 @@ export default function DashboardPage() {
     });
   }, [availableAiPicks]);
 
-  // 添加选中的 AI 优选到自选
+  // 添加选中的研究列表到自选
   const handleAddAiPicksToWatchlist = useCallback(async () => {
     if (selectedAiPicks.size === 0) {
       showAlertModal("请选择标的", "请至少选择一个标的添加到自选", "warning");
@@ -717,7 +717,7 @@ export default function DashboardPage() {
         setShowAiPicksModal(false);
         setSelectedAiPicks(new Set());
         fetchWatchlist();
-        fetchAiPicks();  // 刷新 AI 优选列表
+        fetchAiPicks();  // 刷新研究列表
         
         if (data.skipped && data.skipped.length > 0) {
           showAlertModal(
@@ -736,7 +736,7 @@ export default function DashboardPage() {
     }
   }, [selectedAiPicks, availableAiPicks, getToken, fetchWatchlist, fetchAiPicks, showAlertModal]);
 
-  // 添加标的为 AI 优选（管理员）
+  // 添加标的到研究列表（管理员）
   const handleAddToAiPicks = useCallback(async (symbol: string, name: string, type: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/ai-picks`, {
@@ -749,7 +749,7 @@ export default function DashboardPage() {
       });
 
       if (response.ok) {
-        showAlertModal("添加成功", `${symbol} 已添加到 AI 优选`, "success");
+        showAlertModal("添加成功", `${symbol} 已添加到研究列表`, "success");
       } else {
         const data = await response.json();
         showAlertModal("添加失败", data.detail || "添加失败", "error");
@@ -759,7 +759,7 @@ export default function DashboardPage() {
     }
   }, [getToken, showAlertModal]);
 
-  // 从 AI 优选移除（管理员 - 全局删除）
+  // 从研究列表移除（管理员 - 全局删除）
   const handleRemoveFromAiPicks = useCallback(async (symbol: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/ai-picks/${encodeURIComponent(symbol)}`, {
@@ -768,7 +768,7 @@ export default function DashboardPage() {
       });
 
       if (response.ok) {
-        showAlertModal("移除成功", `${symbol} 已从 AI 优选移除（全局）`, "success");
+        showAlertModal("移除成功", `${symbol} 已从研究列表移除（全局）`, "success");
         fetchAiPicks();
       } else {
         const data = await response.json();
@@ -779,7 +779,7 @@ export default function DashboardPage() {
     }
   }, [getToken, showAlertModal, fetchAiPicks]);
 
-  // 用户从 AI 优选中移除单个标的（仅对自己隐藏）
+  // 用户从研究列表中移除单个标的（仅对自己隐藏）
   const handleDismissAiPick = useCallback(async (symbol: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/ai-picks/dismiss`, {
@@ -802,7 +802,7 @@ export default function DashboardPage() {
     }
   }, [getToken, showAlertModal, fetchAiPicks]);
 
-  // 用户批量移除选中的 AI 优选
+  // 用户批量移除选中的研究列表
   const handleDismissSelectedAiPicks = useCallback(async () => {
     if (selectedAiPicks.size === 0) {
       showAlertModal("请选择标的", "请至少选择一个标的", "warning");
@@ -836,7 +836,7 @@ export default function DashboardPage() {
     }
   }, [selectedAiPicks, getToken, showAlertModal, fetchAiPicks]);
 
-  // 用户清空所有 AI 优选
+  // 用户清空所有研究列表
   const handleDismissAllAiPicks = useCallback(async () => {
     setLoading(true);
     try {
@@ -869,7 +869,7 @@ export default function DashboardPage() {
     if (authChecked) {
       // 初始加载 - 一次性获取所有数据
       fetchDashboardInit();
-      // 获取 AI 优选列表（用于显示角标）
+      // 获取研究列表（用于显示角标）
       fetchAiPicks();
 
       // 根据是否有活跃任务调整轮询频率
@@ -939,7 +939,7 @@ export default function DashboardPage() {
     );
   }, [showAlertModal]);
 
-  // 打开 AI 优选弹窗
+  // 打开研究列表弹窗
   const handleOpenAiPicks = useCallback(() => {
     if (!canUseFeatures()) {
       showPendingAlert();
@@ -1097,22 +1097,22 @@ export default function DashboardPage() {
     const positionVal = addPosition && parseFloat(addPosition) > 0 ? parseFloat(addPosition) : undefined;
     const costPriceVal = addCostPrice && parseFloat(addCostPrice) > 0 ? parseFloat(addCostPrice) : undefined;
 
-    // 保存当前的 AI 优选状态
+    // 保存当前的研究列表状态
     const shouldAddAsAiPick = addAsAiPick && user?.role === 'admin';
 
     // 检查是否已存在于自选列表
     const existsInWatchlist = watchlist.some(item => item.symbol === symbolToAdd);
-    // 检查是否已存在于 AI 优选列表
+    // 检查是否已存在于研究列表
     const existsInAiPicks = aiPicks.some(item => item.symbol === symbolToAdd);
 
-    // 如果勾选了 AI 优选，需要检查两个列表
+    // 如果勾选了研究列表，需要检查两个列表
     if (shouldAddAsAiPick) {
       if (existsInWatchlist && existsInAiPicks) {
-        showAlertModal("已存在", `${symbolToAdd} 已在自选列表和 AI 优选列表中，不能重复添加`, "warning");
+        showAlertModal("已存在", `${symbolToAdd} 已在自选列表和研究列表中，不能重复添加`, "warning");
         return;
       }
     } else {
-      // 没勾选 AI 优选，只检查自选列表
+      // 没勾选研究列表，只检查自选列表
       if (existsInWatchlist) {
         showAlertModal("已存在", `${symbolToAdd} 已在自选列表中`, "warning");
         return;
@@ -1178,7 +1178,7 @@ export default function DashboardPage() {
       }
     }
 
-    // 添加到 AI 优选列表（如果勾选了且不存在）
+    // 添加到研究列表（如果勾选了且不存在）
     if (shouldAddAsAiPick && !existsInAiPicks) {
       try {
         const response = await fetch(`${API_BASE}/api/ai-picks`, {
@@ -1192,7 +1192,7 @@ export default function DashboardPage() {
 
         if (response.ok) {
           aiPicksAdded = true;
-          // 刷新 AI 优选列表
+          // 刷新研究列表
           fetchAiPicks();
         }
       } catch (error) {
@@ -1203,20 +1203,20 @@ export default function DashboardPage() {
     // 显示结果提示
     if (shouldAddAsAiPick) {
       if (existsInWatchlist && aiPicksAdded) {
-        showAlertModal("添加成功", `${symbolToAdd} 已存在于自选列表，已添加到 AI 优选列表`, "success");
+        showAlertModal("添加成功", `${symbolToAdd} 已存在于自选列表，已添加到研究列表`, "success");
       } else if (watchlistAdded && existsInAiPicks) {
-        showAlertModal("添加成功", `${symbolToAdd} 已添加到自选列表，AI 优选列表已存在`, "success");
+        showAlertModal("添加成功", `${symbolToAdd} 已添加到自选列表，研究列表已存在`, "success");
       } else if (watchlistAdded && aiPicksAdded) {
-        showAlertModal("添加成功", `${symbolToAdd} 已添加到自选列表和 AI 优选列表`, "success");
+        showAlertModal("添加成功", `${symbolToAdd} 已添加到自选列表和研究列表`, "success");
       } else if (watchlistAdded) {
-        showAlertModal("部分成功", `${symbolToAdd} 已添加到自选列表，AI 优选添加失败`, "warning");
+        showAlertModal("部分成功", `${symbolToAdd} 已添加到自选列表，研究列表添加失败`, "warning");
       } else if (aiPicksAdded) {
-        showAlertModal("部分成功", `${symbolToAdd} 自选添加失败，已添加到 AI 优选列表`, "warning");
+        showAlertModal("部分成功", `${symbolToAdd} 自选添加失败，已添加到研究列表`, "warning");
       } else {
         showAlertModal("添加失败", "网络错误，请稍后重试", "error");
       }
     } else {
-      // 没勾选 AI 优选，只提示自选结果
+      // 没勾选研究列表，只提示自选结果
       if (!closeAfterAdd) {
         if (watchlistAdded) {
           showAlertModal("添加成功", `${symbolToAdd} 已添加到自选，可继续添加下一个`, "success");
@@ -2062,15 +2062,15 @@ export default function DashboardPage() {
 
           {user && (
             <div className="flex items-center gap-2">
-              {/* AI 优选按钮 - 无权限时隐藏 */}
+              {/* 研究列表按钮 - 无权限时隐藏 */}
               {!aiPicksPermissionDenied && (
                 <button
                   onClick={handleOpenAiPicks}
                   className="relative flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded-lg text-xs sm:text-sm hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
-                  title="AI 优选"
+                  title="研究列表"
                 >
                   <Sparkles className="w-4 h-4" />
-                  <span className="hidden sm:inline">AI 优选</span>
+                  <span className="hidden sm:inline">研究列表</span>
                   {/* 新增数量角标 */}
                   {newAiPicksCount > 0 && (
                     <span className="absolute -top-3 -right-3 min-w-[24px] h-6 px-1.5 bg-red-500 text-white text-sm font-bold rounded-full flex items-center justify-center shadow-lg animate-pulse">
@@ -2079,17 +2079,6 @@ export default function DashboardPage() {
                   )}
                 </button>
               )}
-              {/* 设置按钮 */}
-              <button
-                onClick={() => setShowSettingsModal(true)}
-                className="p-2 hover:bg-white/[0.05] rounded-lg transition-all relative"
-                title="设置"
-              >
-                <Settings className="w-5 h-5 text-slate-400" />
-                {!userSettings?.wechat_configured && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full"></span>
-                )}
-              </button>
               <UserHeader user={user} onLogout={handleLogout} />
             </div>
           )}
@@ -2304,7 +2293,6 @@ export default function DashboardPage() {
                 )}
               </div>
               <div className="w-20 flex-shrink-0 text-sm font-semibold text-slate-300">状态</div>
-              <div className="w-20 flex-shrink-0 text-sm font-semibold text-slate-300">提醒记录</div>
               <div className="flex-1 min-w-[220px] text-sm font-semibold text-slate-300 text-right">操作</div>
             </div>
           </div>
@@ -2374,11 +2362,11 @@ export default function DashboardPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-mono text-sm font-semibold text-slate-100">{item.symbol}</span>
-                            {/* AI 优选标识 */}
+                            {/* 研究列表标识 */}
                             {item.from_ai_pick === 1 && (
                               <span className="px-1.5 py-0.5 text-[10px] bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded flex items-center gap-0.5">
                                 <Sparkles className="w-3 h-3" />
-                                AI
+                                研究
                               </span>
                             )}
                             <button
@@ -2596,11 +2584,11 @@ export default function DashboardPage() {
                       <div className="w-40 flex-shrink-0">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-base font-bold text-slate-50 truncate">{item.symbol}</span>
-                          {/* AI 优选标识 */}
+                          {/* 研究列表标识 */}
                           {item.from_ai_pick === 1 && (
                             <span className="px-1.5 py-0.5 text-[10px] bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 rounded flex items-center gap-0.5 whitespace-nowrap">
                               <Sparkles className="w-3 h-3" />
-                              AI优选
+                              研究
                             </span>
                           )}
                           <button
@@ -2743,16 +2731,6 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      {/* 提醒记录 */}
-                      <div className="w-20 flex-shrink-0">
-                        <button
-                          onClick={() => openReminderLogsModal(item.symbol, item.name)}
-                          className="text-sm text-indigo-400 hover:text-indigo-300 hover:underline font-medium"
-                        >
-                          查看详情
-                        </button>
-                      </div>
-
                       <div className="flex-1 min-w-[220px] flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleAnalyzeSingle(item.symbol)}
@@ -2783,21 +2761,6 @@ export default function DashboardPage() {
                             </span>
                           </div>
                         )}
-
-                        <button
-                          onClick={() => openReminderModal(item.symbol, item.name)}
-                          className={`relative p-2 rounded-lg ${
-                            getReminderCount(item.symbol) > 0 ? "bg-amber-600/20 text-amber-400" : "text-slate-500 hover:text-amber-400 hover:bg-amber-600/10"
-                          }`}
-                          title="提醒"
-                        >
-                          {getReminderCount(item.symbol) > 0 ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
-                          {getReminderCount(item.symbol) > 0 && (
-                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white text-[10px] rounded-full flex items-center justify-center">
-                              {getReminderCount(item.symbol)}
-                            </span>
-                          )}
-                        </button>
 
                         <button
                           onClick={() => openEditPositionModal(item)}
@@ -2925,7 +2888,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* 管理员：AI 优选勾选框 */}
+              {/* 管理员：研究列表勾选框 */}
               {user?.role === 'admin' && (
                 <div className="mb-4">
                   <label 
@@ -2938,7 +2901,7 @@ export default function DashboardPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-amber-400" />
-                        <span className="text-sm font-medium text-amber-400">同时添加为 AI 优选</span>
+                        <span className="text-sm font-medium text-amber-400">同时添加到研究列表</span>
                       </div>
                       <p className="text-[10px] text-slate-500 mt-0.5">共享给所有已审核用户查看</p>
                     </div>
@@ -3982,7 +3945,7 @@ export default function DashboardPage() {
         cancelText="稍后再说"
       />
 
-      {/* AI 优选弹窗 */}
+      {/* 研究列表弹窗 */}
       <AnimatePresence>
         {showAiPicksModal && (
           <motion.div
@@ -4002,7 +3965,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-amber-400" />
-                  AI 优选
+                  研究列表
                 </h3>
                 <button onClick={() => setShowAiPicksModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
                   <X className="w-5 h-5 text-slate-400" />
@@ -4010,7 +3973,7 @@ export default function DashboardPage() {
               </div>
 
               <p className="text-slate-500 text-xs sm:text-sm mb-4">
-                管理员精选的优质标的，可批量添加到自选列表
+                管理员整理的研究标的列表，可批量添加到自选进行学习研究（不构成任何投资建议）
               </p>
 
               {aiPicksLoading ? (
@@ -4020,8 +3983,8 @@ export default function DashboardPage() {
               ) : availableAiPicks.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-500">
                   <Sparkles className="w-12 h-12 mb-3 opacity-30" />
-                  <p>暂无新的 AI 优选标的</p>
-                  <p className="text-xs mt-1">您已添加所有推荐标的到自选</p>
+                  <p>暂无新的研究标的</p>
+                  <p className="text-xs mt-1">您已添加所有标的到自选</p>
                 </div>
               ) : (
                 <>
@@ -4134,7 +4097,7 @@ export default function DashboardPage() {
                           showConfirmModal(
                             user?.role === 'admin' ? "确认清空全部？" : "确认清空？",
                             user?.role === 'admin' 
-                              ? "此操作将删除所有 AI 优选标的（全局生效），确定继续吗？" 
+                              ? "此操作将删除所有研究列表标的（全局生效），确定继续吗？" 
                               : "清空后这些标的将不再显示，除非管理员重新添加。确定继续吗？",
                             handleDismissAllAiPicks,
                             "warning"

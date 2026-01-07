@@ -361,7 +361,7 @@ export default function UserDetailPage() {
                 </p>
               </div>
               <div className="col-span-2">
-                <p className="text-xs text-slate-500 mb-1">AI优选权限</p>
+                <p className="text-xs text-slate-500 mb-1">研究列表权限</p>
                 <button
                   onClick={async () => {
                     const token = getToken();
@@ -438,40 +438,6 @@ export default function UserDetailPage() {
             </div>
           ) : (
             <div className="py-8 text-center text-slate-500">暂无自选</div>
-          )}
-        </div>
-
-        {/* 提醒设置 */}
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-white/[0.06]">
-            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Bell className="w-5 h-5 text-amber-400" />
-              提醒设置 ({reminders.length})
-            </h2>
-          </div>
-          {reminders.length > 0 ? (
-            <div className="divide-y divide-white/[0.06]">
-              {reminders.map((reminder) => (
-                <div key={reminder.id || reminder.reminder_id} className="px-6 py-3 flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-mono text-white">{reminder.symbol}</span>
-                    {reminder.name && <span className="text-sm text-slate-500 ml-2">{reminder.name}</span>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 text-xs rounded ${
-                      reminder.reminder_type === 'buy' ? 'bg-emerald-500/20 text-emerald-400' :
-                      reminder.reminder_type === 'sell' ? 'bg-rose-500/20 text-rose-400' :
-                      'bg-indigo-500/20 text-indigo-400'
-                    }`}>
-                      {reminder.reminder_type === 'buy' ? '买入' : reminder.reminder_type === 'sell' ? '卖出' : '买+卖'}
-                    </span>
-                    <span className="text-xs text-slate-500">{reminder.frequency}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-8 text-center text-slate-500">暂无提醒</div>
           )}
         </div>
 
@@ -566,7 +532,7 @@ export default function UserDetailPage() {
               </div>
               <p className="text-slate-400 mb-6">
                 确定要注销用户 <span className="text-white font-medium">{username}</span> 吗？
-                此操作将删除该用户的所有数据，包括自选列表、提醒设置和分析报告，且无法恢复。
+                此操作将删除该用户的所有数据，包括自选列表和分析报告，且无法恢复。
               </p>
               <div className="flex gap-3">
                 <button

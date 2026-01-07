@@ -149,8 +149,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="智能多维度证券分析系统 API",
-    description="基于 AutoGen + DeepSeek-R1 的多智能体证券分析系统",
+    title="证券数据分析学习系统 API",
+    description="个人学习研究使用，不对外开放",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -522,7 +522,7 @@ async def admin_set_ai_picks_permission(
     data: dict,
     authorization: str = Header(None)
 ):
-    """设置用户AI优选查看权限（仅管理员）"""
+    """设置用户研究列表查看权限（仅管理员）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -544,7 +544,7 @@ async def admin_set_ai_picks_permission(
     success = db_set_user_ai_picks_permission(username, can_view)
     
     if success:
-        return {"status": "success", "message": f"已{'开通' if can_view else '关闭'}用户 {username} 的AI优选权限"}
+        return {"status": "success", "message": f"已{'开通' if can_view else '关闭'}用户 {username} 的研究列表权限"}
     else:
         raise HTTPException(status_code=500, detail="设置失败")
 
@@ -1124,7 +1124,7 @@ async def batch_delete_watchlist_items(
 
 
 # ============================================
-# AI 优选 API
+# 研究列表 API
 # ============================================
 
 @app.get("/api/ai-picks")
@@ -1132,7 +1132,7 @@ async def get_ai_picks(
     background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
-    """获取 AI 优选列表（需要权限）"""
+    """获取研究列表（需要权限）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1146,10 +1146,10 @@ async def get_ai_picks(
     if not is_approved(user):
         raise HTTPException(status_code=403, detail="账户待审核，暂无权限查看")
     
-    # 检查AI优选权限（管理员始终有权限）
+    # 检查研究列表权限（管理员始终有权限）
     from web.database import db_get_user_ai_picks_permission
     if not is_admin(user) and not db_get_user_ai_picks_permission(user['username']):
-        raise HTTPException(status_code=403, detail="暂无AI优选查看权限，请联系管理员开通")
+        raise HTTPException(status_code=403, detail="暂无研究列表查看权限，请联系管理员开通")
     
     # 管理员看到全部，普通用户看到排除已处理的
     if is_admin(user):
@@ -1176,7 +1176,7 @@ async def dismiss_ai_pick(
     data: dict,
     authorization: str = Header(None)
 ):
-    """用户标记 AI 优选标的为已处理（从列表中移除）"""
+    """用户标记研究列表标的为已处理（从列表中移除）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1196,7 +1196,7 @@ async def dismiss_ai_pick(
     from web.database import db_dismiss_ai_pick
     db_dismiss_ai_pick(user['username'], symbol)
     
-    return {"status": "success", "message": f"{symbol} 已从 AI 优选中移除"}
+    return {"status": "success", "message": f"{symbol} 已从研究列表中移除"}
 
 
 @app.post("/api/ai-picks/dismiss-batch")
@@ -1204,7 +1204,7 @@ async def dismiss_ai_picks_batch(
     data: dict,
     authorization: str = Header(None)
 ):
-    """用户批量标记 AI 优选标的为已处理"""
+    """用户批量标记研究列表标的为已处理"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1231,7 +1231,7 @@ async def dismiss_ai_picks_batch(
 async def dismiss_all_ai_picks(
     authorization: str = Header(None)
 ):
-    """用户清空所有 AI 优选"""
+    """用户清空所有研究列表"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1255,7 +1255,7 @@ async def refresh_ai_picks(
     background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
-    """刷新所有 AI 优选标的的名称和类型（仅管理员）"""
+    """刷新所有研究列表标的的名称和类型（仅管理员）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1281,7 +1281,7 @@ async def refresh_ai_picks(
 
 
 class AiPickItem(BaseModel):
-    """AI 优选项"""
+    """研究列表项"""
     symbol: str
     name: str = ""
     type: str = "stock"
@@ -1293,7 +1293,7 @@ async def add_ai_pick(
     background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
-    """添加 AI 优选（仅管理员）"""
+    """添加到研究列表（仅管理员）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1328,13 +1328,13 @@ async def add_ai_pick(
     if success:
         # 后台异步获取名称和更精确的类型
         background_tasks.add_task(update_ai_pick_name_and_type, symbol)
-        return {"status": "success", "message": f"{symbol} 已添加到 AI 优选"}
+        return {"status": "success", "message": f"{symbol} 已添加到研究列表"}
     else:
         return {"status": "error", "message": "添加失败"}
 
 
 def update_ai_pick_name_and_type(symbol: str):
-    """后台任务：更新 AI 优选标的的名称和类型"""
+    """后台任务：更新研究列表标的的名称和类型"""
     try:
         from tools.data_fetcher import get_stock_info
         from web.database import db_update_ai_pick
@@ -1390,7 +1390,7 @@ async def batch_add_ai_picks(
     items: List[AiPickItem],
     authorization: str = Header(None)
 ):
-    """批量添加 AI 优选（仅管理员）"""
+    """批量添加到研究列表（仅管理员）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1412,7 +1412,7 @@ async def batch_add_ai_picks(
     return {
         "status": "success",
         "added": added,
-        "message": f"成功添加 {len(added)} 个标的到 AI 优选"
+        "message": f"成功添加 {len(added)} 个标的到研究列表"
     }
 
 
@@ -1421,7 +1421,7 @@ async def remove_ai_pick(
     symbol: str,
     authorization: str = Header(None)
 ):
-    """移除 AI 优选（仅管理员）"""
+    """从研究列表移除（仅管理员）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -1438,7 +1438,7 @@ async def remove_ai_pick(
     success = db_remove_ai_pick(symbol)
     
     if success:
-        return {"status": "success", "message": f"{symbol} 已从 AI 优选移除"}
+        return {"status": "success", "message": f"{symbol} 已从研究列表移除"}
     else:
         raise HTTPException(status_code=404, detail="未找到该标的")
 
@@ -5180,29 +5180,29 @@ async def test_user_push(
                 
                 <div style="background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                        <span style="color: #64748b;">触发类型</span>
-                        <span style="color: {action_color}; font-weight: bold;">{action}提醒</span>
+                        <span style="color: #64748b;">提醒类型</span>
+                        <span style="color: {action_color}; font-weight: bold;">触及{action}位</span>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #64748b;">目标价格</span>
+                        <span style="color: #64748b;">参考价格</span>
                         <span style="font-weight: bold;">¥{test_target:.3f}</span>
                     </div>
                 </div>
                 
                 <div style="background: #eff6ff; border-left: 4px solid #6366f1; padding: 12px; border-radius: 0 8px 8px 0; margin-bottom: 15px;">
-                    <div style="font-size: 12px; color: #6366f1; font-weight: bold; margin-bottom: 5px;">🤖 AI 分析摘要</div>
-                    <div style="font-size: 13px; color: #334155; line-height: 1.5;">这是一条测试消息，用于验证您的推送配置是否正常工作。正式提醒将包含 AI 智能分析的投资建议摘要。</div>
+                    <div style="font-size: 12px; color: #6366f1; font-weight: bold; margin-bottom: 5px;">📊 技术分析说明</div>
+                    <div style="font-size: 13px; color: #334155; line-height: 1.5;">这是一条测试消息，用于验证您的推送配置是否正常工作。正式提醒将包含技术分析的参考说明。</div>
                 </div>
                 
                 <div style="background: #fef3c7; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
                     <div style="font-size: 12px; color: #d97706; font-weight: bold;">✅ 推送配置成功</div>
                     <div style="font-size: 13px; color: #92400e; margin-top: 5px;">
-                        恭喜！您的微信推送已配置成功。PushPlus 免费版每月有 200 次推送额度。
+                        恭喜！您的微信推送已配置成功。
                     </div>
                 </div>
                 
                 <div style="font-size: 11px; color: #94a3b8; text-align: center;">
-                    {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} · AI智能投研
+                    {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} · 数据分析学习
                 </div>
             </div>
         </div>

@@ -131,7 +131,7 @@ export default function ReportPage() {
     const url = getShareUrl();
     const result = parseReportData(report);
     const title = `${result.ticker} ${result.name} AI分析报告`;
-    const summary = result.summary?.substring(0, 100) || 'AI智能分析报告';
+    const summary = result.summary?.substring(0, 100) || '技术分析报告';
     // QQ分享链接
     const qqShareUrl = `https://connect.qq.com/widget/shareqq/index.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&summary=${encodeURIComponent(summary)}`;
     window.open(qqShareUrl, '_blank', 'width=600,height=500');
@@ -697,7 +697,7 @@ export default function ReportPage() {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
         </div>
         <div>
-          <div class="header-title">智能研报</div>
+          <div class="header-title">技术研报</div>
           <div class="header-subtitle">AI QUANTITATIVE ANALYSIS</div>
         </div>
       </div>
@@ -733,7 +733,7 @@ export default function ReportPage() {
     </div>
     
     <div class="footer">
-      ℹ️ 本报告由 AI 多智能体系统生成，仅供参考，不构成投资建议。投资有风险，入市需谨慎。
+      ℹ️ 本报告由数据分析系统生成，仅供学习研究参考，不构成任何投资建议。投资有风险，入市需谨慎。
     </div>
   </div>
 </body>
@@ -916,7 +916,7 @@ export default function ReportPage() {
                     <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
                   </div>
                   <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide">智能研报</h3>
+                    <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide">技术研报</h3>
                     <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500 hidden sm:block">AI QUANTITATIVE ANALYSIS</span>
                   </div>
                 </div>
