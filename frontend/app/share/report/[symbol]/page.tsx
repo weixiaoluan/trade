@@ -13,7 +13,6 @@ import { API_BASE } from "@/lib/config";
 const StockCard = dynamic(() => import("@/components/ui/StockCard").then(m => ({ default: m.StockCard })), { ssr: false });
 const QuantDashboardCard = dynamic(() => import("@/components/ui/QuantDashboardCard").then(m => ({ default: m.QuantDashboardCard })), { ssr: false });
 const AIRecommendationCard = dynamic(() => import("@/components/ui/AIRecommendationCard").then(m => ({ default: m.AIRecommendationCard })), { ssr: false });
-const PredictionTimeline = dynamic(() => import("@/components/ui/PredictionTimeline").then(m => ({ default: m.PredictionTimeline })), { ssr: false });
 
 // 骨架屏组件
 const SkeletonCard = memo(({ className = "" }: { className?: string }) => (
@@ -66,7 +65,6 @@ export default function ShareReportPage() {
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<'auth' | 'pending' | 'notfound' | 'other'>('other');
-  const [activeHorizon, setActiveHorizon] = useState<'short' | 'mid' | 'long' | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
   const getToken = () => localStorage.getItem("token");
@@ -430,7 +428,6 @@ export default function ShareReportPage() {
               adxValue={result.adxValue}
               adxTrendStrength={result.adxTrendStrength}
               atrPct={result.atrPct}
-              activeHorizon={activeHorizon || undefined}
             />
 
             {result.signalDetails && result.signalDetails.length > 0 && (
@@ -461,26 +458,23 @@ export default function ShareReportPage() {
             )}
           </div>
 
-          {/* 预测时间线 */}
-          <div className="lg:col-span-3">
-            <div className="glass-card rounded-xl p-5 border border-white/[0.06]">
-              <PredictionTimeline
-                predictions={result.predictions}
-                onHoverHorizon={setActiveHorizon}
-              />
-            </div>
-          </div>
-
           {/* 详细报告 */}
           <div className="lg:col-span-3">
             <div className="glass-card rounded-xl border border-white/[0.06] overflow-hidden">
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06] bg-white/[0.02]">
-                <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                  <FileText className="w-4 h-4 text-indigo-400" />
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-5 py-4 border-b border-white/[0.06] bg-white/[0.02] gap-2 sm:gap-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">技术研报</h3>
+                    <span className="text-[10px] uppercase tracking-wider text-slate-500">AI QUANTITATIVE ANALYSIS</span>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">技术研报</h3>
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500">AI QUANTITATIVE ANALYSIS</span>
+                {/* 免责声明 */}
+                <div className="text-[10px] sm:text-xs text-amber-400/80 leading-relaxed max-w-xl">
+                  <span className="font-medium">⚠️ 免责声明：</span>
+                  <span className="text-slate-400">本报告由AI技术生成，数据来源于公开市场信息，仅供个人技术分析参考与学习交流之用。报告内容不构成任何具体的投资操作建议，使用者应独立判断并对投资决策负全部责任。</span>
                 </div>
               </div>
               <div className="p-6 md:p-8">
