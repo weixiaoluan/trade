@@ -221,6 +221,8 @@ export default function DashboardPage() {
   
   // 搜索状态
   const [searchQuery, setSearchQuery] = useState("");
+  // 周期筛选状态
+  const [periodFilter, setPeriodFilter] = useState<string>("all");
   // 移动端操作菜单
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
 
@@ -976,6 +978,11 @@ export default function DashboardPage() {
       );
     }
     
+    // 周期筛选
+    if (periodFilter !== "all") {
+      sorted = sorted.filter(item => item.holding_period === periodFilter);
+    }
+    
     sorted.sort((a, b) => (b.starred || 0) - (a.starred || 0));
     
     if (sortField && quotes) {
@@ -994,6 +1001,24 @@ export default function DashboardPage() {
         } else if (sortField === "position") {
           aVal = a.position || 0;
           bVal = b.position || 0;
+        } else if (sortField === "ai_buy_price") {
+          // 参考低位排序：按与当前价的差距排序
+          const aPrice = aQuote?.current_price || 0;
+          const bPrice = bQuote?.current_price || 0;
+          const aBuyPrice = a.ai_buy_price || 0;
+          const bBuyPrice = b.ai_buy_price || 0;
+          // 计算差距（绝对值）
+          aVal = aBuyPrice > 0 && aPrice > 0 ? Math.abs(aPrice - aBuyPrice) : Infinity;
+          bVal = bBuyPrice > 0 && bPrice > 0 ? Math.abs(bPrice - bBuyPrice) : Infinity;
+        } else if (sortField === "ai_sell_price") {
+          // 参考高位排序：按与当前价的差距排序
+          const aPrice = aQuote?.current_price || 0;
+          const bPrice = bQuote?.current_price || 0;
+          const aSellPrice = a.ai_sell_price || 0;
+          const bSellPrice = b.ai_sell_price || 0;
+          // 计算差距（绝对值）
+          aVal = aSellPrice > 0 && aPrice > 0 ? Math.abs(aPrice - aSellPrice) : Infinity;
+          bVal = bSellPrice > 0 && bPrice > 0 ? Math.abs(bPrice - bSellPrice) : Infinity;
         }
         
         return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
@@ -1001,7 +1026,7 @@ export default function DashboardPage() {
     }
     
     return sorted;
-  }, [watchlist, sortField, sortOrder, quotes, searchQuery]);
+  }, [watchlist, sortField, sortOrder, quotes, searchQuery, periodFilter]);
 
   const reportsBySymbol = useMemo(() => {
     const map: Record<string, ReportSummary> = {};
@@ -2087,7 +2112,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <h2 className="text-lg sm:text-xl font-semibold text-slate-100">我的自选</h2>
             <span className="text-xs sm:text-sm text-slate-500">
-              ({searchQuery ? `${sortedWatchlist.length}/${watchlist.length}` : watchlist.length})
+              ({(searchQuery || periodFilter !== "all") ? `${sortedWatchlist.length}/${watchlist.length}` : watchlist.length})
             </span>
             {/* 搜索框 */}
             <div className="relative">
@@ -2111,6 +2136,20 @@ export default function DashboardPage() {
                 </button>
               )}
             </div>
+            {/* 周期筛选 */}
+            <select
+              value={periodFilter}
+              onChange={(e) => {
+                setPeriodFilter(e.target.value);
+                setCurrentPage(1); // 筛选时重置到第一页
+              }}
+              className="px-2 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs sm:text-sm cursor-pointer"
+            >
+              <option value="all" className="bg-slate-800">全部周期</option>
+              <option value="short" className="bg-slate-800">短线</option>
+              <option value="swing" className="bg-slate-800">波段</option>
+              <option value="long" className="bg-slate-800">中长线</option>
+            </select>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -2205,8 +2244,30 @@ export default function DashboardPage() {
               <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">持仓盈亏</div>
               <div className="w-16 flex-shrink-0 text-sm font-semibold text-slate-300">周期</div>
               <div className="w-20 flex-shrink-0 text-sm font-semibold text-indigo-400">技术评级</div>
-              <div className="w-28 flex-shrink-0 text-sm font-semibold text-emerald-400 text-right">参考低位</div>
-              <div className="w-28 flex-shrink-0 text-sm font-semibold text-rose-400 text-right">参考高位</div>
+              <div 
+                className="w-28 flex-shrink-0 text-sm font-semibold text-emerald-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-emerald-300"
+                onClick={() => handleSort("ai_buy_price")}
+                title="按与当前价的差距排序"
+              >
+                参考低位
+                {sortField === "ai_buy_price" ? (
+                  sortOrder === "asc" ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                ) : (
+                  <ArrowUpDown className="w-3.5 h-3.5 opacity-50" />
+                )}
+              </div>
+              <div 
+                className="w-28 flex-shrink-0 text-sm font-semibold text-rose-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-rose-300"
+                onClick={() => handleSort("ai_sell_price")}
+                title="按与当前价的差距排序"
+              >
+                参考高位
+                {sortField === "ai_sell_price" ? (
+                  sortOrder === "asc" ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                ) : (
+                  <ArrowUpDown className="w-3.5 h-3.5 opacity-50" />
+                )}
+              </div>
               <div className="w-20 flex-shrink-0 text-sm font-semibold text-slate-300">状态</div>
               <div className="w-20 flex-shrink-0 text-sm font-semibold text-slate-300">提醒记录</div>
               <div className="flex-1 min-w-[220px] text-sm font-semibold text-slate-300 text-right">操作</div>
