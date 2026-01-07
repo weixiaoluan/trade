@@ -197,28 +197,28 @@ def check_price_alert(username: str, phone: str, reminder: Dict) -> bool:
         logger.warning(f"无法获取 {symbol} 的实时价格")
         return False
     
-    # 获取目标价
+    # 获取技术分析参考价位
     targets = get_ai_price_targets(username, symbol)
-    buy_price = targets.get('buy_price')
-    sell_price = targets.get('sell_price')
+    buy_price = targets.get('buy_price')  # 参考低位（支撑位）
+    sell_price = targets.get('sell_price')  # 参考高位（阻力位）
     ai_summary = targets.get('ai_summary', '')
     
     triggered = False
     name = reminder.get('name', symbol)
     
-    # 检查买入信号
+    # 检查是否触及参考低位（仅通知价格已到达技术支撑位，不构成买入建议）
     if reminder_type in ['buy', 'both'] and buy_price:
         if current_price <= buy_price:
             send_sms_alert(phone, symbol, 'buy', current_price, buy_price, name, username, ai_summary)
             triggered = True
-            logger.info(f"{symbol} 触发买入提醒: 当前价 {current_price} <= 目标价 {buy_price}")
+            logger.info(f"{symbol} 触及参考低位: 当前价 {current_price} <= 技术支撑位 {buy_price}")
     
-    # 检查卖出信号
+    # 检查是否触及参考高位（仅通知价格已到达技术阻力位，不构成卖出建议）
     if reminder_type in ['sell', 'both'] and sell_price:
         if current_price >= sell_price:
             send_sms_alert(phone, symbol, 'sell', current_price, sell_price, name, username, ai_summary)
             triggered = True
-            logger.info(f"{symbol} 触发卖出提醒: 当前价 {current_price} >= 目标价 {sell_price}")
+            logger.info(f"{symbol} 触及参考高位: 当前价 {current_price} >= 技术阻力位 {sell_price}")
     
     return triggered
 
@@ -465,23 +465,25 @@ def check_watchlist_price_alerts():
             alert_type = None
             target_price = None
             
-            # 检查买入信号（当前价格 <= AI建议买入价）
+            # 检查是否触及参考低位（当前价格 <= 技术支撑位）
+            # 注意：这仅是价格到达技术分析参考位置的通知，不构成任何买入建议
             if ai_buy_price and current_price <= ai_buy_price:
                 triggered = True
                 alert_type = 'buy'
                 target_price = ai_buy_price
-                logger.info(f"[自选监控] {symbol} 触发买入: 当前价 {current_price} <= AI建议买入价 {ai_buy_price}")
+                logger.info(f"[自选监控] {symbol} 触及参考低位: 当前价 {current_price} <= 技术支撑位 {ai_buy_price}")
             
-            # 检查卖出信号（当前价格 >= AI建议卖出价）
+            # 检查是否触及参考高位（当前价格 >= 技术阻力位）
+            # 注意：这仅是价格到达技术分析参考位置的通知，不构成任何卖出建议
             elif ai_sell_price and current_price >= ai_sell_price:
                 triggered = True
                 alert_type = 'sell'
                 target_price = ai_sell_price
-                logger.info(f"[自选监控] {symbol} 触发卖出: 当前价 {current_price} >= AI建议卖出价 {ai_sell_price}")
+                logger.info(f"[自选监控] {symbol} 触及参考高位: 当前价 {current_price} >= 技术阻力位 {ai_sell_price}")
             
             # 发送提醒
             if triggered:
-                # 获取AI分析摘要
+                # 获取技术分析摘要
                 ai_summary = ""
                 try:
                     targets = get_ai_price_targets(username, symbol)
@@ -489,7 +491,7 @@ def check_watchlist_price_alerts():
                 except:
                     pass
                 
-                # 发送推送（包含建议价格和数量）
+                # 发送推送（包含参考价位信息）
                 result = send_price_alert_notification(
                     username=username,
                     symbol=symbol,

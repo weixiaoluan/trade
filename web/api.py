@@ -2037,69 +2037,69 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         print(f"[报告保存] 原始symbol: {original_symbol}, 规范化后: {save_symbol}")
         save_user_report(username, save_symbol, report_data)
         
-        # 从报告中提取AI建议价格并更新到自选列表
+        # 从报告中提取技术分析参考价位并更新到自选列表
+        # 注意：这些价位仅供学习研究参考，不构成任何投资建议
         try:
             from web.database import db_update_watchlist_ai_prices
             import re
             
-            # 优先从AI报告文本中提取建议买入/卖出价格和数量
-            ai_buy_price = None
-            ai_sell_price = None
+            # 从技术分析中提取参考低位/参考高位（支撑位/阻力位）
+            ai_buy_price = None  # 参考低位（技术支撑位）
+            ai_sell_price = None  # 参考高位（技术阻力位）
             ai_buy_quantity = None
             ai_sell_quantity = None
             
-            # 尝试从报告中解析建议价格表格
+            # 尝试从报告中解析参考价位表格
             if report:
-                print(f"[AI价格] 开始从报告中提取建议价格和数量...")
+                print(f"[技术分析] 开始从报告中提取参考价位...")
                 
-                # 匹配多种格式的建议买入价（支持 $ 和 ¥）
+                # 匹配多种格式的参考低位（支持 $ 和 ¥）
                 buy_patterns = [
-                    r'\*\*建议买入价\*\*\s*\|\s*[$¥]?([\d.]+)',
-                    r'\|\s*\*\*建议买入价\*\*\s*\|\s*[$¥]?([\d.]+)',
-                    r'\|\s*建议买入价\s*\|\s*[$¥]?([\d.]+)',
-                    r'建议买入价[：:]\s*[$¥]?([\d.]+)',
-                    r'建议买入[：:]\s*[$¥]?([\d.]+)',
-                    r'买入价[：:]\s*[$¥]?([\d.]+)',
-                    r'买入价位[：:]\s*[$¥]?([\d.]+)',
+                    r'\*\*参考低位\*\*\s*\|\s*[$¥]?([\d.]+)',
+                    r'\|\s*\*\*参考低位\*\*\s*\|\s*[$¥]?([\d.]+)',
+                    r'\|\s*参考低位\s*\|\s*[$¥]?([\d.]+)',
+                    r'参考低位[：:]\s*[$¥]?([\d.]+)',
+                    r'参考买入[：:]\s*[$¥]?([\d.]+)',
+                    r'支撑位[：:]\s*[$¥]?([\d.]+)',
+                    r'技术支撑[：:]\s*[$¥]?([\d.]+)',
                 ]
                 for pattern in buy_patterns:
                     buy_match = re.search(pattern, report)
                     if buy_match:
                         try:
                             ai_buy_price = float(buy_match.group(1))
-                            print(f"[AI价格] 从报告中提取到买入价: {ai_buy_price}")
+                            print(f"[技术分析] 从报告中提取到参考低位: {ai_buy_price}")
                             break
                         except:
                             pass
                 
-                # 匹配多种格式的建议卖出价（支持 $ 和 ¥）
+                # 匹配多种格式的参考高位（支持 $ 和 ¥）
                 sell_patterns = [
-                    r'\*\*建议卖出价\*\*\s*\|\s*[$¥]?([\d.]+)',
-                    r'\|\s*\*\*建议卖出价\*\*\s*\|\s*[$¥]?([\d.]+)',
-                    r'\|\s*建议卖出价\s*\|\s*[$¥]?([\d.]+)',
-                    r'建议卖出价[：:]\s*[$¥]?([\d.]+)',
-                    r'建议卖出[：:]\s*[$¥]?([\d.]+)',
-                    r'卖出价[：:]\s*[$¥]?([\d.]+)',
-                    r'卖出价位[：:]\s*[$¥]?([\d.]+)',
+                    r'\*\*参考高位\*\*\s*\|\s*[$¥]?([\d.]+)',
+                    r'\|\s*\*\*参考高位\*\*\s*\|\s*[$¥]?([\d.]+)',
+                    r'\|\s*参考高位\s*\|\s*[$¥]?([\d.]+)',
+                    r'参考高位[：:]\s*[$¥]?([\d.]+)',
+                    r'参考卖出[：:]\s*[$¥]?([\d.]+)',
+                    r'阻力位[：:]\s*[$¥]?([\d.]+)',
+                    r'技术阻力[：:]\s*[$¥]?([\d.]+)',
                 ]
                 for pattern in sell_patterns:
                     sell_match = re.search(pattern, report)
                     if sell_match:
                         try:
                             ai_sell_price = float(sell_match.group(1))
-                            print(f"[AI价格] 从报告中提取到卖出价: {ai_sell_price}")
+                            print(f"[技术分析] 从报告中提取到参考高位: {ai_sell_price}")
                             break
                         except:
                             pass
                 
-                # 提取建议买入数量 - 从表格行中提取（支持 $ 和 ¥）
+                # 提取参考数量 - 从表格行中提取（支持 $ 和 ¥）
                 buy_qty_patterns = [
-                    r'\*\*建议买入价\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'\|\s*\*\*建议买入价\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'\|\s*建议买入价\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'建议买入[^|]*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'买入数量[：:]\s*([\d,]+)\s*(?:股|份)?',
-                    r'建议买入.*?([\d,]{3,})\s*(?:股|份)',
+                    r'\*\*参考低位\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*\*\*参考低位\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*参考低位\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'参考低位[^|]*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'参考数量[：:]\s*([\d,]+)\s*(?:股|份)?',
                 ]
                 for pattern in buy_qty_patterns:
                     qty_match = re.search(pattern, report)
@@ -2108,19 +2108,17 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                             qty_str = qty_match.group(1).replace(',', '').replace('，', '')
                             ai_buy_quantity = int(qty_str)
                             if ai_buy_quantity > 0:
-                                print(f"[AI价格] 从报告中提取到买入数量: {ai_buy_quantity}")
+                                print(f"[技术分析] 从报告中提取到参考数量: {ai_buy_quantity}")
                                 break
                         except:
                             pass
                 
-                # 提取建议卖出数量 - 从表格行中提取（支持 $ 和 ¥）
+                # 提取参考高位数量 - 从表格行中提取（支持 $ 和 ¥）
                 sell_qty_patterns = [
-                    r'\*\*建议卖出价\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'\|\s*\*\*建议卖出价\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'\|\s*建议卖出价\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'建议卖出[^|]*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
-                    r'卖出数量[：:]\s*([\d,]+)\s*(?:股|份)?',
-                    r'建议卖出.*?([\d,]{3,})\s*(?:股|份)',
+                    r'\*\*参考高位\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*\*\*参考高位\*\*\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'\|\s*参考高位\s*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
+                    r'参考高位[^|]*\|\s*[$¥]?[\d.]+\s*\|\s*([\d,]+)\s*(?:股|份)',
                 ]
                 for pattern in sell_qty_patterns:
                     qty_match = re.search(pattern, report)
@@ -2129,14 +2127,14 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                             qty_str = qty_match.group(1).replace(',', '').replace('，', '')
                             ai_sell_quantity = int(qty_str)
                             if ai_sell_quantity > 0:
-                                print(f"[AI价格] 从报告中提取到卖出数量: {ai_sell_quantity}")
+                                print(f"[技术分析] 从报告中提取到参考高位数量: {ai_sell_quantity}")
                                 break
                         except:
                             pass
             
-            # 如果AI报告中没有提取到，则从技术分析的支撑位/阻力位获取
+            # 如果报告中没有提取到，则从技术分析的支撑位/阻力位获取
             if not ai_buy_price or not ai_sell_price:
-                print(f"[AI价格] 从技术分析中获取支撑位/阻力位...")
+                print(f"[技术分析] 从技术分析中获取支撑位/阻力位...")
                 key_levels = levels_dict.get('key_levels', {})
                 if isinstance(key_levels, list):
                     # 列表格式
@@ -2144,20 +2142,20 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                     resistance_prices = [l.get('price') for l in key_levels if l.get('type') == 'resistance' and l.get('price')]
                     if not ai_buy_price and support_prices:
                         ai_buy_price = support_prices[0]
-                        print(f"[AI价格] 从key_levels列表获取买入价(支撑位): {ai_buy_price}")
+                        print(f"[技术分析] 从key_levels列表获取参考低位(支撑位): {ai_buy_price}")
                     if not ai_sell_price and resistance_prices:
                         ai_sell_price = resistance_prices[0]
-                        print(f"[AI价格] 从key_levels列表获取卖出价(阻力位): {ai_sell_price}")
+                        print(f"[技术分析] 从key_levels列表获取参考高位(阻力位): {ai_sell_price}")
                 elif isinstance(key_levels, dict):
                     # 字典格式
                     if not ai_buy_price:
                         ai_buy_price = key_levels.get('nearest_support')
                         if ai_buy_price:
-                            print(f"[AI价格] 从key_levels字典获取买入价(支撑位): {ai_buy_price}")
+                            print(f"[技术分析] 从key_levels字典获取参考低位(支撑位): {ai_buy_price}")
                     if not ai_sell_price:
                         ai_sell_price = key_levels.get('nearest_resistance')
                         if ai_sell_price:
-                            print(f"[AI价格] 从key_levels字典获取卖出价(阻力位): {ai_sell_price}")
+                            print(f"[技术分析] 从key_levels字典获取参考高位(阻力位): {ai_sell_price}")
                 
                 # 如果key_levels没有，尝试从support_levels/resistance_levels获取
                 if not ai_buy_price:
@@ -2168,7 +2166,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                         elif isinstance(support_levels[0], (int, float)):
                             ai_buy_price = support_levels[0]
                         if ai_buy_price:
-                            print(f"[AI价格] 从support_levels获取买入价: {ai_buy_price}")
+                            print(f"[技术分析] 从support_levels获取参考低位: {ai_buy_price}")
                 
                 if not ai_sell_price:
                     resistance_levels = levels_dict.get('resistance_levels', [])
@@ -2178,7 +2176,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                         elif isinstance(resistance_levels[0], (int, float)):
                             ai_sell_price = resistance_levels[0]
                         if ai_sell_price:
-                            print(f"[AI价格] 从resistance_levels获取卖出价: {ai_sell_price}")
+                            print(f"[技术分析] 从resistance_levels获取参考高位: {ai_sell_price}")
             
             # 确保价格是数值类型
             if isinstance(ai_buy_price, str):
@@ -4827,50 +4825,54 @@ def send_price_alert_notification(username: str, symbol: str, name: str,
     trigger_time = now.strftime("%Y年%m月%d日 %H时%M分%S秒")
     time_str = now.strftime("%Y-%m-%d %H:%M:%S")
     
-    # 构建AI建议价格信息
+    # 构建技术分析参考价位信息
     ai_price_info = ""
     if ai_buy_price or ai_sell_price:
-        ai_price_info = "\n\n【AI建议价格】"
+        ai_price_info = "\n\n【技术分析参考价位】"
         if ai_buy_price:
-            ai_price_info += f"\n建议买入价：¥{ai_buy_price:.3f}"
+            ai_price_info += f"\n参考低位（支撑位）：¥{ai_buy_price:.3f}"
             if ai_buy_quantity:
-                ai_price_info += f"（建议买入{ai_buy_quantity}股/份）"
+                ai_price_info += f"（参考数量{ai_buy_quantity}股/份）"
         if ai_sell_price:
-            ai_price_info += f"\n建议卖出价：¥{ai_sell_price:.3f}"
+            ai_price_info += f"\n参考高位（阻力位）：¥{ai_sell_price:.3f}"
             if ai_sell_quantity:
-                ai_price_info += f"（建议卖出{ai_sell_quantity}股/份）"
+                ai_price_info += f"（参考数量{ai_sell_quantity}股/份）"
+        ai_price_info += "\n\n⚠️ 以上价位仅为技术分析参考，不构成任何投资建议"
     
     # 确保 AI 分析内容至少 50 字
     if ai_summary and len(ai_summary) < 50:
         # 补充默认分析内容
         if alert_type == "buy":
-            ai_summary = ai_summary + "。综合技术面和基本面分析，当前价位具有较好的投资价值，建议关注后续走势变化。"
+            ai_summary = ai_summary + "。当前价格已触及技术分析的参考低位（支撑位），请自行判断是否进行操作。本提醒不构成任何投资建议。"
         else:
-            ai_summary = ai_summary + "。综合技术面和基本面分析，当前价位已达到预期目标，建议适时获利了结，注意控制风险。"
+            ai_summary = ai_summary + "。当前价格已触及技术分析的参考高位（阻力位），请自行判断是否进行操作。本提醒不构成任何投资建议。"
     
     # 如果没有 AI 分析，生成默认内容
     if not ai_summary:
         if alert_type == "buy":
-            ai_summary = f"根据AI智能分析，{name}当前价格已触及设定的买入价位。技术指标显示短期存在反弹机会，建议关注成交量变化，把握买入时机。"
+            ai_summary = f"根据技术分析，{name}当前价格已触及设定的参考低位（技术支撑位）。这仅是价格到达技术参考位置的通知，不构成任何买入建议，请自行判断。"
         else:
-            ai_summary = f"根据AI智能分析，{name}当前价格已触及设定的卖出价位。技术指标显示短期可能面临回调压力，建议适时获利了结，注意控制风险。"
+            ai_summary = f"根据技术分析，{name}当前价格已触及设定的参考高位（技术阻力位）。这仅是价格到达技术参考位置的通知，不构成任何卖出建议，请自行判断。"
     
     # 优先使用微信公众号推送
     if user_openid and WECHAT_APP_SECRET:
-        # 标题
-        title = f"{action_emoji} {action}提醒"
+        # 标题 - 使用中性术语
+        action_display = "触及参考低位" if alert_type == "buy" else "触及参考高位"
+        title = f"📊 价格提醒"
         
         # 构建完整的消息内容
-        content = f"""{action}提醒
+        content = f"""价格变动提醒
 触发时间：{trigger_time}
 股票代码：{symbol}
 名称：{name}
 当前价格：¥{current_price:.3f}
 
-已经触发AI分析的{action}价格 ¥{target_price:.3f}，请尽快{action}。{ai_price_info}
+当前价格已{action_display} ¥{target_price:.3f}。{ai_price_info}
 
-AI分析{action}原因：
-{ai_summary}"""
+技术分析参考：
+{ai_summary}
+
+⚠️ 重要声明：本提醒仅为价格到达技术分析参考位置的通知，不构成任何投资建议。任何投资决策请自行判断并承担风险。"""
         
         # 自动检测前端 URL
         frontend_url = os.environ.get("FRONTEND_URL", "").strip()

@@ -1296,11 +1296,11 @@ def analyze_trend(indicators_json: str) -> str:
             if sar_signal == "buy":
                 score += 8
                 bullish_signals += 1
-                signal_details.append("SAR发出买入信号（趋势反转向上）")
+                signal_details.append("SAR指标看多（趋势反转向上）")
             elif sar_signal == "sell":
                 score -= 8
                 bearish_signals += 1
-                signal_details.append("SAR发出卖出信号（趋势反转向下）")
+                signal_details.append("SAR指标看空（趋势反转向下）")
             elif sar_status == "bullish":
                 score += 2
                 signal_details.append("SAR显示上升趋势")

@@ -413,8 +413,8 @@ export default function UserDetailPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-slate-400">持仓</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-slate-400">成本价</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">周期</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-emerald-400">建议买入</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-rose-400">建议卖出</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-emerald-400">参考低位</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-rose-400">参考高位</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.06]">

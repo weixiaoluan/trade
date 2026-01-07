@@ -197,13 +197,13 @@ def migrate_database():
             print("迁移: 添加 starred 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN starred INTEGER DEFAULT 0")
         
-        # 检查 watchlist 表是否有 AI 建议价格字段
+        # 检查 watchlist 表是否有技术分析参考价位字段（仅供学习研究参考，不构成投资建议）
         if 'ai_buy_price' not in watchlist_columns:
-            print("迁移: 添加 ai_buy_price 字段到 watchlist 表")
+            print("迁移: 添加 ai_buy_price 字段到 watchlist 表（技术分析参考低位）")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_buy_price REAL")
         
         if 'ai_sell_price' not in watchlist_columns:
-            print("迁移: 添加 ai_sell_price 字段到 watchlist 表")
+            print("迁移: 添加 ai_sell_price 字段到 watchlist 表（技术分析参考高位）")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_sell_price REAL")
         
         if 'ai_price_updated_at' not in watchlist_columns:
@@ -219,21 +219,21 @@ def migrate_database():
             print("迁移: 添加 holding_period 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN holding_period TEXT DEFAULT 'swing'")
         
-        # 检查 watchlist 表是否有 AI 建议数量字段
+        # 检查 watchlist 表是否有参考数量字段（仅供学习研究参考）
         if 'ai_buy_quantity' not in watchlist_columns:
-            print("迁移: 添加 ai_buy_quantity 字段到 watchlist 表")
+            print("迁移: 添加 ai_buy_quantity 字段到 watchlist 表（参考数量）")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_buy_quantity INTEGER")
         
         if 'ai_sell_quantity' not in watchlist_columns:
-            print("迁移: 添加 ai_sell_quantity 字段到 watchlist 表")
+            print("迁移: 添加 ai_sell_quantity 字段到 watchlist 表（参考数量）")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_sell_quantity INTEGER")
         
-        # 检查 watchlist 表是否有 AI 建议字段（买入/卖出/持有等）
+        # 检查 watchlist 表是否有技术面评级字段（强势/偏强/中性/偏弱/弱势）
         if 'ai_recommendation' not in watchlist_columns:
-            print("迁移: 添加 ai_recommendation 字段到 watchlist 表")
+            print("迁移: 添加 ai_recommendation 字段到 watchlist 表（技术面评级）")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_recommendation TEXT")
         
-        # 检查 watchlist 表是否有 from_ai_pick 字段（标记是否来自 AI 优选）
+        # 检查 watchlist 表是否有 from_ai_pick 字段（标记是否来自研究列表）
         if 'from_ai_pick' not in watchlist_columns:
             print("迁移: 添加 from_ai_pick 字段到 watchlist 表")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN from_ai_pick INTEGER DEFAULT 0")
@@ -251,7 +251,7 @@ def migrate_database():
             print("迁移: 添加 wechat_openid 字段到 users 表")
             cursor.execute("ALTER TABLE users ADD COLUMN wechat_openid TEXT")
         
-        # 检查 users 表是否有 can_view_ai_picks 字段 (AI优选查看权限)
+        # 检查 users 表是否有 can_view_ai_picks 字段 (研究列表查看权限)
         if 'can_view_ai_picks' not in user_columns:
             print("迁移: 添加 can_view_ai_picks 字段到 users 表")
             cursor.execute("ALTER TABLE users ADD COLUMN can_view_ai_picks INTEGER DEFAULT 0")
@@ -524,7 +524,13 @@ def db_update_watchlist_ai_prices(username: str, symbol: str,
                                    ai_buy_quantity: int = None,
                                    ai_sell_quantity: int = None,
                                    ai_recommendation: str = None) -> bool:
-    """更新自选项的AI建议买入/卖出价格、数量和建议"""
+    """更新自选项的技术分析参考价位（参考低位/参考高位）和技术面评级
+    
+    注意：这些数据仅供个人学习研究参考，不构成任何投资建议。
+    - ai_buy_price: 技术分析参考低位（支撑位）
+    - ai_sell_price: 技术分析参考高位（阻力位）
+    - ai_recommendation: 技术面评级（强势/偏强/中性/偏弱/弱势）
+    """
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -537,11 +543,14 @@ def db_update_watchlist_ai_prices(username: str, symbol: str,
         ''', (ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity, 
               ai_recommendation, datetime.now().isoformat(), username, symbol))
         return cursor.rowcount > 0
-        return cursor.rowcount > 0
 
 
 def db_get_all_watchlist_with_ai_prices() -> List[Dict]:
-    """获取所有设置了AI建议价格的自选项（用于价格监控）"""
+    """获取所有设置了技术分析参考价位的自选项（用于价格变动提醒）
+    
+    注意：价格提醒仅用于通知用户价格已到达技术分析的参考位置，
+    不构成任何买入或卖出建议。用户应自行判断是否进行任何操作。
+    """
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
