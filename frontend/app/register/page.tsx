@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Bot, Check } from "lucide-react";
+import { Bot, Check, X } from "lucide-react";
 
 import { API_BASE } from "@/lib/config";
 
@@ -18,6 +18,8 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTermsAlert, setShowTermsAlert] = useState(false);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -64,6 +66,12 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 检查是否勾选用户协议
+    if (!agreedToTerms) {
+      setShowTermsAlert(true);
+      return;
+    }
 
     if (!validateForm()) {
       return;
@@ -131,6 +139,40 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 relative overflow-hidden">
+      {/* 用户协议弹窗 */}
+      {showTermsAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">提示</h3>
+              <button 
+                onClick={() => setShowTermsAlert(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-slate-300 mb-6">
+              请先阅读并勾选同意《用户协议与免责声明》后再注册。
+            </p>
+            <div className="flex gap-3">
+              <Link
+                href="/disclaimer"
+                className="flex-1 py-2.5 text-center bg-white/5 border border-white/10 text-slate-300 rounded-xl hover:bg-white/10 transition-colors"
+              >
+                查看协议
+              </Link>
+              <button
+                onClick={() => setShowTermsAlert(false)}
+                className="flex-1 py-2.5 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors"
+              >
+                我知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Background Gradient Mesh - 与主页一致 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 -left-1/4 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[120px]" />
@@ -163,11 +205,23 @@ export default function RegisterPage() {
             注册账号
           </h2>
           
-          {/* 免责声明 */}
+          {/* 用户协议勾选 */}
           <div className="mb-6 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-            <p className="text-amber-300/90 text-xs leading-relaxed">
-              ⚠️ 本工具仅供个人学习研究使用，所有数据分析结果不构成任何投资建议。注册即表示您已阅读并同意此声明。
-            </p>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-amber-500/50 bg-transparent text-indigo-500 focus:ring-indigo-500/50 cursor-pointer"
+              />
+              <span className="text-amber-300/90 text-xs leading-relaxed">
+                我已阅读并同意
+                <Link href="/disclaimer" className="underline hover:text-amber-200 mx-1 font-medium">
+                  《用户协议与免责声明》
+                </Link>
+                ，了解本工具仅供个人学习研究，不构成投资建议。
+              </span>
+            </label>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

@@ -3383,10 +3383,17 @@ async def generate_ai_report(
 请生成**{holding_period_cn}**专业分析报告，包含以下章节：
 
 ## 一、标的概况
-用Markdown表格展示核心指标
+用Markdown表格展示核心指标（当前价格、日涨跌幅、52周区间、市值规模、综合趋势、趋势强度、市场状态）
 
-### 多周期表现
-展示5日/10日/20日/60日/120日/250日区间涨跌幅表格
+紧接着展示多周期表现（区间涨跌）：
+| 周期 | 涨跌幅 |
+|------|--------|
+| 5日 | +X.XX% |
+| 10日 | +X.XX% |
+| 20日 | +X.XX% |
+| 60日 | +X.XX% |
+| 120日 | +X.XX% |
+| 250日 | +X.XX% |
 
 ## 二、AI深度研判
 ### 2.1 消息面与情绪分析
@@ -3654,7 +3661,7 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
 
     - 避免 LLM 生成一整行 "| 周期 | 日涨跌幅 ..." 的异常表格
     - 使用后端的真实收益率数据构建标准 Markdown 表格
-    - 将多周期表现放在"一、标的概况"之后，"二、AI深度研判"之前
+    - 将多周期表现紧跟在"一、标的概况"表格之后
     """
     try:
         import re
@@ -3671,9 +3678,9 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
             return "N/A"
 
         table_lines = [
-            "### 多周期表现",
+            "**多周期表现**",
             "",
-            "**区间涨跌**:",
+            "区间涨跌:",
             "",
             "| 周期 | 涨跌幅 |",
             "|------|--------|",
@@ -3688,9 +3695,8 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
         new_block = "\n".join(table_lines)
 
         # 删除所有"多周期表现"相关内容（可能有多种格式）
-        # 匹配 ### 多周期表现 或 **多周期表现** 或 多周期表现 开头的段落
         patterns_to_remove = [
-            r"#{1,3}\s*多周期表现[\s\S]*?(?=\n## |\n### |\n\*\*[^多]|\Z)",  # ### 多周期表现
+            r"#{1,3}\s*多周期表现[\s\S]*?(?=\n## |\n### |\n\*\*[^多区]|\Z)",  # ### 多周期表现
             r"\*\*多周期表现\*\*[\s\S]*?(?=\n## |\n### |\n\*\*[^区]|\Z)",  # **多周期表现**
             r"多周期表现\s*\n+\s*区间涨跌[\s\S]*?(?=\n## |\n### |\Z)",  # 多周期表现 区间涨跌
         ]
