@@ -3711,7 +3711,7 @@ def normalize_report_timestamp(report_text: str, completed_at: datetime) -> str:
 def normalize_multi_period_section(report_text: str, period_returns: dict) -> str:
     """根据 period_returns 重写报告中的"多周期表现/区间涨跌"小节。
 
-    - 彻底删除所有AI生成的多周期表现内容（避免重复）
+    - 删除AI生成的多周期表现内容（避免重复）
     - 使用后端的真实收益率数据构建标准 Markdown 表格
     - 将多周期表现紧跟在"一、标的概况"之后，"二、AI深度研判"之前
     """
@@ -3747,45 +3747,42 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
         ]
         new_block = "\n".join(table_lines)
 
-        # 彻底删除所有"多周期表现"相关内容（包括各种格式）
+        # 更精确地删除多周期表现相关内容
+        # 只删除明确的多周期表现表格，不影响其他内容
         patterns_to_remove = [
-            # 匹配 ### 多周期表现 及其后续内容直到下一个章节
-            r"#{1,3}\s*多周期表现[\s\S]*?(?=\n## |\n---|\Z)",
-            # 匹配 **多周期表现** 及其后续内容
-            r"\*\*多周期表现\*\*[\s\S]*?(?=\n## |\n---|\n\*\*报告生成时间|\Z)",
-            # 匹配 多周期表现（区间涨跌）格式
-            r"多周期表现\s*[（\(]?区间涨跌[）\)]?\s*[:：]?[\s\S]*?(?=\n## |\n---|\n\*\*报告生成时间|\Z)",
-            # 匹配纯文本格式的多周期表现
-            r"多周期表现\s*\n+区间涨跌[\s\S]*?(?=\n## |\n---|\n\*\*报告生成时间|\Z)",
-            # 匹配格式错乱的表格（| 周期 | 日涨跌幅 | 开头的）
-            r"\|\s*周期\s*\|\s*日?涨跌幅[\s\S]*?(?=\n## |\n---|\n\*\*[^|]|\n[^|]|\Z)",
-            # 匹配单独的涨跌幅表格行
-            r"(?:\|\s*\d+日\s*\|\s*[+\-]?\d+\.?\d*%?\s*\|\s*\n)+",
+            # 匹配 **多周期表现** 开头的完整表格块（到下一个空行或章节）
+            r"\*\*多周期表现\*\*\s*\n+区间涨跌[:：]?\s*\n+\|\s*周期\s*\|\s*涨跌幅\s*\|\s*\n\|[-:]+\|[-:]+\|\s*\n(?:\|\s*\d+日\s*\|[^|]*\|\s*\n)+",
+            # 匹配 ### 多周期表现 格式
+            r"#{1,3}\s*多周期表现\s*\n+区间涨跌[:：]?\s*\n+\|\s*周期\s*\|\s*涨跌幅\s*\|\s*\n\|[-:]+\|[-:]+\|\s*\n(?:\|\s*\d+日\s*\|[^|]*\|\s*\n)+",
+            # 匹配独立的多周期涨跌幅表格（在报告末尾）
+            r"\n多周期表现\s*区间涨跌[:：]?\s*\n+\|\s*周期\s*\|\s*涨跌幅\s*\|\s*\n\|[-:]+\|[-:]+\|\s*\n(?:\|\s*\d+日\s*\|[^|]*\|\s*\n)+",
         ]
         
         for pattern in patterns_to_remove:
-            report_text = re.sub(pattern, "", report_text, flags=re.MULTILINE)
+            report_text = re.sub(pattern, "\n", report_text, flags=re.MULTILINE)
         
-        # 清理可能残留的空行和分隔符
-        report_text = re.sub(r'\n{3,}', '\n\n', report_text)
-        report_text = re.sub(r'\|[-:]+\|[-:]+\|\s*\n', '', report_text)  # 清理残留的表格分隔行
+        # 清理可能残留的多余空行
+        report_text = re.sub(r'\n{4,}', '\n\n\n', report_text)
+        
+        # 检查是否已经有多周期表现表格（避免重复插入）
+        if re.search(r'\*\*多周期表现\*\*', report_text):
+            return report_text
         
         # 将多周期表现插入到"## 二、AI深度研判"之前
         pattern_insert = r"(## 二、AI深度研判)"
         if re.search(pattern_insert, report_text):
             report_text = re.sub(pattern_insert, new_block + "\n" + r"\1", report_text)
         else:
-            # 如果找不到"二、AI深度研判"，尝试在"一、标的概况"后面插入
-            pattern_after_overview = r"(## 一、标的概况[\s\S]*?)(\n## )"
-            if re.search(pattern_after_overview, report_text):
-                report_text = re.sub(pattern_after_overview, r"\1\n\n" + new_block + r"\2", report_text)
+            # 如果找不到"二、AI深度研判"，尝试在"一、标的概况"的表格后面插入
+            # 查找标的概况表格的结束位置
+            pattern_after_table = r"(\|\s*市场状态\s*\|[^\n]*\n)"
+            if re.search(pattern_after_table, report_text):
+                report_text = re.sub(pattern_after_table, r"\1\n" + new_block + "\n", report_text)
             else:
-                # 最后的备选：在报告生成时间之前插入
-                pattern_before_footer = r"(\n---\s*\n\*\*报告生成时间)"
-                if re.search(pattern_before_footer, report_text):
-                    report_text = re.sub(pattern_before_footer, "\n\n" + new_block + r"\1", report_text)
-                else:
-                    report_text = report_text.rstrip() + "\n\n" + new_block
+                # 尝试在任何 ## 二 之前插入
+                pattern_before_section2 = r"(\n## 二)"
+                if re.search(pattern_before_section2, report_text):
+                    report_text = re.sub(pattern_before_section2, "\n\n" + new_block + r"\1", report_text)
 
         return report_text
     except Exception:
