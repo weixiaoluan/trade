@@ -1083,7 +1083,7 @@ export default function DashboardPage() {
           aVal = a.position || 0;
           bVal = b.position || 0;
         } else if (sortField === "ai_buy_price") {
-          // 参考低位排序：按与当前价的差距排序
+          // 支撑位排序：按与当前价的差距排序
           const aPrice = aQuote?.current_price || 0;
           const bPrice = bQuote?.current_price || 0;
           const aBuyPrice = a.ai_buy_price || 0;
@@ -1092,7 +1092,7 @@ export default function DashboardPage() {
           aVal = aBuyPrice > 0 && aPrice > 0 ? Math.abs(aPrice - aBuyPrice) : Infinity;
           bVal = bBuyPrice > 0 && bPrice > 0 ? Math.abs(bPrice - bBuyPrice) : Infinity;
         } else if (sortField === "ai_sell_price") {
-          // 参考高位排序：按与当前价的差距排序
+          // 阻力位排序：按与当前价的差距排序
           const aPrice = aQuote?.current_price || 0;
           const bPrice = bQuote?.current_price || 0;
           const aSellPrice = a.ai_sell_price || 0;
@@ -2231,10 +2231,10 @@ export default function DashboardPage() {
               <option value="default" className="bg-slate-800">默认排序</option>
               <option value="change_percent:desc" className="bg-slate-800">涨跌幅↓</option>
               <option value="change_percent:asc" className="bg-slate-800">涨跌幅↑</option>
-              <option value="ai_buy_price:asc" className="bg-slate-800">参考低位(近→远)</option>
-              <option value="ai_buy_price:desc" className="bg-slate-800">参考低位(远→近)</option>
-              <option value="ai_sell_price:asc" className="bg-slate-800">参考高位(近→远)</option>
-              <option value="ai_sell_price:desc" className="bg-slate-800">参考高位(远→近)</option>
+              <option value="ai_buy_price:asc" className="bg-slate-800">支撑位(近→远)</option>
+              <option value="ai_buy_price:desc" className="bg-slate-800">支撑位(远→近)</option>
+              <option value="ai_sell_price:asc" className="bg-slate-800">阻力位(近→远)</option>
+              <option value="ai_sell_price:desc" className="bg-slate-800">阻力位(远→近)</option>
               <option value="report_time:desc" className="bg-slate-800">报告时间(新→旧)</option>
               <option value="report_time:asc" className="bg-slate-800">报告时间(旧→新)</option>
             </select>
@@ -2337,7 +2337,7 @@ export default function DashboardPage() {
                 onClick={() => handleSort("ai_buy_price")}
                 title="按与当前价的差距排序"
               >
-                参考低位
+                支撑位
                 {sortField === "ai_buy_price" ? (
                   sortOrder === "asc" ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
                 ) : (
@@ -2349,7 +2349,7 @@ export default function DashboardPage() {
                 onClick={() => handleSort("ai_sell_price")}
                 title="按与当前价的差距排序"
               >
-                参考高位
+                阻力位
                 {sortField === "ai_sell_price" ? (
                   sortOrder === "asc" ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
                 ) : (
@@ -2529,7 +2529,7 @@ export default function DashboardPage() {
                               )}
                             </div>
                             <div className="min-w-[90px]">
-                              <div className="text-[10px] text-emerald-400/70 mb-0.5">参考低位</div>
+                              <div className="text-[10px] text-emerald-400/70 mb-0.5">支撑位</div>
                               <div className="flex flex-col">
                                 <span className="font-mono text-sm font-semibold text-emerald-400">
                                   {item.ai_buy_price ? `${getCurrencySymbol(item.symbol)}${item.ai_buy_price.toFixed(3)}` : "-"}
@@ -2540,7 +2540,7 @@ export default function DashboardPage() {
                               </div>
                             </div>
                             <div className="min-w-[90px]">
-                              <div className="text-[10px] text-rose-400/70 mb-0.5">参考高位</div>
+                              <div className="text-[10px] text-rose-400/70 mb-0.5">阻力位</div>
                               <div className="flex flex-col">
                                 <span className="font-mono text-sm font-semibold text-rose-400">
                                   {item.ai_sell_price ? `${getCurrencySymbol(item.symbol)}${item.ai_sell_price.toFixed(3)}` : "-"}
@@ -2745,7 +2745,7 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      {/* 参考低位（支撑位） */}
+                      {/* 支撑位 */}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
                           <span className="font-mono text-base font-semibold text-emerald-400">
@@ -2757,7 +2757,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* 参考高位（阻力位） */}
+                      {/* 阻力位 */}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
                           <span className="font-mono text-base font-semibold text-rose-400">
@@ -3655,13 +3655,13 @@ export default function DashboardPage() {
                           <span className="text-slate-400">当前价: <span className="text-white">{getCurrencySymbol(log.symbol)}{log.current_price.toFixed(3)}</span></span>
                         )}
                         {log.buy_price && (
-                          <span className="text-emerald-400/70">参考低位: {getCurrencySymbol(log.symbol)}{log.buy_price.toFixed(3)}</span>
+                          <span className="text-emerald-400/70">支撑位: {getCurrencySymbol(log.symbol)}{log.buy_price.toFixed(3)}</span>
                         )}
                         {log.buy_quantity && (
                           <span className="text-emerald-400/70">参考量: {log.buy_quantity}股</span>
                         )}
                         {log.sell_price && (
-                          <span className="text-rose-400/70">参考高位: {getCurrencySymbol(log.symbol)}{log.sell_price.toFixed(3)}</span>
+                          <span className="text-rose-400/70">阻力位: {getCurrencySymbol(log.symbol)}{log.sell_price.toFixed(3)}</span>
                         )}
                         {log.sell_quantity && (
                           <span className="text-rose-400/70">参考量: {log.sell_quantity}股</span>

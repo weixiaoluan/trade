@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { 
-  Bot, Shield, Users, Check, X, ArrowLeft, 
-  Crown, Clock, UserCheck, UserX, Eye, Trash2, Loader2
+  Shield, Users, Check, X, ArrowLeft, 
+  Crown, Clock, UserCheck, UserX, Eye, Trash2, Loader2, UserPlus
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -30,6 +30,17 @@ export default function AdminPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteUsername, setDeleteUsername] = useState<string>("");
   const [deleting, setDeleting] = useState(false);
+  
+  // 新增用户弹窗
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [addUserForm, setAddUserForm] = useState({
+    username: "",
+    password: "",
+    confirm_password: "",
+    phone: "",
+  });
+  const [addUserErrors, setAddUserErrors] = useState<Record<string, string>>({});
+  const [addingUser, setAddingUser] = useState(false);
 
   const getToken = () => {
     if (typeof window !== "undefined") {
@@ -160,6 +171,75 @@ export default function AdminPage() {
     setShowDeleteConfirm(true);
   };
 
+  // 验证新增用户表单
+  const validateAddUserForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    // 验证用户名：必须是中文或英文，2-20位
+    const usernameRegex = /^[\u4e00-\u9fa5a-zA-Z]{2,20}$/;
+    if (!usernameRegex.test(addUserForm.username)) {
+      newErrors.username = "用户名必须为2-20位中文或英文字母";
+    }
+
+    // 验证密码长度
+    if (addUserForm.password.length < 6 || addUserForm.password.length > 20) {
+      newErrors.password = "密码长度必须为6-20位";
+    }
+
+    // 验证确认密码
+    if (addUserForm.password !== addUserForm.confirm_password) {
+      newErrors.confirm_password = "两次输入的密码不一致";
+    }
+
+    // 验证手机号
+    const phoneRegex = /^1[3-9]\d{9}$/;
+    if (!phoneRegex.test(addUserForm.phone)) {
+      newErrors.phone = "请输入有效的手机号码";
+    }
+
+    setAddUserErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // 新增用户
+  const handleAddUser = async () => {
+    if (!validateAddUserForm()) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    setAddingUser(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/users/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          username: addUserForm.username,
+          password: addUserForm.password,
+          phone: addUserForm.phone,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setShowAddUserModal(false);
+        setAddUserForm({ username: "", password: "", confirm_password: "", phone: "" });
+        setAddUserErrors({});
+        fetchUsers();
+      } else {
+        setAddUserErrors({ submit: data.detail || "创建用户失败" });
+      }
+    } catch (error) {
+      setAddUserErrors({ submit: "创建用户失败，请重试" });
+    } finally {
+      setAddingUser(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "approved":
@@ -248,6 +328,13 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
+          <button
+            onClick={() => setShowAddUserModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl hover:from-indigo-600 hover:to-violet-700 transition-all"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span className="hidden sm:inline">新增用户</span>
+          </button>
         </div>
       </header>
 
@@ -430,6 +517,142 @@ export default function AdminPage() {
                 >
                   {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   确认注销
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 新增用户弹窗 */}
+      <AnimatePresence>
+        {showAddUserModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setShowAddUserModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                  <UserPlus className="w-5 h-5 text-indigo-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">新增用户</h3>
+              </div>
+
+              <div className="space-y-4">
+                {/* 用户名 */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    用户名 <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={addUserForm.username}
+                    onChange={(e) => setAddUserForm({ ...addUserForm, username: e.target.value })}
+                    placeholder="请输入中文或英文用户名"
+                    className={`w-full px-4 py-3 bg-white/[0.03] border rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all ${
+                      addUserErrors.username ? "border-rose-500/50" : "border-white/[0.08]"
+                    }`}
+                  />
+                  {addUserErrors.username && (
+                    <p className="text-rose-400 text-sm mt-1">{addUserErrors.username}</p>
+                  )}
+                  <p className="text-slate-600 text-xs mt-1">2-20位中文或英文字母</p>
+                </div>
+
+                {/* 密码 */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    密码 <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={addUserForm.password}
+                    onChange={(e) => setAddUserForm({ ...addUserForm, password: e.target.value })}
+                    placeholder="请输入密码"
+                    className={`w-full px-4 py-3 bg-white/[0.03] border rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all ${
+                      addUserErrors.password ? "border-rose-500/50" : "border-white/[0.08]"
+                    }`}
+                  />
+                  {addUserErrors.password && (
+                    <p className="text-rose-400 text-sm mt-1">{addUserErrors.password}</p>
+                  )}
+                  <p className="text-slate-600 text-xs mt-1">6-20位字符</p>
+                </div>
+
+                {/* 确认密码 */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    确认密码 <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={addUserForm.confirm_password}
+                    onChange={(e) => setAddUserForm({ ...addUserForm, confirm_password: e.target.value })}
+                    placeholder="请再次输入密码"
+                    className={`w-full px-4 py-3 bg-white/[0.03] border rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all ${
+                      addUserErrors.confirm_password ? "border-rose-500/50" : "border-white/[0.08]"
+                    }`}
+                  />
+                  {addUserErrors.confirm_password && (
+                    <p className="text-rose-400 text-sm mt-1">{addUserErrors.confirm_password}</p>
+                  )}
+                </div>
+
+                {/* 手机号 */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    手机号 <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={addUserForm.phone}
+                    onChange={(e) => setAddUserForm({ ...addUserForm, phone: e.target.value })}
+                    placeholder="请输入手机号"
+                    className={`w-full px-4 py-3 bg-white/[0.03] border rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all ${
+                      addUserErrors.phone ? "border-rose-500/50" : "border-white/[0.08]"
+                    }`}
+                  />
+                  {addUserErrors.phone && (
+                    <p className="text-rose-400 text-sm mt-1">{addUserErrors.phone}</p>
+                  )}
+                </div>
+
+                {/* 提交错误 */}
+                {addUserErrors.submit && (
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl">
+                    <p className="text-rose-400 text-sm text-center">{addUserErrors.submit}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowAddUserModal(false);
+                    setAddUserForm({ username: "", password: "", confirm_password: "", phone: "" });
+                    setAddUserErrors({});
+                  }}
+                  className="flex-1 py-2.5 bg-white/[0.05] text-slate-300 rounded-xl hover:bg-white/[0.08] transition-all"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleAddUser}
+                  disabled={addingUser}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 hover:from-indigo-600 hover:to-violet-700 transition-all"
+                >
+                  {addingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                  创建用户
                 </button>
               </div>
             </motion.div>

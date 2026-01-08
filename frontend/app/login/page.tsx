@@ -215,19 +215,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* Register Link */}
-          <div className="mt-6 text-center">
-            <p className="text-slate-500">
-              还没有账号？{" "}
-              <Link
-                href="/register"
-                className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
-              >
-                立即注册
-              </Link>
-            </p>
-          </div>
           
           {/* 用户协议勾选 */}
           <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">

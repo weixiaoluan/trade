@@ -92,7 +92,7 @@ function NotifyContent() {
               </div>
               <div>
                 <h1 className={`text-xl font-bold ${isBuy ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  触及{isBuy ? '参考低位' : '参考高位'}
+                  触及{isBuy ? '支撑位' : '阻力位'}
                 </h1>
                 <div className="flex items-center gap-1.5 text-slate-400 text-sm mt-1">
                   <Clock className="w-3.5 h-3.5" />
@@ -129,10 +129,10 @@ function NotifyContent() {
                 <AlertTriangle className={`w-5 h-5 mt-0.5 ${isBuy ? 'text-emerald-400' : 'text-rose-400'}`} />
                 <div>
                   <p className={`font-semibold ${isBuy ? 'text-emerald-300' : 'text-rose-300'}`}>
-                    触及{isBuy ? '参考低位' : '参考高位'}
+                    触及{isBuy ? '支撑位' : '阻力位'}
                   </p>
                   <p className="text-slate-300 mt-1">
-                    当前价格已触及技术分析的{isBuy ? '参考低位（支撑位）' : '参考高位（阻力位）'} 
+                    当前价格已触及技术分析的{isBuy ? '支撑位' : '阻力位'} 
                     <span className={`font-mono font-bold ml-1 ${isBuy ? 'text-emerald-400' : 'text-rose-400'}`}>
                       ¥{extractedTarget}
                     </span>
