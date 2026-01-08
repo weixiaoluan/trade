@@ -3729,14 +3729,13 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
                 return v
             return "N/A"
 
-        # 构建标准的多周期表现表格
+        # 构建标准的多周期表现表格（确保格式正确）
         table_lines = [
-            "**多周期表现**",
             "",
-            "区间涨跌:",
+            "**多周期表现（区间涨跌）：**",
             "",
             "| 周期 | 涨跌幅 |",
-            "|------|--------|",
+            "|:-----|:-------|",
             f"| 5日 | {_fmt('5日')} |",
             f"| 10日 | {_fmt('10日')} |",
             f"| 20日 | {_fmt('20日')} |",
@@ -3747,26 +3746,21 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
         ]
         new_block = "\n".join(table_lines)
 
-        # 更精确地删除多周期表现相关内容
-        # 只删除明确的多周期表现表格，不影响其他内容
+        # 删除所有可能的多周期表现相关内容
         patterns_to_remove = [
-            # 匹配 **多周期表现** 开头的完整表格块（到下一个空行或章节）
-            r"\*\*多周期表现\*\*\s*\n+区间涨跌[:：]?\s*\n+\|\s*周期\s*\|\s*涨跌幅\s*\|\s*\n\|[-:]+\|[-:]+\|\s*\n(?:\|\s*\d+日\s*\|[^|]*\|\s*\n)+",
-            # 匹配 ### 多周期表现 格式
-            r"#{1,3}\s*多周期表现\s*\n+区间涨跌[:：]?\s*\n+\|\s*周期\s*\|\s*涨跌幅\s*\|\s*\n\|[-:]+\|[-:]+\|\s*\n(?:\|\s*\d+日\s*\|[^|]*\|\s*\n)+",
-            # 匹配独立的多周期涨跌幅表格（在报告末尾）
-            r"\n多周期表现\s*区间涨跌[:：]?\s*\n+\|\s*周期\s*\|\s*涨跌幅\s*\|\s*\n\|[-:]+\|[-:]+\|\s*\n(?:\|\s*\d+日\s*\|[^|]*\|\s*\n)+",
+            # 匹配 **多周期表现** 或 多周期表现 开头的内容块
+            r"\*?\*?多周期表现[^#]*?(?=\n## |\n---|\n\*\*报告生成时间|\Z)",
+            # 匹配 区间涨跌 开头的表格
+            r"区间涨跌[:：]?\s*\n+\|[^\n]+\n\|[-:]+[^\n]*\n(?:\|[^\n]+\n)*",
+            # 匹配格式错误的表格（| 周期 | 日涨跌幅 | 开头）
+            r"\|\s*周期\s*\|\s*日?涨跌幅[^\n]*\n\|[-:]+[^\n]*\n(?:\|[^\n]+\n)*",
         ]
         
         for pattern in patterns_to_remove:
-            report_text = re.sub(pattern, "\n", report_text, flags=re.MULTILINE)
+            report_text = re.sub(pattern, "\n", report_text, flags=re.MULTILINE | re.DOTALL)
         
         # 清理可能残留的多余空行
-        report_text = re.sub(r'\n{4,}', '\n\n\n', report_text)
-        
-        # 检查是否已经有多周期表现表格（避免重复插入）
-        if re.search(r'\*\*多周期表现\*\*', report_text):
-            return report_text
+        report_text = re.sub(r'\n{3,}', '\n\n', report_text)
         
         # 将多周期表现插入到"## 二、AI深度研判"之前
         pattern_insert = r"(## 二、AI深度研判)"
@@ -3774,15 +3768,15 @@ def normalize_multi_period_section(report_text: str, period_returns: dict) -> st
             report_text = re.sub(pattern_insert, new_block + "\n" + r"\1", report_text)
         else:
             # 如果找不到"二、AI深度研判"，尝试在"一、标的概况"的表格后面插入
-            # 查找标的概况表格的结束位置
+            # 查找标的概况表格的结束位置（市场状态行之后）
             pattern_after_table = r"(\|\s*市场状态\s*\|[^\n]*\n)"
             if re.search(pattern_after_table, report_text):
-                report_text = re.sub(pattern_after_table, r"\1\n" + new_block + "\n", report_text)
+                report_text = re.sub(pattern_after_table, r"\1" + new_block + "\n", report_text)
             else:
                 # 尝试在任何 ## 二 之前插入
                 pattern_before_section2 = r"(\n## 二)"
                 if re.search(pattern_before_section2, report_text):
-                    report_text = re.sub(pattern_before_section2, "\n\n" + new_block + r"\1", report_text)
+                    report_text = re.sub(pattern_before_section2, new_block + r"\1", report_text)
 
         return report_text
     except Exception:
