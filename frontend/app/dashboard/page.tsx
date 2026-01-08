@@ -216,13 +216,68 @@ export default function DashboardPage() {
     type: "warning" as "warning" | "info" | "success" | "error",
   });
 
-  const [sortField, setSortField] = useState<string | null>(null);
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortField, setSortField] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dashboard_sortField') || null;
+    }
+    return null;
+  });
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dashboard_sortOrder');
+      return (saved === 'asc' || saved === 'desc') ? saved : 'desc';
+    }
+    return 'desc';
+  });
   
   // 搜索状态
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dashboard_searchQuery') || '';
+    }
+    return '';
+  });
   // 周期筛选状态
-  const [periodFilter, setPeriodFilter] = useState<string>("all");
+  const [periodFilter, setPeriodFilter] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dashboard_periodFilter') || 'all';
+    }
+    return 'all';
+  });
+  
+  // 保存筛选状态到 localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (sortField) {
+        localStorage.setItem('dashboard_sortField', sortField);
+      } else {
+        localStorage.removeItem('dashboard_sortField');
+      }
+    }
+  }, [sortField]);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dashboard_sortOrder', sortOrder);
+    }
+  }, [sortOrder]);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (searchQuery) {
+        localStorage.setItem('dashboard_searchQuery', searchQuery);
+      } else {
+        localStorage.removeItem('dashboard_searchQuery');
+      }
+    }
+  }, [searchQuery]);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dashboard_periodFilter', periodFilter);
+    }
+  }, [periodFilter]);
+  
   // 移动端操作菜单
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
 
