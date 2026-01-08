@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Shield, Users, Check, X, ArrowLeft, 
-  Crown, Clock, UserCheck, UserX, Eye, Trash2, Loader2, UserPlus
+  Crown, Clock, UserCheck, UserX, Eye, Trash2, Loader2, UserPlus, Star, RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -17,6 +17,14 @@ interface User {
   role: string;
   status: string;
   created_at: string;
+}
+
+interface AiPick {
+  symbol: string;
+  name: string;
+  type: string;
+  added_by: string;
+  added_at: string;
 }
 
 export default function AdminPage() {
@@ -41,6 +49,10 @@ export default function AdminPage() {
   });
   const [addUserErrors, setAddUserErrors] = useState<Record<string, string>>({});
   const [addingUser, setAddingUser] = useState(false);
+
+  // 研究列表记录
+  const [aiPicks, setAiPicks] = useState<AiPick[]>([]);
+  const [aiPicksLoading, setAiPicksLoading] = useState(false);
 
   const getToken = () => {
     if (typeof window !== "undefined") {
@@ -94,8 +106,50 @@ export default function AdminPage() {
   useEffect(() => {
     if (currentUser) {
       fetchUsers();
+      fetchAiPicks();
     }
   }, [currentUser, fetchUsers]);
+
+  // 获取研究列表记录
+  const fetchAiPicks = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+
+    setAiPicksLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/ai-picks`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAiPicks(data.picks || []);
+      }
+    } catch (error) {
+      console.error("获取研究列表失败:", error);
+    } finally {
+      setAiPicksLoading(false);
+    }
+  }, []);
+
+  // 删除研究列表标的
+  const handleDeleteAiPick = async (symbol: string) => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/ai-picks/${encodeURIComponent(symbol)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        fetchAiPicks();
+      }
+    } catch (error) {
+      console.error("删除研究列表标的失败:", error);
+    }
+  };
 
   // 审核通过
   const handleApprove = async (username: string) => {
@@ -472,6 +526,83 @@ export default function AdminPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* 研究列表记录 */}
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden mt-8">
+          <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Star className="w-5 h-5 text-amber-400" />
+              <h2 className="text-lg font-semibold text-white">研究列表记录</h2>
+              <span className="text-xs text-slate-500">（今日添加）</span>
+            </div>
+            <button
+              onClick={fetchAiPicks}
+              disabled={aiPicksLoading}
+              className="p-2 rounded-lg bg-white/[0.05] text-slate-400 hover:bg-white/[0.08] transition-all disabled:opacity-50"
+              title="刷新"
+            >
+              <RefreshCw className={`w-4 h-4 ${aiPicksLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            {aiPicksLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+              </div>
+            ) : aiPicks.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <Star className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>暂无研究列表记录</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-white/[0.02]">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">代码</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">名称</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">类型</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">添加人</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">添加时间</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.06]">
+                  {aiPicks.map((pick) => (
+                    <tr key={pick.symbol} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-mono font-medium text-white">{pick.symbol}</span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-300">{pick.name || "-"}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          pick.type === 'ETF' ? 'bg-indigo-500/20 text-indigo-400' :
+                          pick.type === '股票' ? 'bg-emerald-500/20 text-emerald-400' :
+                          pick.type === '基金' ? 'bg-violet-500/20 text-violet-400' :
+                          'bg-slate-500/20 text-slate-400'
+                        }`}>
+                          {pick.type || "未知"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-400">{pick.added_by || "-"}</td>
+                      <td className="px-6 py-4 text-sm text-slate-400">
+                        {pick.added_at ? new Date(pick.added_at).toLocaleString("zh-CN", { hour12: false }) : "-"}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => handleDeleteAiPick(pick.symbol)}
+                          className="p-2 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 transition-all"
+                          title="删除"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </main>
