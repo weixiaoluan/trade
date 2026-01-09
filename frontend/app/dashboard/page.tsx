@@ -312,6 +312,7 @@ export default function DashboardPage() {
   }, []);
 
   // 计算价格与当前价的差异（支撑位/阻力位/风险位）
+  // 正数用红色，负数用绿色，触达用黄色
   const getPriceDiff = useCallback((currentPrice: number | undefined, targetPrice: number | undefined, type: 'support' | 'resistance' | 'risk') => {
     if (!currentPrice || !targetPrice || currentPrice <= 0 || targetPrice <= 0) {
       return null;
@@ -320,34 +321,51 @@ export default function DashboardPage() {
     const diff = currentPrice - targetPrice;
     const diffPercent = (diff / targetPrice) * 100;
     
-    if (type === 'support') {
-      // 支撑位：当前价 > 支撑位 显示"差值"，当前价 < 支撑位 显示"跌破"，相等显示"触达"
-      if (Math.abs(diffPercent) < 0.1) {
-        return { status: 'touch', text: '触达', color: 'text-amber-400' };
-      } else if (diff > 0) {
-        return { status: 'above', text: `差:${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, color: 'text-emerald-400/70' };
-      } else {
-        return { status: 'below', text: `破:${Math.abs(diff).toFixed(3)}/${Math.abs(diffPercent).toFixed(1)}%`, color: 'text-rose-400' };
-      }
-    } else if (type === 'resistance') {
-      // 阻力位：当前价 < 阻力位 显示"差值"，当前价 > 阻力位 显示"突破"，相等显示"触达"
-      if (Math.abs(diffPercent) < 0.1) {
-        return { status: 'touch', text: '触达', color: 'text-amber-400' };
-      } else if (diff < 0) {
-        return { status: 'below', text: `差:${Math.abs(diff).toFixed(3)}/${Math.abs(diffPercent).toFixed(1)}%`, color: 'text-rose-400/70' };
-      } else {
-        return { status: 'above', text: `破:${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, color: 'text-emerald-400' };
-      }
-    } else {
-      // 风险位：当前价 > 风险位 显示"差值"，当前价 < 风险位 显示"跌破"，相等显示"触达"
-      if (Math.abs(diffPercent) < 0.1) {
-        return { status: 'touch', text: '触达', color: 'text-amber-400' };
-      } else if (diff > 0) {
-        return { status: 'above', text: `差:${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, color: 'text-orange-400/70' };
-      } else {
-        return { status: 'below', text: `破:${Math.abs(diff).toFixed(3)}/${Math.abs(diffPercent).toFixed(1)}%`, color: 'text-rose-500' };
-      }
+    // 触达判断（差异小于0.1%）
+    if (Math.abs(diffPercent) < 0.1) {
+      return { status: 'touch', text: '触达', color: 'text-amber-400 font-medium' };
     }
+    
+    // 统一格式：正数红色，负数绿色
+    if (diff > 0) {
+      return { 
+        status: 'positive', 
+        text: `+${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, 
+        color: 'text-rose-400' 
+      };
+    } else {
+      return { 
+        status: 'negative', 
+        text: `${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, 
+        color: 'text-emerald-400' 
+      };
+    }
+  }, []);
+
+  // 获取技术评级的颜色样式（强势红色深浅，弱势绿色深浅）
+  const getRatingStyle = useCallback((rating: string | undefined) => {
+    if (!rating) return 'bg-slate-500/15 text-slate-400';
+    
+    // 强势系列 - 红色（越强越深）
+    if (rating.includes('强势')) {
+      return 'bg-rose-500/25 text-rose-400 font-semibold';
+    }
+    if (rating.includes('偏强')) {
+      return 'bg-rose-500/15 text-rose-400/90';
+    }
+    // 弱势系列 - 绿色（越弱越深）
+    if (rating.includes('弱势')) {
+      return 'bg-emerald-500/25 text-emerald-400 font-semibold';
+    }
+    if (rating.includes('偏弱')) {
+      return 'bg-emerald-500/15 text-emerald-400/90';
+    }
+    // 中性 - 灰色
+    if (rating.includes('中性') || rating.includes('震荡')) {
+      return 'bg-slate-500/20 text-slate-300';
+    }
+    
+    return 'bg-slate-500/15 text-slate-400';
   }, []);
 
   const [pendingAnalysisSymbols, setPendingAnalysisSymbols] = useState<string[]>([]);
@@ -2247,11 +2265,7 @@ export default function DashboardPage() {
                             <div className="min-w-[70px]">
                               <div className="text-[10px] text-indigo-400/70 mb-0.5">技术评级</div>
                               {item.ai_recommendation ? (
-                                <span className={`px-1.5 py-0.5 text-xs rounded ${
-                                  item.ai_recommendation.includes('强势') || item.ai_recommendation.includes('偏强') ? 'bg-emerald-500/10 text-emerald-400' :
-                                  item.ai_recommendation.includes('弱势') || item.ai_recommendation.includes('偏弱') ? 'bg-rose-500/10 text-rose-400' :
-                                  'bg-slate-500/10 text-slate-400'
-                                }`}>
+                                <span className={`px-1.5 py-0.5 text-xs rounded ${getRatingStyle(item.ai_recommendation)}`}>
                                   {item.ai_recommendation}
                                 </span>
                               ) : (
@@ -2267,7 +2281,7 @@ export default function DashboardPage() {
                                     return prices.support ? `${getCurrencySymbol(item.symbol)}${prices.support.toFixed(3)}` : "-";
                                   })()}
                                 </span>
-                                <span className="font-mono text-[10px]">
+                                <span className="font-mono text-xs">
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     const diff = getPriceDiff(quote?.current_price, prices.support, 'support');
@@ -2285,7 +2299,7 @@ export default function DashboardPage() {
                                     return prices.resistance ? `${getCurrencySymbol(item.symbol)}${prices.resistance.toFixed(3)}` : "-";
                                   })()}
                                 </span>
-                                <span className="font-mono text-[10px]">
+                                <span className="font-mono text-xs">
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     const diff = getPriceDiff(quote?.current_price, prices.resistance, 'resistance');
@@ -2303,7 +2317,7 @@ export default function DashboardPage() {
                                     return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
                                   })()}
                                 </span>
-                                <span className="font-mono text-[10px]">
+                                <span className="font-mono text-xs">
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     const diff = getPriceDiff(quote?.current_price, prices.risk, 'risk');
@@ -2484,11 +2498,7 @@ export default function DashboardPage() {
                       {/* 技术评级 */}
                       <div className="w-20 flex-shrink-0">
                         {item.ai_recommendation ? (
-                          <span className={`px-2.5 py-1 text-sm font-medium rounded-md whitespace-nowrap ${
-                            item.ai_recommendation.includes('强势') || item.ai_recommendation.includes('偏强') ? 'bg-emerald-500/15 text-emerald-400' :
-                            item.ai_recommendation.includes('弱势') || item.ai_recommendation.includes('偏弱') ? 'bg-rose-500/15 text-rose-400' :
-                            'bg-slate-500/15 text-slate-300'
-                          }`}>
+                          <span className={`px-2.5 py-1 text-sm font-medium rounded-md whitespace-nowrap ${getRatingStyle(item.ai_recommendation)}`}>
                             {item.ai_recommendation}
                           </span>
                         ) : (
@@ -2505,7 +2515,7 @@ export default function DashboardPage() {
                               return prices.support ? `${getCurrencySymbol(item.symbol)}${prices.support.toFixed(3)}` : "-";
                             })()}
                           </span>
-                          <span className="font-mono text-xs">
+                          <span className="font-mono text-sm">
                             {(() => {
                               const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                               const diff = getPriceDiff(quote?.current_price, prices.support, 'support');
@@ -2524,7 +2534,7 @@ export default function DashboardPage() {
                               return prices.resistance ? `${getCurrencySymbol(item.symbol)}${prices.resistance.toFixed(3)}` : "-";
                             })()}
                           </span>
-                          <span className="font-mono text-xs">
+                          <span className="font-mono text-sm">
                             {(() => {
                               const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                               const diff = getPriceDiff(quote?.current_price, prices.resistance, 'resistance');
@@ -2543,7 +2553,7 @@ export default function DashboardPage() {
                               return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
                             })()}
                           </span>
-                          <span className="font-mono text-xs">
+                          <span className="font-mono text-sm">
                             {(() => {
                               const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                               const diff = getPriceDiff(quote?.current_price, prices.risk, 'risk');
