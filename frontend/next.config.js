@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 启用 standalone 输出模式（优化 Docker 构建）
+  output: 'standalone',
+  
   // 启用生产优化
   reactStrictMode: false, // 关闭严格模式减少双重渲染
   swcMinify: true, // 使用SWC压缩
