@@ -128,7 +128,6 @@ if ANALYSIS_STATS_PATH.exists():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    import asyncio
     from web.database import migrate_database
     
     print("[START] Securities Analysis API starting...")
@@ -136,13 +135,8 @@ async def lifespan(app: FastAPI):
     # 执行数据库迁移
     migrate_database()
     
-    # 启动价格触发检查后台任务
-    task = asyncio.create_task(check_price_triggers())
-    
     yield
     
-    # 取消后台任务
-    task.cancel()
     print("[STOP] Securities Analysis API shutting down...")
 
 
