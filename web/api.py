@@ -2268,9 +2268,99 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                     if ai_recommendation:
                         print(f"[技术评级] 从量化分析获取评级: {ai_recommendation}")
             
-            if ai_buy_price or ai_sell_price or ai_recommendation:
-                db_update_watchlist_ai_prices(username, original_symbol, ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity, ai_recommendation)
+            # 从报告中提取多周期价位（短线/波段/中长线的支撑位、阻力位、风险位）
+            multi_period_prices = {'short': {}, 'swing': {}, 'long': {}}
+            if report:
+                print(f"[多周期价位] 开始从报告中提取多周期价位...")
+                
+                # 定义周期关键词映射
+                period_keywords = {
+                    'short': ['短线', '1-5天', '1-5日'],
+                    'swing': ['波段', '1-4周'],
+                    'long': ['中长线', '1月以上', '中长期']
+                }
+                
+                # 提取每个周期的价位
+                for period_key, keywords in period_keywords.items():
+                    # 构建周期匹配模式
+                    keyword_pattern = '|'.join(keywords)
+                    
+                    # 查找该周期的表格区域
+                    # 匹配格式: ### 短线（1-5天） 或 ### 波段（1-4周） 等
+                    section_pattern = rf'###\s*(?:{keyword_pattern})[^#]*?(?=###|\Z|## )'
+                    section_match = re.search(section_pattern, report, re.DOTALL | re.IGNORECASE)
+                    
+                    if section_match:
+                        section_text = section_match.group(0)
+                        
+                        # 从表格中提取支撑位
+                        support_patterns = [
+                            r'\|\s*\*\*支撑位\*\*\s*\|\s*[$¥]?([\d.]+)',
+                            r'\|\s*支撑位\s*\|\s*[$¥]?([\d.]+)',
+                        ]
+                        for pattern in support_patterns:
+                            match = re.search(pattern, section_text)
+                            if match:
+                                try:
+                                    multi_period_prices[period_key]['support'] = float(match.group(1))
+                                    print(f"[多周期价位] {period_key} 支撑位: {multi_period_prices[period_key]['support']}")
+                                    break
+                                except:
+                                    pass
+                        
+                        # 从表格中提取阻力位
+                        resistance_patterns = [
+                            r'\|\s*\*\*阻力位\*\*\s*\|\s*[$¥]?([\d.]+)',
+                            r'\|\s*阻力位\s*\|\s*[$¥]?([\d.]+)',
+                        ]
+                        for pattern in resistance_patterns:
+                            match = re.search(pattern, section_text)
+                            if match:
+                                try:
+                                    multi_period_prices[period_key]['resistance'] = float(match.group(1))
+                                    print(f"[多周期价位] {period_key} 阻力位: {multi_period_prices[period_key]['resistance']}")
+                                    break
+                                except:
+                                    pass
+                        
+                        # 从表格中提取风险位
+                        risk_patterns = [
+                            r'\|\s*\*\*风险位\*\*\s*\|\s*[$¥]?([\d.]+)',
+                            r'\|\s*风险位\s*\|\s*[$¥]?([\d.]+)',
+                            r'\|\s*\*\*风险观察位\*\*\s*\|\s*[$¥]?([\d.]+)',
+                            r'\|\s*风险观察位\s*\|\s*[$¥]?([\d.]+)',
+                        ]
+                        for pattern in risk_patterns:
+                            match = re.search(pattern, section_text)
+                            if match:
+                                try:
+                                    multi_period_prices[period_key]['risk'] = float(match.group(1))
+                                    print(f"[多周期价位] {period_key} 风险位: {multi_period_prices[period_key]['risk']}")
+                                    break
+                                except:
+                                    pass
+                
+                print(f"[多周期价位] 提取完成: {multi_period_prices}")
+            
+            # 检查是否有任何多周期价位数据
+            has_multi_period = any(
+                multi_period_prices[p].get('support') or 
+                multi_period_prices[p].get('resistance') or 
+                multi_period_prices[p].get('risk')
+                for p in ['short', 'swing', 'long']
+            )
+            
+            if ai_buy_price or ai_sell_price or ai_recommendation or has_multi_period:
+                db_update_watchlist_ai_prices(
+                    username, original_symbol, 
+                    ai_buy_price, ai_sell_price, 
+                    ai_buy_quantity, ai_sell_quantity, 
+                    ai_recommendation,
+                    multi_period_prices if has_multi_period else None
+                )
                 print(f"[AI价格] 已更新 {original_symbol}: 评级={ai_recommendation}, 支撑位={ai_buy_price}, 阻力位={ai_sell_price}")
+                if has_multi_period:
+                    print(f"[AI价格] 多周期价位已更新: {multi_period_prices}")
                 
                 # 将AI建议价格添加到report_data中，便于前端获取
                 report_data['ai_buy_price'] = ai_buy_price
@@ -2278,6 +2368,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 report_data['ai_buy_quantity'] = ai_buy_quantity
                 report_data['ai_sell_quantity'] = ai_sell_quantity
                 report_data['ai_recommendation'] = ai_recommendation
+                report_data['multi_period_prices'] = multi_period_prices
             
             # 更新持有周期到自选列表
             from web.database import db_update_watchlist_item
@@ -3463,14 +3554,31 @@ async def generate_ai_report(
 ## 四、支撑阻力位
 列出关键支撑位和阻力位
 
-## 五、参考价位（仅供研究参考）
+## 五、多周期参考价位（仅供研究参考）
 > 注：参考价位基于历史数据与技术指标计算，为市场分析提供辅助视角，并非未来价格保证。
 
+**必须提供以下三个周期的价位数据（精确到小数点后3位）：**
+
+### 短线（1-5天）
 | 类型 | 价格 | 说明 |
 |------|------|------|
-| **支撑位** | {currency_symbol}X.XXX | 基于技术支撑位计算 |
-| **阻力位** | {currency_symbol}X.XXX | 基于技术阻力位计算 |
-| **风险控制位** | {currency_symbol}X.XXX | 若跌破该位，短线技术结构转弱 |
+| **支撑位** | {currency_symbol}X.XXX | 基于日内/日线支撑位计算 |
+| **阻力位** | {currency_symbol}X.XXX | 基于短期阻力位计算 |
+| **风险位** | {currency_symbol}X.XXX | 若跌破该位，短线技术结构转弱 |
+
+### 波段（1-4周）
+| 类型 | 价格 | 说明 |
+|------|------|------|
+| **支撑位** | {currency_symbol}X.XXX | 基于波段支撑位计算 |
+| **阻力位** | {currency_symbol}X.XXX | 基于波段阻力位计算 |
+| **风险位** | {currency_symbol}X.XXX | 若跌破该位，波段技术结构转弱 |
+
+### 中长线（1月以上）
+| 类型 | 价格 | 说明 |
+|------|------|------|
+| **支撑位** | {currency_symbol}X.XXX | 基于重要支撑位计算 |
+| **阻力位** | {currency_symbol}X.XXX | 基于长期阻力位计算 |
+| **风险位** | {currency_symbol}X.XXX | 若跌破该位，中长线技术结构转弱 |
 
 {f"用户持仓: {user_position}股，成本: " + currency_symbol + f"{user_cost_price}" if user_position and user_cost_price else ""}
 
@@ -3481,7 +3589,7 @@ async def generate_ai_report(
 技术面综合评级（强势/偏强/中性/偏弱/弱势），仅描述技术面状态，禁止给出任何操作建议或行动指引
 
 **要求**：
-1. 必须给出具体的支撑位和阻力位数字（精确到小数点后3位）
+1. 必须给出三个周期（短线、波段、中长线）的支撑位、阻力位、风险位数字（精确到小数点后3位）
 2. 所有内容必须是客观技术分析，禁止使用"介入"、"建仓"、"止盈"、"止损"、"操作上"、"建议"等引导性词汇
 
 ---

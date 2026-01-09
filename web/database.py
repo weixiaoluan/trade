@@ -228,6 +228,40 @@ def migrate_database():
             print("迁移: 添加 ai_sell_quantity 字段到 watchlist 表（参考数量）")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_sell_quantity INTEGER")
         
+        # 检查 watchlist 表是否有多周期价位字段
+        # 短线价位
+        if 'short_support' not in watchlist_columns:
+            print("迁移: 添加 short_support 字段到 watchlist 表（短线支撑位）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN short_support REAL")
+        if 'short_resistance' not in watchlist_columns:
+            print("迁移: 添加 short_resistance 字段到 watchlist 表（短线阻力位）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN short_resistance REAL")
+        if 'short_risk' not in watchlist_columns:
+            print("迁移: 添加 short_risk 字段到 watchlist 表（短线风险位）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN short_risk REAL")
+        
+        # 波段价位
+        if 'swing_support' not in watchlist_columns:
+            print("迁移: 添加 swing_support 字段到 watchlist 表（波段支撑位）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN swing_support REAL")
+        if 'swing_resistance' not in watchlist_columns:
+            print("迁移: 添加 swing_resistance 字段到 watchlist 表（波段阻力位）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN swing_resistance REAL")
+        if 'swing_risk' not in watchlist_columns:
+            print("迁移: 添加 swing_risk 字段到 watchlist 表（波段风险位）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN swing_risk REAL")
+        
+        # 中长线价位
+        if 'long_support' not in watchlist_columns:
+            print("迁移: 添加 long_support 字段到 watchlist 表（中长线支撑位）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN long_support REAL")
+        if 'long_resistance' not in watchlist_columns:
+            print("迁移: 添加 long_resistance 字段到 watchlist 表（中长线阻力位）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN long_resistance REAL")
+        if 'long_risk' not in watchlist_columns:
+            print("迁移: 添加 long_risk 字段到 watchlist 表（中长线风险位）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN long_risk REAL")
+        
         # 检查 watchlist 表是否有技术面评级字段（强势/偏强/中性/偏弱/弱势）
         if 'ai_recommendation' not in watchlist_columns:
             print("迁移: 添加 ai_recommendation 字段到 watchlist 表（技术面评级）")
@@ -449,7 +483,10 @@ def db_get_user_watchlist(username: str) -> List[Dict]:
                    ai_buy_price, ai_sell_price, ai_price_updated_at, last_alert_at,
                    COALESCE(holding_period, 'swing') as holding_period,
                    ai_buy_quantity, ai_sell_quantity, ai_recommendation,
-                   COALESCE(from_ai_pick, 0) as from_ai_pick
+                   COALESCE(from_ai_pick, 0) as from_ai_pick,
+                   short_support, short_resistance, short_risk,
+                   swing_support, swing_resistance, swing_risk,
+                   long_support, long_resistance, long_risk
             FROM watchlist WHERE username = ? 
             ORDER BY starred DESC, added_at DESC
         ''', (username,))
@@ -523,25 +560,56 @@ def db_update_watchlist_ai_prices(username: str, symbol: str,
                                    ai_sell_price: float = None,
                                    ai_buy_quantity: int = None,
                                    ai_sell_quantity: int = None,
-                                   ai_recommendation: str = None) -> bool:
+                                   ai_recommendation: str = None,
+                                   multi_period_prices: dict = None) -> bool:
     """更新自选项的技术分析参考价位（支撑位/阻力位）和技术面评级
     
     注意：这些数据仅供个人学习研究参考，不构成任何投资建议。
-    - ai_buy_price: 技术分析支撑位
-    - ai_sell_price: 技术分析阻力位
+    - ai_buy_price: 技术分析支撑位（当前周期）
+    - ai_sell_price: 技术分析阻力位（当前周期）
     - ai_recommendation: 技术面评级（强势/偏强/中性/偏弱/弱势）
+    - multi_period_prices: 多周期价位数据 {
+        'short': {'support': x, 'resistance': x, 'risk': x},
+        'swing': {'support': x, 'resistance': x, 'risk': x},
+        'long': {'support': x, 'resistance': x, 'risk': x}
+      }
     """
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        
+        # 基础更新
+        updates = [
+            'ai_buy_price = ?', 'ai_sell_price = ?',
+            'ai_buy_quantity = ?', 'ai_sell_quantity = ?',
+            'ai_recommendation = ?', 'ai_price_updated_at = ?'
+        ]
+        params = [ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity,
+                  ai_recommendation, datetime.now().isoformat()]
+        
+        # 多周期价位更新
+        if multi_period_prices:
+            short = multi_period_prices.get('short', {})
+            swing = multi_period_prices.get('swing', {})
+            long = multi_period_prices.get('long', {})
+            
+            updates.extend([
+                'short_support = ?', 'short_resistance = ?', 'short_risk = ?',
+                'swing_support = ?', 'swing_resistance = ?', 'swing_risk = ?',
+                'long_support = ?', 'long_resistance = ?', 'long_risk = ?'
+            ])
+            params.extend([
+                short.get('support'), short.get('resistance'), short.get('risk'),
+                swing.get('support'), swing.get('resistance'), swing.get('risk'),
+                long.get('support'), long.get('resistance'), long.get('risk')
+            ])
+        
+        params.extend([username, symbol])
+        
+        cursor.execute(f'''
             UPDATE watchlist 
-            SET ai_buy_price = ?, ai_sell_price = ?, 
-                ai_buy_quantity = ?, ai_sell_quantity = ?,
-                ai_recommendation = ?,
-                ai_price_updated_at = ?
+            SET {', '.join(updates)}
             WHERE username = ? AND UPPER(symbol) = UPPER(?)
-        ''', (ai_buy_price, ai_sell_price, ai_buy_quantity, ai_sell_quantity, 
-              ai_recommendation, datetime.now().isoformat(), username, symbol))
+        ''', params)
         return cursor.rowcount > 0
 
 

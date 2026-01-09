@@ -84,6 +84,16 @@ interface WatchlistItem {
   last_alert_at?: string;
   holding_period?: string;
   from_ai_pick?: number;
+  // 多周期价位字段
+  short_support?: number;
+  short_resistance?: number;
+  short_risk?: number;
+  swing_support?: number;
+  swing_resistance?: number;
+  swing_risk?: number;
+  long_support?: number;
+  long_resistance?: number;
+  long_risk?: number;
 }
 
 interface TaskStatus {
@@ -308,6 +318,47 @@ export default function DashboardPage() {
   // 持有周期选择弹窗状态
   const [showHoldingPeriodModal, setShowHoldingPeriodModal] = useState(false);
   const [holdingPeriod, setHoldingPeriod] = useState<string>("short");
+
+  // 每个标的的显示周期选择（用于切换显示不同周期的支撑位/阻力位/风险位）
+  const [itemDisplayPeriods, setItemDisplayPeriods] = useState<Record<string, string>>({});
+
+  // 获取标的当前显示周期（默认使用标的的holding_period）
+  const getItemDisplayPeriod = useCallback((item: WatchlistItem) => {
+    return itemDisplayPeriods[item.symbol] || item.holding_period || 'swing';
+  }, [itemDisplayPeriods]);
+
+  // 切换标的显示周期
+  const toggleItemDisplayPeriod = useCallback((symbol: string, currentPeriod: string) => {
+    const periods = ['short', 'swing', 'long'];
+    const currentIndex = periods.indexOf(currentPeriod);
+    const nextPeriod = periods[(currentIndex + 1) % periods.length];
+    setItemDisplayPeriods(prev => ({ ...prev, [symbol]: nextPeriod }));
+  }, []);
+
+  // 根据周期获取对应的价位数据
+  const getPeriodPrices = useCallback((item: WatchlistItem, period: string) => {
+    switch (period) {
+      case 'short':
+        return {
+          support: item.short_support,
+          resistance: item.short_resistance,
+          risk: item.short_risk,
+        };
+      case 'long':
+        return {
+          support: item.long_support,
+          resistance: item.long_resistance,
+          risk: item.long_risk,
+        };
+      case 'swing':
+      default:
+        return {
+          support: item.swing_support || item.ai_buy_price,
+          resistance: item.swing_resistance || item.ai_sell_price,
+          risk: item.swing_risk,
+        };
+    }
+  }, []);
   const [pendingAnalysisSymbols, setPendingAnalysisSymbols] = useState<string[]>([]);
   const [isBatchAnalysis, setIsBatchAnalysis] = useState(false);
 
@@ -2356,6 +2407,7 @@ export default function DashboardPage() {
                   <ArrowUpDown className="w-3.5 h-3.5 opacity-50" />
                 )}
               </div>
+              <div className="w-28 flex-shrink-0 text-sm font-semibold text-orange-400 text-right">风险位</div>
               <div className="w-20 flex-shrink-0 text-sm font-semibold text-slate-300">状态</div>
               <div className="flex-1 min-w-[220px] text-sm font-semibold text-slate-300 text-right">操作</div>
             </div>
@@ -2502,13 +2554,18 @@ export default function DashboardPage() {
                             </div>
                             <div className="min-w-[50px]">
                               <div className="text-[10px] text-slate-500 mb-0.5">周期</div>
-                              <span className={`px-1.5 py-0.5 text-[10px] rounded ${
-                                item.holding_period === 'short' ? 'bg-amber-500/10 text-amber-400' :
-                                item.holding_period === 'long' ? 'bg-violet-500/10 text-violet-400' :
-                                'bg-indigo-500/10 text-indigo-400'
-                              }`}>
-                                {getHoldingPeriodLabel(item.holding_period)}
-                              </span>
+                              <button
+                                onClick={() => toggleItemDisplayPeriod(item.symbol, getItemDisplayPeriod(item))}
+                                className={`px-1.5 py-0.5 text-[10px] rounded cursor-pointer hover:opacity-80 ${
+                                  getItemDisplayPeriod(item) === 'short' ? 'bg-amber-500/10 text-amber-400' :
+                                  getItemDisplayPeriod(item) === 'long' ? 'bg-violet-500/10 text-violet-400' :
+                                  'bg-indigo-500/10 text-indigo-400'
+                                }`}
+                                title="点击切换周期"
+                              >
+                                {getItemDisplayPeriod(item) === 'short' ? '短线' : 
+                                 getItemDisplayPeriod(item) === 'long' ? '中长线' : '波段'}
+                              </button>
                             </div>
                           </div>
                           
@@ -2532,7 +2589,10 @@ export default function DashboardPage() {
                               <div className="text-[10px] text-emerald-400/70 mb-0.5">支撑位</div>
                               <div className="flex flex-col">
                                 <span className="font-mono text-sm font-semibold text-emerald-400">
-                                  {item.ai_buy_price ? `${getCurrencySymbol(item.symbol)}${item.ai_buy_price.toFixed(3)}` : "-"}
+                                  {(() => {
+                                    const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                    return prices.support ? `${getCurrencySymbol(item.symbol)}${prices.support.toFixed(3)}` : "-";
+                                  })()}
                                 </span>
                                 <span className="font-mono text-xs text-emerald-400/70">
                                   {item.ai_buy_quantity ? `${item.ai_buy_quantity.toLocaleString()}股` : "-"}
@@ -2543,12 +2603,24 @@ export default function DashboardPage() {
                               <div className="text-[10px] text-rose-400/70 mb-0.5">阻力位</div>
                               <div className="flex flex-col">
                                 <span className="font-mono text-sm font-semibold text-rose-400">
-                                  {item.ai_sell_price ? `${getCurrencySymbol(item.symbol)}${item.ai_sell_price.toFixed(3)}` : "-"}
+                                  {(() => {
+                                    const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                    return prices.resistance ? `${getCurrencySymbol(item.symbol)}${prices.resistance.toFixed(3)}` : "-";
+                                  })()}
                                 </span>
                                 <span className="font-mono text-xs text-rose-400/70">
                                   {item.ai_sell_quantity ? `${item.ai_sell_quantity.toLocaleString()}股` : "-"}
                                 </span>
                               </div>
+                            </div>
+                            <div className="min-w-[90px]">
+                              <div className="text-[10px] text-orange-400/70 mb-0.5">风险位</div>
+                              <span className="font-mono text-sm font-semibold text-orange-400">
+                                {(() => {
+                                  const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                  return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
+                                })()}
+                              </span>
                             </div>
                           </div>
                           
@@ -2719,15 +2791,20 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      {/* 持有周期 */}
+                      {/* 持有周期 - 可点击切换 */}
                       <div className="w-16 flex-shrink-0">
-                        <span className={`px-2.5 py-1 text-sm rounded-md ${
-                          item.holding_period === 'short' ? 'bg-amber-500/10 text-amber-400' :
-                          item.holding_period === 'long' ? 'bg-violet-500/10 text-violet-400' :
-                          'bg-indigo-500/10 text-indigo-400'
-                        }`}>
-                          {getHoldingPeriodLabel(item.holding_period)}
-                        </span>
+                        <button
+                          onClick={() => toggleItemDisplayPeriod(item.symbol, getItemDisplayPeriod(item))}
+                          className={`px-2.5 py-1 text-sm rounded-md cursor-pointer hover:opacity-80 transition-opacity ${
+                            getItemDisplayPeriod(item) === 'short' ? 'bg-amber-500/10 text-amber-400' :
+                            getItemDisplayPeriod(item) === 'long' ? 'bg-violet-500/10 text-violet-400' :
+                            'bg-indigo-500/10 text-indigo-400'
+                          }`}
+                          title="点击切换周期"
+                        >
+                          {getItemDisplayPeriod(item) === 'short' ? '短线' : 
+                           getItemDisplayPeriod(item) === 'long' ? '中长线' : '波段'}
+                        </button>
                       </div>
 
                       {/* 技术评级 */}
@@ -2745,11 +2822,14 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      {/* 支撑位 */}
+                      {/* 支撑位 - 根据选择的周期显示 */}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
                           <span className="font-mono text-base font-semibold text-emerald-400">
-                            {item.ai_buy_price ? `${getCurrencySymbol(item.symbol)}${item.ai_buy_price.toFixed(3)}` : "-"}
+                            {(() => {
+                              const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                              return prices.support ? `${getCurrencySymbol(item.symbol)}${prices.support.toFixed(3)}` : "-";
+                            })()}
                           </span>
                           <span className="font-mono text-sm text-emerald-400/70">
                             {item.ai_buy_quantity ? `${item.ai_buy_quantity.toLocaleString()}股` : "-"}
@@ -2757,16 +2837,29 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* 阻力位 */}
+                      {/* 阻力位 - 根据选择的周期显示 */}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
                           <span className="font-mono text-base font-semibold text-rose-400">
-                            {item.ai_sell_price ? `${getCurrencySymbol(item.symbol)}${item.ai_sell_price.toFixed(3)}` : "-"}
+                            {(() => {
+                              const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                              return prices.resistance ? `${getCurrencySymbol(item.symbol)}${prices.resistance.toFixed(3)}` : "-";
+                            })()}
                           </span>
                           <span className="font-mono text-sm text-rose-400/70">
                             {item.ai_sell_quantity ? `${item.ai_sell_quantity.toLocaleString()}股` : "-"}
                           </span>
                         </div>
+                      </div>
+
+                      {/* 风险位 - 根据选择的周期显示 */}
+                      <div className="w-28 flex-shrink-0 text-right">
+                        <span className="font-mono text-base font-semibold text-orange-400">
+                          {(() => {
+                            const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                            return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
+                          })()}
+                        </span>
                       </div>
 
                       <div className="w-20 flex-shrink-0">
