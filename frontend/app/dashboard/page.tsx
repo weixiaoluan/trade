@@ -642,6 +642,22 @@ export default function DashboardPage() {
     }
   }, [getToken, shownErrorTasks, showAlertModal, fetchReports, fetchWatchlist]);
 
+  // 判断是否为交易时间（A股: 9:30-11:30, 13:00-15:00，周一到周五）
+  const isTradingTime = useCallback(() => {
+    const now = new Date();
+    const day = now.getDay();
+    // 周末不交易
+    if (day === 0 || day === 6) return false;
+    
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const time = hours * 60 + minutes;
+    
+    // 上午 9:30-11:30 (570-690)
+    // 下午 13:00-15:00 (780-900)
+    return (time >= 570 && time <= 690) || (time >= 780 && time <= 900);
+  }, []);
+
   const fetchQuotes = useCallback(async () => {
     const token = getToken();
     if (!token || watchlist.length === 0) return;
@@ -987,17 +1003,36 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authChecked && watchlist.length > 0) {
+      // 立即获取一次行情
       fetchQuotes();
       
-      // 行情数据15秒刷新一次（非交易时间可以更长）
-      const quoteInterval = setInterval(() => {
-        if (document.visibilityState !== "visible") return;
-        fetchQuotes();
-      }, 15000);
+      // 根据是否交易时间动态调整刷新频率
+      // 交易时间: 3秒刷新一次
+      // 非交易时间: 60秒刷新一次（使用缓存数据）
+      let quoteInterval: NodeJS.Timeout;
+      
+      const setupInterval = () => {
+        const interval = isTradingTime() ? 3000 : 60000;
+        quoteInterval = setInterval(() => {
+          if (document.visibilityState !== "visible") return;
+          fetchQuotes();
+        }, interval);
+      };
+      
+      setupInterval();
+      
+      // 每分钟检查一次是否需要调整刷新频率
+      const checkInterval = setInterval(() => {
+        clearInterval(quoteInterval);
+        setupInterval();
+      }, 60000);
 
-      return () => clearInterval(quoteInterval);
+      return () => {
+        clearInterval(quoteInterval);
+        clearInterval(checkInterval);
+      };
     }
-  }, [authChecked, watchlist, fetchQuotes]);
+  }, [authChecked, watchlist, fetchQuotes, isTradingTime]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
