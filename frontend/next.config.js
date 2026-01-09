@@ -1,11 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 启用 standalone 输出模式（优化 Docker 构建）
-  output: 'standalone',
-  
   // 启用生产优化
-  reactStrictMode: false, // 关闭严格模式减少双重渲染
-  swcMinify: true, // 使用SWC压缩
+  reactStrictMode: false,
+  swcMinify: true,
   
   // 优化图片
   images: {
@@ -14,7 +11,7 @@ const nextConfig = {
   
   // 编译优化
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production', // 生产环境移除console
+    removeConsole: process.env.NODE_ENV === 'production',
   },
   
   async rewrites() {
