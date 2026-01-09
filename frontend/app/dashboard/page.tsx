@@ -323,49 +323,52 @@ export default function DashboardPage() {
     
     // 触达判断（差异小于0.1%）
     if (Math.abs(diffPercent) < 0.1) {
-      return { status: 'touch', text: '触达', color: 'text-amber-400 font-medium' };
+      return { status: 'touch', text: '触达', color: 'text-amber-400 font-semibold' };
     }
     
-    // 统一格式：正数红色，负数绿色
+    // 简化格式：正数红色，负数绿色，不带"差:"前缀
     if (diff > 0) {
       return { 
         status: 'positive', 
         text: `+${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, 
-        color: 'text-rose-400' 
+        color: 'text-rose-400 font-medium' 
       };
     } else {
       return { 
         status: 'negative', 
         text: `${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, 
-        color: 'text-emerald-400' 
+        color: 'text-emerald-400 font-medium' 
       };
     }
   }, []);
 
   // 获取技术评级的颜色样式（强势红色深浅，弱势绿色深浅）
+  // 样式参考周期按钮，使用圆角和背景色
   const getRatingStyle = useCallback((rating: string | undefined) => {
-    if (!rating) return 'bg-slate-500/15 text-slate-400';
+    if (!rating) return 'bg-slate-600/30 text-slate-400';
     
-    // 强势系列 - 红色（越强越深）
-    if (rating.includes('强势')) {
+    const r = rating.toLowerCase();
+    
+    // 强势系列 - 红色（越强颜色越深）
+    if (r.includes('强势') || r === '强势') {
+      return 'bg-rose-600/40 text-rose-300 font-bold border border-rose-500/50';
+    }
+    if (r.includes('偏强') || r === '偏强') {
       return 'bg-rose-500/25 text-rose-400 font-semibold';
     }
-    if (rating.includes('偏强')) {
-      return 'bg-rose-500/15 text-rose-400/90';
+    // 弱势系列 - 绿色（越弱颜色越深）
+    if (r.includes('弱势') || r === '弱势') {
+      return 'bg-emerald-600/40 text-emerald-300 font-bold border border-emerald-500/50';
     }
-    // 弱势系列 - 绿色（越弱越深）
-    if (rating.includes('弱势')) {
+    if (r.includes('偏弱') || r === '偏弱') {
       return 'bg-emerald-500/25 text-emerald-400 font-semibold';
     }
-    if (rating.includes('偏弱')) {
-      return 'bg-emerald-500/15 text-emerald-400/90';
-    }
-    // 中性 - 灰色
-    if (rating.includes('中性') || rating.includes('震荡')) {
-      return 'bg-slate-500/20 text-slate-300';
+    // 中性/震荡 - 蓝灰色
+    if (r.includes('中性') || r.includes('震荡') || r === '中性' || r === '震荡') {
+      return 'bg-slate-500/30 text-slate-300 font-medium';
     }
     
-    return 'bg-slate-500/15 text-slate-400';
+    return 'bg-slate-600/30 text-slate-400';
   }, []);
 
   const [pendingAnalysisSymbols, setPendingAnalysisSymbols] = useState<string[]>([]);
@@ -538,7 +541,7 @@ export default function DashboardPage() {
     }
   }, [getToken]);
 
-  // 一次性获取所有dashboard数据
+  // 一次性获取所有dashboard数据（包括行情）
   const fetchDashboardInit = useCallback(async () => {
     const token = getToken();
     if (!token) return;
@@ -555,6 +558,11 @@ export default function DashboardPage() {
         setReports(data.reports || []);
         setUserSettings(data.settings);
         setWechatOpenId(data.settings?.wechat_openid || "");
+        
+        // 如果返回了行情数据，直接使用
+        if (data.quotes) {
+          setQuotes(data.quotes);
+        }
       }
     } catch (error) {
       console.error("获取dashboard数据失败:", error);
@@ -2298,25 +2306,25 @@ export default function DashboardPage() {
                           {/* 技术指标参考价位 - 移动端（始终显示预留空间） */}
                           <div className="flex flex-wrap items-start gap-4 mb-3 pt-2 border-t border-white/[0.05]">
                             <div className="min-w-[70px]">
-                              <div className="text-[10px] text-indigo-400/70 mb-0.5">技术评级</div>
+                              <div className="text-xs text-indigo-400/80 mb-1">技术评级</div>
                               {item.ai_recommendation ? (
-                                <span className={`px-1.5 py-0.5 text-xs rounded ${getRatingStyle(item.ai_recommendation)}`}>
+                                <span className={`px-2 py-1 text-sm rounded-md ${getRatingStyle(item.ai_recommendation)}`}>
                                   {item.ai_recommendation}
                                 </span>
                               ) : (
-                                <span className="text-xs text-slate-500">-</span>
+                                <span className="text-sm text-slate-500">-</span>
                               )}
                             </div>
-                            <div className="min-w-[90px]">
-                              <div className="text-[10px] text-emerald-400/70 mb-0.5">支撑位</div>
+                            <div className="min-w-[95px]">
+                              <div className="text-xs text-emerald-400/80 mb-1">支撑位</div>
                               <div className="flex flex-col">
-                                <span className="font-mono text-sm font-semibold text-emerald-400">
+                                <span className="font-mono text-base font-semibold text-emerald-400">
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     return prices.support ? `${getCurrencySymbol(item.symbol)}${prices.support.toFixed(3)}` : "-";
                                   })()}
                                 </span>
-                                <span className="font-mono text-xs">
+                                <span className="font-mono text-sm mt-0.5">
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     const diff = getPriceDiff(quote?.current_price, prices.support, 'support');
@@ -2325,16 +2333,16 @@ export default function DashboardPage() {
                                 </span>
                               </div>
                             </div>
-                            <div className="min-w-[90px]">
-                              <div className="text-[10px] text-rose-400/70 mb-0.5">阻力位</div>
+                            <div className="min-w-[95px]">
+                              <div className="text-xs text-rose-400/80 mb-1">阻力位</div>
                               <div className="flex flex-col">
-                                <span className="font-mono text-sm font-semibold text-rose-400">
+                                <span className="font-mono text-base font-semibold text-rose-400">
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     return prices.resistance ? `${getCurrencySymbol(item.symbol)}${prices.resistance.toFixed(3)}` : "-";
                                   })()}
                                 </span>
-                                <span className="font-mono text-xs">
+                                <span className="font-mono text-sm mt-0.5">
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     const diff = getPriceDiff(quote?.current_price, prices.resistance, 'resistance');
@@ -2343,16 +2351,16 @@ export default function DashboardPage() {
                                 </span>
                               </div>
                             </div>
-                            <div className="min-w-[90px]">
-                              <div className="text-[10px] text-orange-400/70 mb-0.5">风险位</div>
+                            <div className="min-w-[95px]">
+                              <div className="text-xs text-orange-400/80 mb-1">风险位</div>
                               <div className="flex flex-col">
-                                <span className="font-mono text-sm font-semibold text-orange-400">
+                                <span className="font-mono text-base font-semibold text-orange-400">
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
                                   })()}
                                 </span>
-                                <span className="font-mono text-xs">
+                                <span className="font-mono text-sm mt-0.5">
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     const diff = getPriceDiff(quote?.current_price, prices.risk, 'risk');
@@ -2533,7 +2541,7 @@ export default function DashboardPage() {
                       {/* 技术评级 */}
                       <div className="w-20 flex-shrink-0">
                         {item.ai_recommendation ? (
-                          <span className={`px-2.5 py-1 text-sm font-medium rounded-md whitespace-nowrap ${getRatingStyle(item.ai_recommendation)}`}>
+                          <span className={`px-2.5 py-1.5 text-sm rounded-md whitespace-nowrap ${getRatingStyle(item.ai_recommendation)}`}>
                             {item.ai_recommendation}
                           </span>
                         ) : (
