@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { 
-  Bot, Shield, ArrowLeft, User, Phone, Clock, 
-  FileText, Bell, Star, Trash2, Save, X, Loader2,
-  Check, AlertCircle, Edit3, Activity
+  ArrowLeft, User, 
+  FileText, Star, Trash2, Save, X, Loader2,
+  AlertCircle, Edit3, Activity
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE } from "@/lib/config";
@@ -29,15 +29,6 @@ interface WatchlistItem {
   ai_buy_price?: number;
   ai_sell_price?: number;
   holding_period?: string;
-}
-
-interface ReminderItem {
-  id: string;
-  reminder_id: string;
-  symbol: string;
-  name?: string;
-  reminder_type: string;
-  frequency: string;
 }
 
 interface ReportItem {
@@ -64,7 +55,6 @@ export default function UserDetailPage() {
   const [saving, setSaving] = useState(false);
   const [userDetail, setUserDetail] = useState<UserDetail | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
 
@@ -96,7 +86,6 @@ export default function UserDetailPage() {
         const data = await response.json();
         setUserDetail(data.user);
         setWatchlist(data.watchlist || []);
-        setReminders(data.reminders || []);
         setReports(data.reports || []);
         setActivities(data.activities || []);
         

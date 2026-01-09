@@ -19,8 +19,6 @@ from web.database import (
     db_get_user_watchlist, db_add_to_watchlist, db_remove_from_watchlist, db_update_watchlist_item,
     db_save_report, db_get_user_reports, db_get_user_report, db_delete_report,
     db_create_task, db_update_task, db_get_user_tasks,
-    db_get_user_reminders, db_add_reminder, db_update_reminder, db_delete_reminder, 
-    db_get_symbol_reminders, db_get_all_reminders,
     db_get_all_users, db_update_user_status, db_update_user_role
 )
 
@@ -78,30 +76,6 @@ class WatchlistItem(BaseModel):
     position: Optional[float] = None  # 持仓数量
     cost_price: Optional[float] = None  # 持仓成本价
     from_ai_pick: Optional[int] = 0  # 是否来自研究列表
-
-
-class ReminderItem(BaseModel):
-    """价格触发提醒项"""
-    id: Optional[str] = None
-    symbol: str
-    name: Optional[str] = None
-    reminder_type: str  # buy, sell, both
-    frequency: str = "trading_day"  # trading_day, weekly, monthly
-    analysis_time: str = "09:30"  # 提醒时间 HH:MM
-    weekday: Optional[int] = None  # 1-7 (周一-周日)，仅 weekly 时使用
-    day_of_month: Optional[int] = None  # 1-31，仅 monthly 时使用
-    # AI 自动分析设置
-    ai_analysis_frequency: str = "trading_day"  # AI分析频率
-    ai_analysis_time: str = "09:30"  # AI分析时间 HH:MM
-    ai_analysis_weekday: Optional[int] = None  # AI分析周几
-    ai_analysis_day_of_month: Optional[int] = None  # AI分析日期
-    buy_price: Optional[float] = None  # AI分析的支撑位
-    sell_price: Optional[float] = None  # AI分析的阻力位
-    enabled: bool = True
-    created_at: Optional[str] = None
-    last_notified_type: Optional[str] = None  # 最后触发类型
-    last_notified_at: Optional[str] = None  # 最后触发时间
-    last_analysis_at: Optional[str] = None  # 最后分析时间
 
 
 # ============================================
@@ -359,73 +333,3 @@ def update_analysis_task(username: str, symbol: str, updates: Dict):
 def get_user_analysis_tasks(username: str) -> Dict:
     """获取用户的所有分析任务"""
     return db_get_user_tasks(username)
-
-
-# ============================================
-# 定时提醒相关函数 (使用数据库)
-# ============================================
-
-def get_reminders() -> Dict:
-    """获取所有提醒"""
-    return db_get_all_reminders()
-
-
-def get_user_reminders(username: str) -> list:
-    """获取用户的所有提醒"""
-    reminders = db_get_user_reminders(username)
-    # 转换 reminder_id 为 id 以兼容前端（排除数据库自增主键 id）
-    result = []
-    for r in reminders:
-        item = {k: v for k, v in r.items() if k not in ('id', 'reminder_id')}
-        item['id'] = r.get('reminder_id')  # 使用 reminder_id 作为前端的 id
-        result.append(item)
-    return result
-
-
-def add_reminder(username: str, reminder: Dict) -> Dict:
-    """添加价格触发提醒"""
-    reminder_id = secrets.token_hex(8)
-    return db_add_reminder(
-        username,
-        reminder_id,
-        reminder['symbol'],
-        reminder.get('name'),
-        reminder['reminder_type'],
-        reminder.get('frequency', 'trading_day'),
-        reminder.get('analysis_time', '09:30'),
-        reminder.get('weekday'),
-        reminder.get('day_of_month'),
-        reminder.get('ai_analysis_frequency', 'trading_day'),
-        reminder.get('ai_analysis_time', '09:30'),
-        reminder.get('ai_analysis_weekday'),
-        reminder.get('ai_analysis_day_of_month'),
-        reminder.get('buy_price'),
-        reminder.get('sell_price')
-    )
-
-
-def update_reminder(username: str, reminder_id: str, updates: Dict) -> bool:
-    """更新提醒"""
-    return db_update_reminder(username, reminder_id, **updates)
-
-
-def delete_reminder(username: str, reminder_id: str) -> bool:
-    """删除提醒"""
-    return db_delete_reminder(username, reminder_id)
-
-
-def get_symbol_reminders(username: str, symbol: str) -> list:
-    """获取某个证券的所有提醒"""
-    reminders = db_get_symbol_reminders(username, symbol)
-    return [{'id': r.get('reminder_id', r.get('id')), **{k: v for k, v in r.items() if k != 'reminder_id'}} for r in reminders]
-
-
-def batch_add_reminders(username: str, symbols: list, reminder_config: Dict) -> Dict:
-    """批量添加提醒"""
-    added = []
-    for symbol in symbols:
-        reminder = reminder_config.copy()
-        reminder['symbol'] = symbol
-        result = add_reminder(username, reminder)
-        added.append(result)
-    return {'added': added, 'count': len(added)}

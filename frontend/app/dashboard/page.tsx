@@ -23,8 +23,6 @@ import {
   Minus,
   AlertCircle,
   Loader2,
-  Bell,
-  BellRing,
   Star,
   ArrowUpDown,
   ArrowUp,
@@ -118,29 +116,6 @@ interface ReportSummary {
   change_percent: number;
 }
 
-interface ReminderItem {
-  id: string;
-  symbol: string;
-  name?: string;
-  reminder_type: string;
-  frequency: string;
-  analysis_time: string;
-  weekday?: number;
-  day_of_month?: number;
-  // AI 分析设置
-  ai_analysis_frequency?: string;
-  ai_analysis_time?: string;
-  ai_analysis_weekday?: number;
-  ai_analysis_day_of_month?: number;
-  buy_price?: number;
-  sell_price?: number;
-  enabled: boolean;
-  created_at: string;
-  last_notified_type?: string;
-  last_notified_at?: string;
-  last_analysis_at?: string;
-}
-
 interface QuoteData {
   symbol: string;
   current_price: number;
@@ -187,30 +162,6 @@ export default function DashboardPage() {
 
   const [addPosition, setAddPosition] = useState<string>("");
   const [addCostPrice, setAddCostPrice] = useState<string>("");
-
-  const [showReminderModal, setShowReminderModal] = useState(false);
-  const [reminderSymbol, setReminderSymbol] = useState<string>("");
-  const [reminderName, setReminderName] = useState<string>("");
-  const [reminders, setReminders] = useState<ReminderItem[]>([]);
-  const [reminderType, setReminderType] = useState<string>("both");
-  const [reminderFrequency, setReminderFrequency] = useState<string>("trading_day");
-  const [analysisWeekday, setAnalysisWeekday] = useState<number>(1);
-  const [analysisDayOfMonth, setAnalysisDayOfMonth] = useState<number>(1);
-  const [showBatchReminderModal, setShowBatchReminderModal] = useState(false);
-
-  // 提醒记录
-  const [showReminderLogsModal, setShowReminderLogsModal] = useState(false);
-  const [reminderLogsSymbol, setReminderLogsSymbol] = useState<string>("");
-  const [reminderLogsName, setReminderLogsName] = useState<string>("");
-  const [reminderLogs, setReminderLogs] = useState<any[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
-
-  // AI 自动分析设置
-  const [aiAnalysisFrequency, setAiAnalysisFrequency] = useState<string>("trading_day");
-  const [aiAnalysisTime, setAiAnalysisTime] = useState<string>("09:30");
-  const [aiAnalysisWeekday, setAiAnalysisWeekday] = useState<number>(1);
-  const [aiAnalysisDayOfMonth, setAiAnalysisDayOfMonth] = useState<number>(1);
-  const [reminderHoldingPeriod, setReminderHoldingPeriod] = useState<string>("short");
 
   const [currentPage, setCurrentPage] = useState(1);
   // 移动端默认10条，桌面端默认50条
@@ -359,6 +310,46 @@ export default function DashboardPage() {
         };
     }
   }, []);
+
+  // 计算价格与当前价的差异（支撑位/阻力位/风险位）
+  const getPriceDiff = useCallback((currentPrice: number | undefined, targetPrice: number | undefined, type: 'support' | 'resistance' | 'risk') => {
+    if (!currentPrice || !targetPrice || currentPrice <= 0 || targetPrice <= 0) {
+      return null;
+    }
+    
+    const diff = currentPrice - targetPrice;
+    const diffPercent = (diff / targetPrice) * 100;
+    
+    if (type === 'support') {
+      // 支撑位：当前价 > 支撑位 显示"差值"，当前价 < 支撑位 显示"跌破"，相等显示"触达"
+      if (Math.abs(diffPercent) < 0.1) {
+        return { status: 'touch', text: '触达', color: 'text-amber-400' };
+      } else if (diff > 0) {
+        return { status: 'above', text: `差:${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, color: 'text-emerald-400/70' };
+      } else {
+        return { status: 'below', text: `破:${Math.abs(diff).toFixed(3)}/${Math.abs(diffPercent).toFixed(1)}%`, color: 'text-rose-400' };
+      }
+    } else if (type === 'resistance') {
+      // 阻力位：当前价 < 阻力位 显示"差值"，当前价 > 阻力位 显示"突破"，相等显示"触达"
+      if (Math.abs(diffPercent) < 0.1) {
+        return { status: 'touch', text: '触达', color: 'text-amber-400' };
+      } else if (diff < 0) {
+        return { status: 'below', text: `差:${Math.abs(diff).toFixed(3)}/${Math.abs(diffPercent).toFixed(1)}%`, color: 'text-rose-400/70' };
+      } else {
+        return { status: 'above', text: `破:${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, color: 'text-emerald-400' };
+      }
+    } else {
+      // 风险位：当前价 > 风险位 显示"差值"，当前价 < 风险位 显示"跌破"，相等显示"触达"
+      if (Math.abs(diffPercent) < 0.1) {
+        return { status: 'touch', text: '触达', color: 'text-amber-400' };
+      } else if (diff > 0) {
+        return { status: 'above', text: `差:${diff.toFixed(3)}/${diffPercent.toFixed(1)}%`, color: 'text-orange-400/70' };
+      } else {
+        return { status: 'below', text: `破:${Math.abs(diff).toFixed(3)}/${Math.abs(diffPercent).toFixed(1)}%`, color: 'text-rose-500' };
+      }
+    }
+  }, []);
+
   const [pendingAnalysisSymbols, setPendingAnalysisSymbols] = useState<string[]>([]);
   const [isBatchAnalysis, setIsBatchAnalysis] = useState(false);
 
@@ -544,7 +535,6 @@ export default function DashboardPage() {
         setWatchlist(data.watchlist || []);
         setTasks(data.tasks || {});
         setReports(data.reports || []);
-        setReminders(data.reminders || []);
         setUserSettings(data.settings);
         setWechatOpenId(data.settings?.wechat_openid || "");
       }
@@ -652,20 +642,6 @@ export default function DashboardPage() {
       console.error("获取实时行情失败:", error);
     }
   }, [getToken, watchlist]);
-
-  const fetchReminders = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/reminders`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setReminders(data.reminders || []);
-      }
-    } catch (error) {
-      console.error("获取提醒失败:", error);
-    }
-  }, [getToken]);
 
   // 获取用户设置
   const fetchUserSettings = useCallback(async () => {
@@ -1166,14 +1142,6 @@ export default function DashboardPage() {
     return sorted;
   }, [watchlist, sortField, sortOrder, quotes, searchQuery, periodFilter, reportsBySymbol]);
 
-  const reminderCountBySymbol = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const r of reminders) {
-      map[r.symbol] = (map[r.symbol] || 0) + 1;
-    }
-    return map;
-  }, [reminders]);
-
   const pagedWatchlist = useMemo(() => {
     return sortedWatchlist.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   }, [sortedWatchlist, currentPage, pageSize]);
@@ -1664,135 +1632,6 @@ export default function DashboardPage() {
     setShowHoldingPeriodModal(true);
   }, [canUseFeatures, selectedItems, showPendingAlert, showAlertModal]);
 
-  // 批量提醒
-  const handleBatchReminder = useCallback(() => {
-    if (selectedItems.size === 0) return;
-    
-    if (!canUseFeatures()) {
-      showPendingAlert();
-      return;
-    }
-    
-    // 检查是否配置了微信推送
-    if (!userSettings?.wechat_openid) {
-      showAlertModal(
-        "请先配置推送",
-        "您还未配置微信推送，请先在设置中绑定微信 OpenID 才能使用提醒功能。",
-        "warning"
-      );
-      setShowSettingsModal(true);
-      return;
-    }
-    
-    // 重置提醒设置为默认值
-    setReminderType("both");
-    setReminderFrequency("trading_day");
-    setAnalysisWeekday(1);
-    setAnalysisDayOfMonth(1);
-    setAiAnalysisFrequency("trading_day");
-    setAiAnalysisTime("09:30");
-    setAiAnalysisWeekday(1);
-    setAiAnalysisDayOfMonth(1);
-    setReminderHoldingPeriod("short");
-    setShowBatchReminderModal(true);
-  }, [canUseFeatures, selectedItems, showPendingAlert, userSettings, showAlertModal]);
-
-  // 批量创建提醒
-  const handleCreateBatchReminder = useCallback(async () => {
-    if (selectedItems.size === 0) return;
-
-    setLoading(true);
-    let successCount = 0;
-    let failCount = 0;
-    const failedSymbols: string[] = [];
-
-    try {
-      for (const symbol of Array.from(selectedItems)) {
-        const item = watchlist.find(w => w.symbol === symbol);
-        const payload = {
-          symbol: symbol,
-          name: item?.name || symbol,
-          reminder_type: reminderType,
-          frequency: reminderFrequency,
-          analysis_time: aiAnalysisTime,
-          weekday: reminderFrequency === "weekly" ? analysisWeekday : undefined,
-          day_of_month: reminderFrequency === "monthly" ? analysisDayOfMonth : undefined,
-          ai_analysis_frequency: aiAnalysisFrequency,
-          ai_analysis_time: aiAnalysisTime,
-          ai_analysis_weekday: aiAnalysisFrequency === "weekly" ? aiAnalysisWeekday : undefined,
-          ai_analysis_day_of_month: aiAnalysisFrequency === "monthly" ? aiAnalysisDayOfMonth : undefined,
-          holding_period: reminderHoldingPeriod,
-        };
-
-        try {
-          const response = await fetch(`${API_BASE}/api/reminders`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${getToken()}`,
-            },
-            body: JSON.stringify(payload),
-          });
-
-          const data = await response.json();
-          
-          if (response.ok && data.status !== "error") {
-            successCount++;
-          } else {
-            failCount++;
-            failedSymbols.push(symbol);
-          }
-        } catch {
-          failCount++;
-          failedSymbols.push(symbol);
-        }
-      }
-
-      setShowBatchReminderModal(false);
-      fetchReminders();
-      setSelectedItems(new Set());
-
-      if (failCount === 0) {
-        showAlertModal("批量提醒创建成功", `已为 ${successCount} 个标的创建提醒`, "success");
-      } else if (successCount === 0) {
-        showAlertModal("批量提醒创建失败", `所有 ${failCount} 个标的创建失败（可能已存在相同提醒）`, "error");
-      } else {
-        showAlertModal(
-          "部分提醒创建成功",
-          `成功: ${successCount} 个，失败: ${failCount} 个（${failedSymbols.join(", ")}）`,
-          "warning"
-        );
-      }
-    } catch (error) {
-      showAlertModal("批量提醒创建失败", "网络错误，请稍后重试", "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedItems, watchlist, reminderType, reminderFrequency, aiAnalysisTime, analysisWeekday, analysisDayOfMonth, aiAnalysisFrequency, aiAnalysisWeekday, aiAnalysisDayOfMonth, reminderHoldingPeriod, getToken, fetchReminders, showAlertModal]);
-
-  // 查看提醒记录
-  const openReminderLogsModal = useCallback(async (symbol: string, name?: string) => {
-    setReminderLogsSymbol(symbol);
-    setReminderLogsName(name || symbol);
-    setReminderLogs([]);
-    setShowReminderLogsModal(true);
-    setLoadingLogs(true);
-    
-    try {
-      const response = await fetch(`${API_BASE}/api/reminder-logs/${symbol}`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setReminderLogs(data.logs || []);
-      }
-    } catch (error) {
-      console.error("获取提醒记录失败:", error);
-    } finally {
-      setLoadingLogs(false);
-    }
-  }, [getToken]);
-
   // 实际执行批量分析
   const executeBatchAnalyze = useCallback(async (symbols: string[], period: string) => {
     // 重置错误状态
@@ -1911,162 +1750,6 @@ export default function DashboardPage() {
     const urlSymbol = symbol.replace(/\./g, '_');
     router.prefetch(`/report/${encodeURIComponent(urlSymbol)}`);
   }, [router]);
-
-  const openReminderModal = useCallback((symbol: string, name?: string) => {
-    if (!canUseFeatures()) {
-      showPendingAlert();
-      return;
-    }
-    
-    // 检查是否配置了微信公众号 OpenID
-    if (!userSettings?.wechat_configured) {
-      showAlertModal(
-        "请先配置推送",
-        "您还未配置微信推送，请先在设置中绑定微信 OpenID 才能使用提醒功能。",
-        "warning"
-      );
-      setShowSettingsModal(true);
-      return;
-    }
-    
-    setReminderSymbol(symbol);
-    setReminderName(name || symbol);
-    setReminderType("both");
-    setReminderFrequency("trading_day");
-    setAnalysisWeekday(1);
-    setAnalysisDayOfMonth(1);
-    setAiAnalysisFrequency("trading_day");
-    setAiAnalysisTime("09:30");
-    setAiAnalysisWeekday(1);
-    setAiAnalysisDayOfMonth(1);
-    setReminderHoldingPeriod("short");
-    setShowReminderModal(true);
-  }, [canUseFeatures, showPendingAlert, userSettings, showAlertModal]);
-
-  const handleCreateReminder = async () => {
-    if (!reminderSymbol) return;
-
-    setLoading(true);
-    try {
-      const payload = {
-        symbol: reminderSymbol,
-        name: reminderName,
-        reminder_type: reminderType,
-        frequency: reminderFrequency,
-        analysis_time: aiAnalysisTime,
-        weekday: reminderFrequency === "weekly" ? analysisWeekday : undefined,
-        day_of_month: reminderFrequency === "monthly" ? analysisDayOfMonth : undefined,
-        // AI 自动分析设置
-        ai_analysis_frequency: aiAnalysisFrequency,
-        ai_analysis_time: aiAnalysisTime,
-        ai_analysis_weekday: aiAnalysisFrequency === "weekly" ? aiAnalysisWeekday : undefined,
-        ai_analysis_day_of_month: aiAnalysisFrequency === "monthly" ? aiAnalysisDayOfMonth : undefined,
-        // 持有周期
-        holding_period: reminderHoldingPeriod,
-      };
-
-      const response = await fetch(`${API_BASE}/api/reminders`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-      
-      if (data.status === "error") {
-        showAlertModal("提醒已存在", data.message || "该提醒已存在，请勿重复设置", "warning");
-        return;
-      }
-      
-      if (response.ok) {
-        setShowReminderModal(false);
-        fetchReminders();
-        
-        if (!data.has_report) {
-          const symbolToAnalyze = reminderSymbol;
-          showAlertModal(
-            "提醒已创建",
-            `${symbolToAnalyze} 尚无AI分析报告，建议先进行分析以获取买卖价格建议。`,
-            "info"
-          );
-        }
-      }
-    } catch (error) {
-      console.error("创建提醒失败:", error);
-      showAlertModal("创建提醒失败", error instanceof Error ? error.message : "网络错误，请稍后重试", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteReminder = async (reminderId: string) => {
-    if (!reminderId) return;
-    try {
-      const response = await fetch(`${API_BASE}/api/reminders/${reminderId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      
-      if (response.ok) {
-        fetchReminders();
-      }
-    } catch (error) {
-      console.error("删除提醒失败:", error);
-    }
-  };
-
-  const handleBatchCreateReminder = async () => {
-    if (selectedItems.size === 0) return;
-
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        reminder_type: reminderType,
-        frequency: reminderFrequency,
-        analysis_time: aiAnalysisTime,
-      });
-      if (reminderFrequency === "weekly") {
-        params.set("weekday", analysisWeekday.toString());
-      }
-      if (reminderFrequency === "monthly") {
-        params.set("day_of_month", analysisDayOfMonth.toString());
-      }
-
-      const response = await fetch(`${API_BASE}/api/reminders/batch?${params}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
-        },
-        body: JSON.stringify(Array.from(selectedItems)),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setShowBatchReminderModal(false);
-        fetchReminders();
-        
-        if (data.symbols_without_report?.length > 0) {
-          showAlertModal(
-            "提醒已创建",
-            `以下证券尚无AI分析报告，建议先进行分析：\n${data.symbols_without_report.join("、")}`,
-            "info"
-          );
-        }
-      }
-    } catch (error) {
-      console.error("批量创建提醒失败:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getReminderCount = (symbol: string) => {
-    return reminderCountBySymbol[symbol] || 0;
-  };
 
   const getTaskStatus = (symbol: string): TaskStatus | null => {
     return tasks[symbol] || null;
@@ -2302,16 +1985,6 @@ export default function DashboardPage() {
                   <Play className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">批量分析</span>
                   <span className="sm:hidden">分析</span>
-                  <span>({selectedItems.size})</span>
-                </button>
-                <button
-                  onClick={handleBatchReminder}
-                  disabled={loading}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded-lg transition-all disabled:opacity-50 text-xs sm:text-sm"
-                >
-                  <Bell className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">批量提醒</span>
-                  <span className="sm:hidden">提醒</span>
                   <span>({selectedItems.size})</span>
                 </button>
                 <button
@@ -2594,8 +2267,12 @@ export default function DashboardPage() {
                                     return prices.support ? `${getCurrencySymbol(item.symbol)}${prices.support.toFixed(3)}` : "-";
                                   })()}
                                 </span>
-                                <span className="font-mono text-xs text-emerald-400/70">
-                                  {item.ai_buy_quantity ? `${item.ai_buy_quantity.toLocaleString()}股` : "-"}
+                                <span className="font-mono text-[10px]">
+                                  {(() => {
+                                    const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                    const diff = getPriceDiff(quote?.current_price, prices.support, 'support');
+                                    return diff ? <span className={diff.color}>{diff.text}</span> : "-";
+                                  })()}
                                 </span>
                               </div>
                             </div>
@@ -2608,19 +2285,32 @@ export default function DashboardPage() {
                                     return prices.resistance ? `${getCurrencySymbol(item.symbol)}${prices.resistance.toFixed(3)}` : "-";
                                   })()}
                                 </span>
-                                <span className="font-mono text-xs text-rose-400/70">
-                                  {item.ai_sell_quantity ? `${item.ai_sell_quantity.toLocaleString()}股` : "-"}
+                                <span className="font-mono text-[10px]">
+                                  {(() => {
+                                    const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                    const diff = getPriceDiff(quote?.current_price, prices.resistance, 'resistance');
+                                    return diff ? <span className={diff.color}>{diff.text}</span> : "-";
+                                  })()}
                                 </span>
                               </div>
                             </div>
                             <div className="min-w-[90px]">
                               <div className="text-[10px] text-orange-400/70 mb-0.5">风险位</div>
-                              <span className="font-mono text-sm font-semibold text-orange-400">
-                                {(() => {
-                                  const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
-                                  return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
-                                })()}
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-mono text-sm font-semibold text-orange-400">
+                                  {(() => {
+                                    const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                    return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
+                                  })()}
+                                </span>
+                                <span className="font-mono text-[10px]">
+                                  {(() => {
+                                    const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                    const diff = getPriceDiff(quote?.current_price, prices.risk, 'risk');
+                                    return diff ? <span className={diff.color}>{diff.text}</span> : "-";
+                                  })()}
+                                </span>
+                              </div>
                             </div>
                           </div>
                           
@@ -2667,22 +2357,6 @@ export default function DashboardPage() {
                             </div>
                             
                             <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => openReminderModal(item.symbol, item.name)}
-                                className={`flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm rounded-xl min-w-[90px] touch-target ${
-                                  getReminderCount(item.symbol) > 0
-                                    ? "bg-amber-600/20 text-amber-400 active:bg-amber-600/30"
-                                    : "bg-white/[0.05] text-slate-400 active:bg-white/[0.1]"
-                                }`}
-                              >
-                                {getReminderCount(item.symbol) > 0 ? (
-                                  <BellRing className="w-4 h-4" />
-                                ) : (
-                                  <Bell className="w-4 h-4" />
-                                )}
-                                提醒
-                              </button>
-                              
                               <button
                                 onClick={() => openEditPositionModal(item)}
                                 className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm rounded-xl min-w-[70px] touch-target bg-white/[0.05] text-slate-400 active:bg-white/[0.1]"
@@ -2831,8 +2505,12 @@ export default function DashboardPage() {
                               return prices.support ? `${getCurrencySymbol(item.symbol)}${prices.support.toFixed(3)}` : "-";
                             })()}
                           </span>
-                          <span className="font-mono text-sm text-emerald-400/70">
-                            {item.ai_buy_quantity ? `${item.ai_buy_quantity.toLocaleString()}股` : "-"}
+                          <span className="font-mono text-xs">
+                            {(() => {
+                              const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                              const diff = getPriceDiff(quote?.current_price, prices.support, 'support');
+                              return diff ? <span className={diff.color}>{diff.text}</span> : "-";
+                            })()}
                           </span>
                         </div>
                       </div>
@@ -2846,20 +2524,33 @@ export default function DashboardPage() {
                               return prices.resistance ? `${getCurrencySymbol(item.symbol)}${prices.resistance.toFixed(3)}` : "-";
                             })()}
                           </span>
-                          <span className="font-mono text-sm text-rose-400/70">
-                            {item.ai_sell_quantity ? `${item.ai_sell_quantity.toLocaleString()}股` : "-"}
+                          <span className="font-mono text-xs">
+                            {(() => {
+                              const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                              const diff = getPriceDiff(quote?.current_price, prices.resistance, 'resistance');
+                              return diff ? <span className={diff.color}>{diff.text}</span> : "-";
+                            })()}
                           </span>
                         </div>
                       </div>
 
                       {/* 风险位 - 根据选择的周期显示 */}
                       <div className="w-28 flex-shrink-0 text-right">
-                        <span className="font-mono text-base font-semibold text-orange-400">
-                          {(() => {
-                            const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
-                            return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
-                          })()}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className="font-mono text-base font-semibold text-orange-400">
+                            {(() => {
+                              const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                              return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
+                            })()}
+                          </span>
+                          <span className="font-mono text-xs">
+                            {(() => {
+                              const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                              const diff = getPriceDiff(quote?.current_price, prices.risk, 'risk');
+                              return diff ? <span className={diff.color}>{diff.text}</span> : "-";
+                            })()}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="w-20 flex-shrink-0">
@@ -3210,567 +2901,6 @@ export default function DashboardPage() {
                   className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base"
                 >
                   {loading ? "添加中..." : `添加 ${ocrResults.filter(r => r.selected).length} 个`}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 提醒设置弹窗 */}
-      <AnimatePresence>
-        {showReminderModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
-            onClick={() => setShowReminderModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 max-h-[85vh] overflow-y-auto safe-area-bottom"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base sm:text-lg font-semibold text-white">提醒设置 - {reminderSymbol}</h3>
-                <button onClick={() => setShowReminderModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-
-              {/* 已有提醒列表 */}
-              {reminders.filter(r => r.symbol === reminderSymbol).length > 0 && (
-                <div className="mb-4 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
-                  <div className="flex items-center gap-2 mb-3">
-                    <BellRing className="w-4 h-4 text-amber-400" />
-                    <span className="text-sm font-medium text-slate-300">已设置的提醒</span>
-                  </div>
-                  <div className="space-y-2">
-                    {reminders.filter(r => r.symbol === reminderSymbol).map((reminder) => (
-                      <div key={reminder.id} className="flex items-center justify-between p-2 bg-white/[0.03] rounded-lg">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className={`px-1.5 py-0.5 rounded ${
-                              reminder.reminder_type === 'buy' ? 'bg-emerald-500/20 text-emerald-400' :
-                              reminder.reminder_type === 'sell' ? 'bg-rose-500/20 text-rose-400' :
-                              'bg-indigo-500/20 text-indigo-400'
-                            }`}>
-                              {reminder.reminder_type === 'buy' ? '低位' : reminder.reminder_type === 'sell' ? '高位' : '双向'}
-                            </span>
-                            <span className="text-slate-400">
-                              {reminder.ai_analysis_frequency === 'trading_day' ? '每交易日' :
-                               reminder.ai_analysis_frequency === 'weekly' ? `每周${['一','二','三','四','五','六','日'][((reminder.ai_analysis_weekday || 1) - 1)]}` :
-                               `每月${reminder.ai_analysis_day_of_month || 1}号`}
-                            </span>
-                            <span className="text-slate-500">{reminder.ai_analysis_time || '09:30'}</span>
-                          </div>
-                          {(reminder.buy_price || reminder.sell_price) && (
-                            <div className="text-[10px] text-slate-500 mt-1">
-                              {reminder.buy_price && <span className="mr-2">低位: {getCurrencySymbol(reminder.symbol)}{reminder.buy_price}</span>}
-                              {reminder.sell_price && <span>高位: {getCurrencySymbol(reminder.symbol)}{reminder.sell_price}</span>}
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleDeleteReminder(reminder.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                {/* AI 自动分析设置 */}
-                <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Bot className="w-4 h-4 text-indigo-400" />
-                    <span className="text-sm font-medium text-indigo-400">AI 自动分析</span>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1.5 block">分析频率</label>
-                      <select
-                        value={aiAnalysisFrequency}
-                        onChange={(e) => setAiAnalysisFrequency(e.target.value)}
-                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
-                      >
-                        <option value="trading_day" className="bg-slate-800">每个交易日</option>
-                        <option value="weekly" className="bg-slate-800">每周</option>
-                        <option value="monthly" className="bg-slate-800">每月</option>
-                      </select>
-                    </div>
-
-                    {aiAnalysisFrequency === "weekly" && (
-                      <div>
-                        <label className="text-xs text-slate-400 mb-1.5 block">选择周几</label>
-                        <div className="grid grid-cols-7 gap-1">
-                          {["一", "二", "三", "四", "五", "六", "日"].map((day, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => setAiAnalysisWeekday(idx + 1)}
-                              className={`py-1.5 rounded text-xs font-medium ${aiAnalysisWeekday === idx + 1 ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
-                            >
-                              {day}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {aiAnalysisFrequency === "monthly" && (
-                      <div>
-                        <label className="text-xs text-slate-400 mb-1.5 block">选择日期</label>
-                        <select
-                          value={aiAnalysisDayOfMonth}
-                          onChange={(e) => setAiAnalysisDayOfMonth(Number(e.target.value))}
-                          className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
-                        >
-                          {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                            <option key={day} value={day} className="bg-slate-800">
-                              {day} 号
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1.5 block">分析时间</label>
-                      <select
-                        value={aiAnalysisTime}
-                        onChange={(e) => setAiAnalysisTime(e.target.value)}
-                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
-                      >
-                        {Array.from({ length: 24 }, (_, h) => 
-                          ["00", "30"].map(m => {
-                            const time = `${h.toString().padStart(2, "0")}:${m}`;
-                            return <option key={time} value={time} className="bg-slate-800">{time}</option>;
-                          })
-                        ).flat()}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1.5 block">持有周期</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { v: "short", l: "短线", desc: "1-5天" },
-                          { v: "swing", l: "波段", desc: "1-4周" },
-                          { v: "long", l: "中长线", desc: "1月以上" }
-                        ].map(({ v, l, desc }) => (
-                          <button
-                            key={v}
-                            onClick={() => setReminderHoldingPeriod(v)}
-                            className={`py-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center ${
-                              reminderHoldingPeriod === v 
-                                ? "bg-indigo-600 text-white" 
-                                : "bg-white/[0.05] text-slate-300 hover:bg-white/[0.08]"
-                            }`}
-                          >
-                            <span>{l}</span>
-                            <span className={`text-[10px] ${reminderHoldingPeriod === v ? "text-indigo-200" : "text-slate-500"}`}>{desc}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs sm:text-sm text-slate-400 mb-2 block">提醒类型</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[{v: "buy", l: "低位"}, {v: "sell", l: "高位"}, {v: "both", l: "双向"}].map(({v, l}) => (
-                      <button
-                        key={v}
-                        onClick={() => setReminderType(v)}
-                        className={`py-2.5 rounded-xl text-sm font-medium transition-all ${reminderType === v ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300 active:bg-white/[0.1]"}`}
-                      >
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs sm:text-sm text-slate-400 mb-2 block">提醒频率</label>
-                  <select
-                    value={reminderFrequency}
-                    onChange={(e) => setReminderFrequency(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none text-sm"
-                  >
-                    <option value="trading_day" className="bg-slate-800">每个交易日</option>
-                    <option value="weekly" className="bg-slate-800">每周</option>
-                    <option value="monthly" className="bg-slate-800">每月</option>
-                  </select>
-                </div>
-
-                {reminderFrequency === "weekly" && (
-                  <div>
-                    <label className="text-xs sm:text-sm text-slate-400 mb-2 block">选择周几</label>
-                    <div className="grid grid-cols-7 gap-1">
-                      {["一", "二", "三", "四", "五", "六", "日"].map((day, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setAnalysisWeekday(idx + 1)}
-                          className={`py-2 rounded-lg text-xs font-medium transition-all ${analysisWeekday === idx + 1 ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
-                        >
-                          {day}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {reminderFrequency === "monthly" && (
-                  <div>
-                    <label className="text-xs sm:text-sm text-slate-400 mb-2 block">选择日期</label>
-                    <select
-                      value={analysisDayOfMonth}
-                      onChange={(e) => setAnalysisDayOfMonth(Number(e.target.value))}
-                      className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none text-sm"
-                    >
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                        <option key={day} value={day} className="bg-slate-800">
-                          {day} 号
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={() => setShowReminderModal(false)}
-                  className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm sm:text-base"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleCreateReminder}
-                  disabled={loading}
-                  className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base"
-                >
-                  {loading ? "创建中..." : "创建提醒"}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 批量提醒设置弹窗 */}
-      <AnimatePresence>
-        {showBatchReminderModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
-            onClick={() => setShowBatchReminderModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 max-h-[85vh] overflow-y-auto safe-area-bottom"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base sm:text-lg font-semibold text-white">提醒设置 - 批量提醒（{selectedItems.size}个）</h3>
-                <button onClick={() => setShowBatchReminderModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-
-              {/* 已选标的列表 */}
-              <div className="mb-4 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
-                <div className="flex items-center gap-2 mb-2">
-                  <Bell className="w-4 h-4 text-amber-400" />
-                  <span className="text-sm font-medium text-slate-300">已选标的</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
-                  {Array.from(selectedItems).map((symbol) => {
-                    const item = watchlist.find(w => w.symbol === symbol);
-                    return (
-                      <span key={symbol} className="px-2 py-0.5 bg-amber-500/10 text-amber-400 text-xs rounded">
-                        {item?.name || symbol}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {/* AI 自动分析设置 */}
-                <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Bot className="w-4 h-4 text-indigo-400" />
-                    <span className="text-sm font-medium text-indigo-400">AI 自动分析</span>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1.5 block">分析频率</label>
-                      <select
-                        value={aiAnalysisFrequency}
-                        onChange={(e) => setAiAnalysisFrequency(e.target.value)}
-                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
-                      >
-                        <option value="trading_day" className="bg-slate-800">每个交易日</option>
-                        <option value="weekly" className="bg-slate-800">每周</option>
-                        <option value="monthly" className="bg-slate-800">每月</option>
-                      </select>
-                    </div>
-
-                    {aiAnalysisFrequency === "weekly" && (
-                      <div>
-                        <label className="text-xs text-slate-400 mb-1.5 block">选择周几</label>
-                        <div className="grid grid-cols-7 gap-1">
-                          {["一", "二", "三", "四", "五", "六", "日"].map((day, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => setAiAnalysisWeekday(idx + 1)}
-                              className={`py-1.5 rounded text-xs font-medium ${aiAnalysisWeekday === idx + 1 ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
-                            >
-                              {day}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {aiAnalysisFrequency === "monthly" && (
-                      <div>
-                        <label className="text-xs text-slate-400 mb-1.5 block">选择日期</label>
-                        <select
-                          value={aiAnalysisDayOfMonth}
-                          onChange={(e) => setAiAnalysisDayOfMonth(Number(e.target.value))}
-                          className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
-                        >
-                          {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                            <option key={day} value={day} className="bg-slate-800">
-                              {day} 号
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1.5 block">分析时间</label>
-                      <select
-                        value={aiAnalysisTime}
-                        onChange={(e) => setAiAnalysisTime(e.target.value)}
-                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none text-sm"
-                      >
-                        {Array.from({ length: 24 }, (_, h) => 
-                          ["00", "30"].map(m => {
-                            const time = `${h.toString().padStart(2, "0")}:${m}`;
-                            return <option key={time} value={time} className="bg-slate-800">{time}</option>;
-                          })
-                        ).flat()}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1.5 block">持有周期</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { v: "short", l: "短线", desc: "1-5天" },
-                          { v: "swing", l: "波段", desc: "1-4周" },
-                          { v: "long", l: "中长线", desc: "1月以上" }
-                        ].map(({ v, l, desc }) => (
-                          <button
-                            key={v}
-                            onClick={() => setReminderHoldingPeriod(v)}
-                            className={`py-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center ${
-                              reminderHoldingPeriod === v 
-                                ? "bg-indigo-600 text-white" 
-                                : "bg-white/[0.05] text-slate-300 hover:bg-white/[0.08]"
-                            }`}
-                          >
-                            <span>{l}</span>
-                            <span className={`text-[10px] ${reminderHoldingPeriod === v ? "text-indigo-200" : "text-slate-500"}`}>{desc}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs sm:text-sm text-slate-400 mb-2 block">提醒类型</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[{v: "buy", l: "低位"}, {v: "sell", l: "高位"}, {v: "both", l: "双向"}].map(({v, l}) => (
-                      <button
-                        key={v}
-                        onClick={() => setReminderType(v)}
-                        className={`py-2.5 rounded-xl text-sm font-medium transition-all ${reminderType === v ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300 active:bg-white/[0.1]"}`}
-                      >
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs sm:text-sm text-slate-400 mb-2 block">提醒频率</label>
-                  <select
-                    value={reminderFrequency}
-                    onChange={(e) => setReminderFrequency(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none text-sm"
-                  >
-                    <option value="trading_day" className="bg-slate-800">每个交易日</option>
-                    <option value="weekly" className="bg-slate-800">每周</option>
-                    <option value="monthly" className="bg-slate-800">每月</option>
-                  </select>
-                </div>
-
-                {reminderFrequency === "weekly" && (
-                  <div>
-                    <label className="text-xs sm:text-sm text-slate-400 mb-2 block">选择周几</label>
-                    <div className="grid grid-cols-7 gap-1">
-                      {["一", "二", "三", "四", "五", "六", "日"].map((day, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setAnalysisWeekday(idx + 1)}
-                          className={`py-2 rounded-lg text-xs font-medium transition-all ${analysisWeekday === idx + 1 ? "bg-indigo-600 text-white" : "bg-white/[0.05] text-slate-300"}`}
-                        >
-                          {day}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {reminderFrequency === "monthly" && (
-                  <div>
-                    <label className="text-xs sm:text-sm text-slate-400 mb-2 block">选择日期</label>
-                    <select
-                      value={analysisDayOfMonth}
-                      onChange={(e) => setAnalysisDayOfMonth(Number(e.target.value))}
-                      className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none text-sm"
-                    >
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                        <option key={day} value={day} className="bg-slate-800">
-                          {day} 号
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={() => setShowBatchReminderModal(false)}
-                  className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm sm:text-base"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleCreateBatchReminder}
-                  disabled={loading}
-                  className="flex-1 py-2.5 sm:py-3 bg-amber-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base"
-                >
-                  {loading ? "创建中..." : `批量创建（${selectedItems.size}个）`}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 提醒记录弹窗 */}
-      <AnimatePresence>
-        {showReminderLogsModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
-            onClick={() => setShowReminderLogsModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-lg sm:mx-4 max-h-[85vh] overflow-y-auto safe-area-bottom"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base sm:text-lg font-semibold text-white">
-                  提醒记录 - {reminderLogsName} ({reminderLogsSymbol})
-                </h3>
-                <button onClick={() => setShowReminderLogsModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-
-              {loadingLogs ? (
-                <div className="py-8 text-center">
-                  <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-2" />
-                  <span className="text-sm text-slate-400">加载中...</span>
-                </div>
-              ) : reminderLogs.length === 0 ? (
-                <div className="py-8 text-center">
-                  <Bell className="w-12 h-12 text-slate-600 mx-auto mb-2" />
-                  <span className="text-sm text-slate-500">暂无提醒记录</span>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-                  {reminderLogs.map((log, index) => (
-                    <div key={index} className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className={`px-2 py-0.5 text-xs rounded ${
-                          log.reminder_type === 'buy' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                        }`}>
-                          {log.reminder_type === 'buy' ? '低位提醒' : '高位提醒'}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {(() => {
-                            const d = new Date(log.created_at);
-                            return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-                          })()}
-                        </span>
-                      </div>
-                      <div className="text-sm text-slate-300 mb-2">{log.message}</div>
-                      <div className="flex flex-wrap gap-3 text-xs">
-                        {log.current_price && (
-                          <span className="text-slate-400">当前价: <span className="text-white">{getCurrencySymbol(log.symbol)}{log.current_price.toFixed(3)}</span></span>
-                        )}
-                        {log.buy_price && (
-                          <span className="text-emerald-400/70">支撑位: {getCurrencySymbol(log.symbol)}{log.buy_price.toFixed(3)}</span>
-                        )}
-                        {log.buy_quantity && (
-                          <span className="text-emerald-400/70">参考量: {log.buy_quantity}股</span>
-                        )}
-                        {log.sell_price && (
-                          <span className="text-rose-400/70">阻力位: {getCurrencySymbol(log.symbol)}{log.sell_price.toFixed(3)}</span>
-                        )}
-                        {log.sell_quantity && (
-                          <span className="text-rose-400/70">参考量: {log.sell_quantity}股</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-4">
-                <button
-                  onClick={() => setShowReminderLogsModal(false)}
-                  className="w-full py-2.5 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl text-sm"
-                >
-                  关闭
                 </button>
               </div>
             </motion.div>
