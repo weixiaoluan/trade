@@ -1888,7 +1888,7 @@ export default function DashboardPage() {
           <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg sm:rounded-xl">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
               </div>
               <div className="min-w-0">
                 <h3 className="text-xs sm:text-sm font-medium text-amber-400">账户待审核</h3>
