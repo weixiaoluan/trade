@@ -207,12 +207,17 @@ export default function DashboardPage() {
   });
   
   // 技术评级筛选状态
-  const [ratingFilter, setRatingFilter] = useState<string>(() => {
+  const [ratingFilter, setRatingFilter] = useState<string>('all');
+  
+  // 客户端挂载后从 localStorage 读取筛选状态
+  useEffect(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('dashboard_ratingFilter') || 'all';
+      const savedRatingFilter = localStorage.getItem('dashboard_ratingFilter');
+      if (savedRatingFilter) {
+        setRatingFilter(savedRatingFilter);
+      }
     }
-    return 'all';
-  });
+  }, []);
   
   // 保存筛选状态到 localStorage
   useEffect(() => {
