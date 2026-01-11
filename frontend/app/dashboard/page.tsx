@@ -124,27 +124,8 @@ interface QuoteData {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<UserInfo | null>(() => {
-    // 从 localStorage 初始化用户信息，避免等待API
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem("user");
-      if (storedUser) {
-        try {
-          return JSON.parse(storedUser);
-        } catch {
-          return null;
-        }
-      }
-    }
-    return null;
-  });
-  const [authChecked, setAuthChecked] = useState(() => {
-    // 如果有缓存的用户信息，直接标记为已检查
-    if (typeof window !== 'undefined') {
-      return !!(localStorage.getItem("token") && localStorage.getItem("user"));
-    }
-    return false;
-  });
+  const [user, setUser] = useState<UserInfo | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [tasks, setTasks] = useState<Record<string, TaskStatus>>({});
@@ -177,45 +158,48 @@ export default function DashboardPage() {
     type: "warning" as "warning" | "info" | "success" | "error",
   });
 
-  const [sortField, setSortField] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('dashboard_sortField') || null;
-    }
-    return null;
-  });
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('dashboard_sortOrder');
-      return (saved === 'asc' || saved === 'desc') ? saved : 'desc';
-    }
-    return 'desc';
-  });
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">('desc');
   
   // 搜索状态
-  const [searchQuery, setSearchQuery] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('dashboard_searchQuery') || '';
-    }
-    return '';
-  });
+  const [searchQuery, setSearchQuery] = useState('');
   // 周期筛选状态
-  const [periodFilter, setPeriodFilter] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('dashboard_periodFilter') || 'all';
-    }
-    return 'all';
-  });
+  const [periodFilter, setPeriodFilter] = useState<string>('all');
   
   // 技术评级筛选状态
   const [ratingFilter, setRatingFilter] = useState<string>('all');
   
-  // 客户端挂载后从 localStorage 读取筛选状态
+  // 客户端挂载后从 localStorage 读取初始状态
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedRatingFilter = localStorage.getItem('dashboard_ratingFilter');
-      if (savedRatingFilter) {
-        setRatingFilter(savedRatingFilter);
+      // 读取用户信息
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch {
+          // ignore
+        }
       }
+      // 检查是否已登录
+      if (localStorage.getItem("token") && localStorage.getItem("user")) {
+        setAuthChecked(true);
+      }
+      // 读取筛选状态
+      const savedSortField = localStorage.getItem('dashboard_sortField');
+      if (savedSortField) setSortField(savedSortField);
+      
+      const savedSortOrder = localStorage.getItem('dashboard_sortOrder');
+      if (savedSortOrder === 'asc' || savedSortOrder === 'desc') setSortOrder(savedSortOrder);
+      
+      const savedSearchQuery = localStorage.getItem('dashboard_searchQuery');
+      if (savedSearchQuery) setSearchQuery(savedSearchQuery);
+      
+      const savedPeriodFilter = localStorage.getItem('dashboard_periodFilter');
+      if (savedPeriodFilter) setPeriodFilter(savedPeriodFilter);
+      
+      const savedRatingFilter = localStorage.getItem('dashboard_ratingFilter');
+      if (savedRatingFilter) setRatingFilter(savedRatingFilter);
     }
   }, []);
   
