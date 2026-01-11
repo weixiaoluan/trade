@@ -359,11 +359,15 @@ export default function DashboardPage() {
   // 获取支撑位/阻力位/风险位数值的颜色（与涨跌幅逻辑一致）
   // 当前价高于目标价（正数）用红色，当前价低于目标价（负数）用绿色
   const getPriceValueColor = useCallback((currentPrice: number | undefined, targetPrice: number | undefined, type: 'support' | 'resistance' | 'risk') => {
+    // 默认颜色
+    const defaultColors = {
+      support: 'text-emerald-400',
+      resistance: 'text-rose-400',
+      risk: 'text-orange-400'
+    };
+    
     if (!currentPrice || !targetPrice || currentPrice <= 0 || targetPrice <= 0) {
-      // 默认颜色
-      if (type === 'support') return 'text-emerald-400';
-      if (type === 'resistance') return 'text-rose-400';
-      return 'text-orange-400';
+      return defaultColors[type];
     }
     
     const diff = currentPrice - targetPrice;
@@ -371,14 +375,14 @@ export default function DashboardPage() {
     
     // 触达判断（差异小于0.5%）- 用黄色
     if (Math.abs(diffPercent) < 0.5) {
-      return 'text-amber-400';
+      return 'text-amber-400 font-bold';
     }
     
-    // 当前价高于目标价 - 红色
+    // 当前价高于目标价 - 红色（涨）
     if (diff > 0) {
       return 'text-rose-400';
     }
-    // 当前价低于目标价 - 绿色
+    // 当前价低于目标价 - 绿色（跌）
     return 'text-emerald-400';
   }, []);
 
