@@ -206,6 +206,14 @@ export default function DashboardPage() {
     return 'all';
   });
   
+  // 技术评级筛选状态
+  const [ratingFilter, setRatingFilter] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dashboard_ratingFilter') || 'all';
+    }
+    return 'all';
+  });
+  
   // 保存筛选状态到 localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -238,6 +246,12 @@ export default function DashboardPage() {
       localStorage.setItem('dashboard_periodFilter', periodFilter);
     }
   }, [periodFilter]);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dashboard_ratingFilter', ratingFilter);
+    }
+  }, [ratingFilter]);
   
   // 移动端操作菜单
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
@@ -340,6 +354,32 @@ export default function DashboardPage() {
         color: 'text-emerald-400 font-medium' 
       };
     }
+  }, []);
+
+  // 获取支撑位/阻力位/风险位数值的颜色（与涨跌幅逻辑一致）
+  // 当前价高于目标价（正数）用红色，当前价低于目标价（负数）用绿色
+  const getPriceValueColor = useCallback((currentPrice: number | undefined, targetPrice: number | undefined, type: 'support' | 'resistance' | 'risk') => {
+    if (!currentPrice || !targetPrice || currentPrice <= 0 || targetPrice <= 0) {
+      // 默认颜色
+      if (type === 'support') return 'text-emerald-400';
+      if (type === 'resistance') return 'text-rose-400';
+      return 'text-orange-400';
+    }
+    
+    const diff = currentPrice - targetPrice;
+    const diffPercent = (diff / targetPrice) * 100;
+    
+    // 触达判断（差异小于0.5%）- 用黄色
+    if (Math.abs(diffPercent) < 0.5) {
+      return 'text-amber-400';
+    }
+    
+    // 当前价高于目标价 - 红色
+    if (diff > 0) {
+      return 'text-rose-400';
+    }
+    // 当前价低于目标价 - 绿色
+    return 'text-emerald-400';
   }, []);
 
   // 获取技术评级的颜色样式（强势红色深浅，弱势绿色深浅）
@@ -1152,6 +1192,29 @@ export default function DashboardPage() {
       sorted = sorted.filter(item => item.holding_period === periodFilter);
     }
     
+    // 技术评级筛选
+    if (ratingFilter !== "all") {
+      sorted = sorted.filter(item => {
+        const rating = (item.ai_recommendation || '').toLowerCase();
+        switch (ratingFilter) {
+          case 'strong':
+            return rating.includes('强势') || rating === '强势';
+          case 'bullish':
+            return rating.includes('偏强') || rating === '偏强';
+          case 'neutral':
+            return rating.includes('中性') || rating.includes('震荡') || rating === '中性' || rating === '震荡';
+          case 'bearish':
+            return rating.includes('偏弱') || rating === '偏弱';
+          case 'weak':
+            return rating.includes('弱势') || rating === '弱势';
+          case 'none':
+            return !item.ai_recommendation;
+          default:
+            return true;
+        }
+      });
+    }
+    
     sorted.sort((a, b) => (b.starred || 0) - (a.starred || 0));
     
     if (sortField && quotes) {
@@ -1201,7 +1264,7 @@ export default function DashboardPage() {
     }
     
     return sorted;
-  }, [watchlist, sortField, sortOrder, quotes, searchQuery, periodFilter, reportsBySymbol]);
+  }, [watchlist, sortField, sortOrder, quotes, searchQuery, periodFilter, ratingFilter, reportsBySymbol]);
 
   const pagedWatchlist = useMemo(() => {
     return sortedWatchlist.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -2004,6 +2067,23 @@ export default function DashboardPage() {
               <option value="swing" className="bg-slate-800">波段</option>
               <option value="long" className="bg-slate-800">中长线</option>
             </select>
+            {/* 技术评级筛选 */}
+            <select
+              value={ratingFilter}
+              onChange={(e) => {
+                setRatingFilter(e.target.value);
+                setCurrentPage(1); // 筛选时重置到第一页
+              }}
+              className="px-2 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs sm:text-sm cursor-pointer"
+            >
+              <option value="all" className="bg-slate-800">全部评级</option>
+              <option value="strong" className="bg-slate-800">强势</option>
+              <option value="bullish" className="bg-slate-800">偏强</option>
+              <option value="neutral" className="bg-slate-800">中性/震荡</option>
+              <option value="bearish" className="bg-slate-800">偏弱</option>
+              <option value="weak" className="bg-slate-800">弱势</option>
+              <option value="none" className="bg-slate-800">未评级</option>
+            </select>
             {/* 排序选择 */}
             <select
               value={sortField ? `${sortField}:${sortOrder}` : "default"}
@@ -2318,7 +2398,10 @@ export default function DashboardPage() {
                             <div className="min-w-[95px]">
                               <div className="text-xs text-emerald-400/80 mb-1">支撑位</div>
                               <div className="flex flex-col">
-                                <span className="font-mono text-base font-semibold text-emerald-400">
+                                <span className={`font-mono text-base font-semibold ${(() => {
+                                    const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                    return getPriceValueColor(quote?.current_price, prices.support, 'support');
+                                  })()}`}>
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     return prices.support ? `${getCurrencySymbol(item.symbol)}${prices.support.toFixed(3)}` : "-";
@@ -2336,7 +2419,10 @@ export default function DashboardPage() {
                             <div className="min-w-[95px]">
                               <div className="text-xs text-rose-400/80 mb-1">阻力位</div>
                               <div className="flex flex-col">
-                                <span className="font-mono text-base font-semibold text-rose-400">
+                                <span className={`font-mono text-base font-semibold ${(() => {
+                                    const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                    return getPriceValueColor(quote?.current_price, prices.resistance, 'resistance');
+                                  })()}`}>
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     return prices.resistance ? `${getCurrencySymbol(item.symbol)}${prices.resistance.toFixed(3)}` : "-";
@@ -2354,7 +2440,10 @@ export default function DashboardPage() {
                             <div className="min-w-[95px]">
                               <div className="text-xs text-orange-400/80 mb-1">风险位</div>
                               <div className="flex flex-col">
-                                <span className="font-mono text-base font-semibold text-orange-400">
+                                <span className={`font-mono text-base font-semibold ${(() => {
+                                    const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                                    return getPriceValueColor(quote?.current_price, prices.risk, 'risk');
+                                  })()}`}>
                                   {(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                                     return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";
@@ -2552,7 +2641,10 @@ export default function DashboardPage() {
                       {/* 支撑位 - 根据选择的周期显示 */}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
-                          <span className="font-mono text-base font-semibold text-emerald-400">
+                          <span className={`font-mono text-base font-semibold ${(() => {
+                              const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                              return getPriceValueColor(quote?.current_price, prices.support, 'support');
+                            })()}`}>
                             {(() => {
                               const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                               return prices.support ? `${getCurrencySymbol(item.symbol)}${prices.support.toFixed(3)}` : "-";
@@ -2571,7 +2663,10 @@ export default function DashboardPage() {
                       {/* 阻力位 - 根据选择的周期显示 */}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
-                          <span className="font-mono text-base font-semibold text-rose-400">
+                          <span className={`font-mono text-base font-semibold ${(() => {
+                              const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                              return getPriceValueColor(quote?.current_price, prices.resistance, 'resistance');
+                            })()}`}>
                             {(() => {
                               const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                               return prices.resistance ? `${getCurrencySymbol(item.symbol)}${prices.resistance.toFixed(3)}` : "-";
@@ -2590,7 +2685,10 @@ export default function DashboardPage() {
                       {/* 风险位 - 根据选择的周期显示 */}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
-                          <span className="font-mono text-base font-semibold text-orange-400">
+                          <span className={`font-mono text-base font-semibold ${(() => {
+                              const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
+                              return getPriceValueColor(quote?.current_price, prices.risk, 'risk');
+                            })()}`}>
                             {(() => {
                               const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
                               return prices.risk ? `${getCurrencySymbol(item.symbol)}${prices.risk.toFixed(3)}` : "-";

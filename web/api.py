@@ -864,9 +864,10 @@ async def delete_watchlist_item(
 @app.post("/api/watchlist/batch")
 async def batch_add_watchlist_items(
     items: List[WatchlistItem],
+    background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
-    """批量添加自选 - 快速添加，不调用外部API"""
+    """批量添加自选 - 快速添加，名称后台异步获取"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -903,6 +904,10 @@ async def batch_add_watchlist_items(
         processed_items.append(item_data)
     
     result = batch_add_to_watchlist(user['username'], processed_items)
+    
+    # 后台异步获取名称和更精确的类型（针对成功添加的标的）
+    for symbol in result['added']:
+        background_tasks.add_task(update_watchlist_name_and_type, user['username'], symbol)
     
     return {
         "status": "success",
