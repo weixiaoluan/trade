@@ -5,6 +5,14 @@ module.exports = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  // 确保动态生成的颜色类被包含
+  safelist: [
+    'text-emerald-400',
+    'text-rose-400',
+    'text-orange-400',
+    'text-amber-400',
+    'font-bold',
+  ],
   theme: {
     // 添加自定义断点以更好地支持各种屏幕尺寸
     screens: {
