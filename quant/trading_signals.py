@@ -620,7 +620,8 @@ class TradingSignalGenerator:
 
 
 def generate_trading_analysis(indicators: Dict, support_resistance: Dict, 
-                               quant_analysis: Dict = None, trend_analysis: Dict = None) -> Dict:
+                               quant_analysis: Dict = None, trend_analysis: Dict = None,
+                               holding_period: str = "swing") -> Dict:
     """
     生成完整的交易分析结果
     
@@ -636,6 +637,7 @@ def generate_trading_analysis(indicators: Dict, support_resistance: Dict,
         support_resistance: 支撑阻力位数据
         quant_analysis: 量化分析数据（可选）
         trend_analysis: 趋势分析数据（可选）
+        holding_period: 持有周期 (short/swing/long)
     
     Returns:
         包含信号、风险管理、操作建议的完整分析结果
@@ -664,7 +666,7 @@ def generate_trading_analysis(indicators: Dict, support_resistance: Dict,
         signal_strength=signal.strength
     )
 
-    # 生成操作建议
+    # 生成操作建议（根据信号类型生成对应的策略）
     quant_score = quant_analysis.get("quant_score", 50) if quant_analysis else 50
     if signal.signal_type == SignalType.BUY:
         if signal.strength >= 4:
@@ -716,5 +718,174 @@ def generate_trading_analysis(indicators: Dict, support_resistance: Dict,
         },
         "action_suggestion": action_suggestion,
         "current_price": current_price,
+        "holding_period": holding_period,
         "disclaimer": "以上内容仅为技术分析工具输出，综合量化评分、技术指标、趋势分析等数据生成，不构成任何投资建议。市场有风险，投资需谨慎，请独立判断并自行承担风险。"
     }
+
+
+def generate_multi_period_signals(indicators: Dict, support_resistance: Dict,
+                                   quant_analysis: Dict = None, trend_analysis: Dict = None) -> Dict:
+    """
+    为所有三个周期（短线/波段/中长线）生成交易信号
+    
+    不同周期使用不同的参数权重：
+    - 短线(short): 更关注短期指标（RSI/KDJ/MACD交叉）
+    - 波段(swing): 均衡考虑各类指标
+    - 中长线(long): 更关注趋势指标（均线排列/ADX/云图）
+    
+    Args:
+        indicators: 技术指标数据
+        support_resistance: 支撑阻力位数据
+        quant_analysis: 量化分析数据（可选）
+        trend_analysis: 趋势分析数据（可选）
+    
+    Returns:
+        包含三个周期信号的字典
+    """
+    generator = TradingSignalGenerator()
+    
+    # 获取基础数据
+    current_price = indicators.get("latest_price", 0)
+    atr_data = indicators.get("atr", {})
+    atr = atr_data.get("value", current_price * 0.02)
+    
+    support_levels = [l.get("price", 0) for l in support_resistance.get("support_levels", [])]
+    resistance_levels = [l.get("price", 0) for l in support_resistance.get("resistance_levels", [])]
+    
+    # 生成基础信号（波段周期使用标准权重）
+    base_signal = generator.generate_signal(indicators, quant_analysis, trend_analysis)
+    
+    # 为不同周期调整信号
+    signals = {}
+    
+    # ========== 短线信号 ==========
+    # 短线更关注：RSI/KDJ超买超卖、MACD交叉、布林带位置、成交量
+    short_buy_score = 0
+    short_sell_score = 0
+    
+    # RSI (短线权重更高)
+    rsi = indicators.get("rsi", {})
+    rsi_value = rsi.get("value", 50)
+    if rsi.get("status") == "oversold":
+        short_buy_score += 3
+    elif rsi.get("status") == "overbought":
+        short_sell_score += 3
+    elif rsi_value < 40:
+        short_buy_score += 1
+    elif rsi_value > 60:
+        short_sell_score += 1
+    
+    # KDJ (短线权重更高)
+    kdj = indicators.get("kdj", {})
+    if kdj.get("crossover") == "golden_cross":
+        short_buy_score += 3
+    elif kdj.get("crossover") == "death_cross":
+        short_sell_score += 3
+    if kdj.get("status") == "oversold":
+        short_buy_score += 2
+    elif kdj.get("status") == "overbought":
+        short_sell_score += 2
+    
+    # MACD交叉 (短线关键信号)
+    macd = indicators.get("macd", {})
+    if macd.get("crossover") == "golden_cross":
+        short_buy_score += 3
+    elif macd.get("crossover") == "death_cross":
+        short_sell_score += 3
+    
+    # 布林带
+    bb = indicators.get("bollinger_bands", {})
+    if bb.get("status") == "near_lower":
+        short_buy_score += 2
+    elif bb.get("status") == "near_upper":
+        short_sell_score += 2
+    
+    # 成交量
+    vol = indicators.get("volume_analysis", {})
+    if vol.get("status") == "high_volume":
+        if short_buy_score > short_sell_score:
+            short_buy_score += 2
+        else:
+            short_sell_score += 2
+    
+    # 短线信号判定
+    if short_buy_score > short_sell_score + 2:
+        signals['short'] = 'buy'
+    elif short_sell_score > short_buy_score + 2:
+        signals['short'] = 'sell'
+    else:
+        signals['short'] = 'hold'
+    
+    # ========== 波段信号 ==========
+    # 波段使用基础信号（均衡考虑所有指标）
+    signals['swing'] = base_signal.signal_type.value
+    
+    # ========== 中长线信号 ==========
+    # 中长线更关注：均线排列、ADX趋势强度、云图、资金流向
+    long_buy_score = 0
+    long_sell_score = 0
+    
+    # 均线排列 (中长线关键)
+    ma_trend = indicators.get("ma_trend", "")
+    if ma_trend == "bullish_alignment":
+        long_buy_score += 4
+    elif ma_trend == "bearish_alignment":
+        long_sell_score += 4
+    
+    # 均线位置
+    ma_values = indicators.get("moving_averages", {})
+    ma60 = ma_values.get("MA60", 0)
+    ma120 = ma_values.get("MA120", 0)
+    if current_price > 0:
+        if ma60 > 0 and current_price > ma60:
+            long_buy_score += 2
+        elif ma60 > 0 and current_price < ma60:
+            long_sell_score += 2
+        if ma120 > 0 and current_price > ma120:
+            long_buy_score += 2
+        elif ma120 > 0 and current_price < ma120:
+            long_sell_score += 2
+    
+    # ADX趋势强度 (中长线关键)
+    adx = indicators.get("adx", {})
+    if adx.get("trend_strength") == "strong":
+        if adx.get("trend_direction") == "bullish":
+            long_buy_score += 3
+        else:
+            long_sell_score += 3
+    
+    # 云图 (中长线关键)
+    ichimoku = indicators.get("ichimoku", {})
+    if ichimoku.get("status") == "strong_bullish":
+        long_buy_score += 3
+    elif ichimoku.get("status") == "strong_bearish":
+        long_sell_score += 3
+    elif ichimoku.get("cloud_position") == "above_cloud":
+        long_buy_score += 2
+    elif ichimoku.get("cloud_position") == "below_cloud":
+        long_sell_score += 2
+    
+    # 资金流向
+    mfi = indicators.get("money_flow", {})
+    if mfi.get("mfi_status") == "inflow":
+        long_buy_score += 2
+    elif mfi.get("mfi_status") == "outflow":
+        long_sell_score += 2
+    
+    # 量化评分 (中长线参考)
+    if quant_analysis:
+        quant_score = quant_analysis.get("quant_score", 50)
+        if quant_score >= 65:
+            long_buy_score += 2
+        elif quant_score <= 35:
+            long_sell_score += 2
+    
+    # 中长线信号判定
+    if long_buy_score > long_sell_score + 3:
+        signals['long'] = 'buy'
+    elif long_sell_score > long_buy_score + 3:
+        signals['long'] = 'sell'
+    else:
+        signals['long'] = 'hold'
+    
+    return signals

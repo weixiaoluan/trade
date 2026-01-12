@@ -2044,13 +2044,14 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         quant_analysis_for_signal = trend_dict.get("quant_analysis", {})
         trend_analysis_for_signal = trend_dict.get("trend_analysis", trend_dict)
         
-        # 生成交易信号（整合AI分析+量化数据指标）
+        # 生成交易信号（整合AI分析+量化数据指标，包含多周期信号）
         trading_signals = await asyncio.to_thread(
             generate_trading_signals, 
             indicators, 
             levels,
             quant_analysis_for_signal,
-            trend_analysis_for_signal
+            trend_analysis_for_signal,
+            holding_period
         )
         trading_signals_dict = json.loads(trading_signals)
         
@@ -2464,22 +2465,27 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 for p in ['short', 'swing', 'long']
             )
             
-            # 从交易信号中提取多周期信号类型
+            # 从交易信号中提取多周期信号类型（现在直接使用返回的多周期信号）
             multi_period_signals = None
             if trading_signals_dict.get("status") == "success":
-                trading_signal = trading_signals_dict.get('trading_signal', {})
-                signal_type = trading_signal.get('signal_type', 'hold')
+                # 优先使用返回的多周期信号
+                multi_period_signals = trading_signals_dict.get('multi_period_signals')
                 
-                # 根据持有周期设置对应的信号
-                multi_period_signals = {'short': None, 'swing': None, 'long': None}
-                if holding_period == 'short':
-                    multi_period_signals['short'] = signal_type
-                elif holding_period == 'long':
-                    multi_period_signals['long'] = signal_type
-                else:
-                    multi_period_signals['swing'] = signal_type
+                # 如果没有多周期信号，则使用当前周期的信号
+                if not multi_period_signals:
+                    trading_signal = trading_signals_dict.get('trading_signal', {})
+                    signal_type = trading_signal.get('signal_type', 'hold')
+                    
+                    # 根据持有周期设置对应的信号
+                    multi_period_signals = {'short': None, 'swing': None, 'long': None}
+                    if holding_period == 'short':
+                        multi_period_signals['short'] = signal_type
+                    elif holding_period == 'long':
+                        multi_period_signals['long'] = signal_type
+                    else:
+                        multi_period_signals['swing'] = signal_type
                 
-                print(f"[交易信号] {original_symbol} 周期={holding_period}, 信号类型={signal_type}")
+                print(f"[交易信号] {original_symbol} 多周期信号: {multi_period_signals}")
             
             if ai_buy_price or ai_sell_price or ai_recommendation or has_multi_period or multi_period_signals:
                 db_update_watchlist_ai_prices(

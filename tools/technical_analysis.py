@@ -1545,7 +1545,8 @@ def get_support_resistance_levels(ohlcv_data: str) -> str:
 
 
 def generate_trading_signals(indicators_json: str, support_resistance_json: str, 
-                             quant_analysis: dict = None, trend_analysis: dict = None) -> str:
+                             quant_analysis: dict = None, trend_analysis: dict = None,
+                             holding_period: str = "swing") -> str:
     """
     生成交易信号和风险管理建议
     
@@ -1562,16 +1563,17 @@ def generate_trading_signals(indicators_json: str, support_resistance_json: str,
         support_resistance_json: get_support_resistance_levels 的输出
         quant_analysis: 量化分析数据（包含 quant_score, recommendation, market_regime 等）
         trend_analysis: 趋势分析数据（包含 bullish_signals, bearish_signals 等）
+        holding_period: 持有周期 (short/swing/long)
     
     Returns:
-        JSON 格式的交易信号和风险管理建议
+        JSON 格式的交易信号和风险管理建议（包含多周期信号）
     """
     try:
         # 导入交易信号模块
         import sys
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).parent.parent))
-        from quant.trading_signals import generate_trading_analysis
+        from quant.trading_signals import generate_trading_analysis, generate_multi_period_signals
         
         # 解析输入数据
         indicators_data = json.loads(indicators_json)
@@ -1591,10 +1593,19 @@ def generate_trading_signals(indicators_json: str, support_resistance_json: str,
             indicators, 
             sr_data, 
             quant_analysis=quant_analysis,
+            trend_analysis=trend_analysis,
+            holding_period=holding_period
+        )
+        
+        # 生成多周期信号（短线/波段/中长线）
+        multi_period_signals = generate_multi_period_signals(
+            indicators,
+            sr_data,
+            quant_analysis=quant_analysis,
             trend_analysis=trend_analysis
         )
         
-        # 返回完整结果（新格式包含 position_strategy）
+        # 返回完整结果（包含多周期信号）
         return json.dumps({
             "status": "success",
             "ticker": indicators.get("ticker", ""),
@@ -1602,7 +1613,9 @@ def generate_trading_signals(indicators_json: str, support_resistance_json: str,
             "risk_management": result["risk_management"],
             "action_suggestion": result["action_suggestion"],
             "current_price": result["current_price"],
+            "holding_period": holding_period,
             "disclaimer": result["disclaimer"],
+            "multi_period_signals": multi_period_signals,
             "data_sources": {
                 "technical_indicators": True,
                 "quant_analysis": quant_analysis is not None,
