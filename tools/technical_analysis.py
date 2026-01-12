@@ -1542,3 +1542,55 @@ def get_support_resistance_levels(ohlcv_data: str) -> str:
             "status": "error",
             "message": str(e)
         }, ensure_ascii=False)
+
+
+def generate_trading_signals(indicators_json: str, support_resistance_json: str) -> str:
+    """
+    生成交易信号和风险管理建议
+    
+    Args:
+        indicators_json: calculate_all_indicators 的输出
+        support_resistance_json: get_support_resistance_levels 的输出
+    
+    Returns:
+        JSON 格式的交易信号和风险管理建议
+    """
+    try:
+        # 导入交易信号模块
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from quant.trading_signals import generate_trading_analysis
+        
+        # 解析输入数据
+        indicators_data = json.loads(indicators_json)
+        sr_data = json.loads(support_resistance_json)
+        
+        if indicators_data.get("status") != "success":
+            return json.dumps({
+                "status": "error",
+                "message": "指标数据无效"
+            }, ensure_ascii=False)
+        
+        # 获取指标数据
+        indicators = indicators_data.get("indicators", indicators_data)
+        
+        # 生成交易分析
+        result = generate_trading_analysis(indicators, sr_data)
+        
+        return json.dumps({
+            "status": "success",
+            "ticker": indicators.get("ticker", ""),
+            "trading_signal": result["signal"],
+            "risk_management": result["risk_management"],
+            "action_suggestion": result["action_suggestion"],
+            "current_price": result["current_price"],
+            "disclaimer": result["disclaimer"],
+            "analysis_timestamp": datetime.now().isoformat()
+        }, ensure_ascii=False)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        }, ensure_ascii=False)

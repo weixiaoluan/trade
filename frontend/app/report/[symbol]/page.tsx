@@ -14,6 +14,7 @@ const StockCard = dynamic(() => import("@/components/ui/StockCard").then(m => ({
 const QuantDashboardCard = dynamic(() => import("@/components/ui/QuantDashboardCard").then(m => ({ default: m.QuantDashboardCard })), { ssr: false });
 const AIRecommendationCard = dynamic(() => import("@/components/ui/AIRecommendationCard").then(m => ({ default: m.AIRecommendationCard })), { ssr: false });
 const PredictionTimeline = dynamic(() => import("@/components/ui/PredictionTimeline").then(m => ({ default: m.PredictionTimeline })), { ssr: false });
+const TradingSignalCard = dynamic(() => import("@/components/ui/TradingSignalCard").then(m => ({ default: m.TradingSignalCard })), { ssr: false });
 
 // 骨架屏组件
 const SkeletonCard = memo(({ className = "" }: { className?: string }) => (
@@ -188,6 +189,7 @@ export default function ReportPage() {
       adxTrendStrength,
       atrPct,
       signalDetails,
+      tradingSignal: data.trading_signal || null,
     };
   };
 
@@ -343,6 +345,18 @@ export default function ReportPage() {
               </div>
             )}
           </div>
+
+          {/* Trading Signal Card - 交易信号与风险管理 */}
+          {result.tradingSignal && result.tradingSignal.signal && (
+            <div className="lg:col-span-3 animate-slideUp" style={{ animationDelay: '0.2s' }}>
+              <TradingSignalCard
+                signal={result.tradingSignal.signal}
+                riskManagement={result.tradingSignal.risk_management}
+                actionSuggestion={result.tradingSignal.action_suggestion}
+                currentPrice={result.tradingSignal.current_price}
+              />
+            </div>
+          )}
 
           {/* Analysis Report */}
           <div

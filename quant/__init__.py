@@ -11,6 +11,14 @@ from .bar_generator import BarGenerator
 from .quant_agent import QuantAgent
 from .market_regime import MarketRegimeAnalyzer
 from .after_hours_detector import AfterHoursDetector
+from .trading_signals import (
+    TradingSignalGenerator,
+    TradingSignal,
+    RiskManagement,
+    SignalType,
+    SignalStrength,
+    generate_trading_analysis,
+)
 
 __all__ = [
     "QuantEventEngine",
@@ -19,4 +27,10 @@ __all__ = [
     "QuantAgent",
     "MarketRegimeAnalyzer",
     "AfterHoursDetector",
+    "TradingSignalGenerator",
+    "TradingSignal",
+    "RiskManagement",
+    "SignalType",
+    "SignalStrength",
+    "generate_trading_analysis",
 ]

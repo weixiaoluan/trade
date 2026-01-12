@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import get_llm_config, APIConfig, SystemConfig
 from tools.data_fetcher import get_stock_data, get_stock_info, get_financial_data, search_ticker
-from tools.technical_analysis import calculate_all_indicators, analyze_trend, get_support_resistance_levels
+from tools.technical_analysis import calculate_all_indicators, analyze_trend, get_support_resistance_levels, generate_trading_signals
 from web.auth import (
     RegisterRequest, LoginRequest, WatchlistItem,
     get_user_by_username, get_user_by_phone, create_user, verify_password,
@@ -2034,6 +2034,15 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         if trend_dict.get("status") == "error":
             raise Exception(f"无法分析 {ticker} 的趋势")
         
+        # === 阶段3.5：生成交易信号 ===
+        update_analysis_task(username, original_symbol, {
+            'progress': 25,
+            'current_step': '生成交易信号'
+        })
+        
+        trading_signals = await asyncio.to_thread(generate_trading_signals, indicators, levels)
+        trading_signals_dict = json.loads(trading_signals)
+        
         print(f"[分析] {ticker} 量化分析完成 耗时{time.time()-start_time:.1f}s")
         
         # === 阶段4：AI报告生成（30-95%）===
@@ -2097,6 +2106,17 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         completed_at = get_beijing_now()
         report = normalize_report_timestamp(report, completed_at)
         
+        # 提取交易信号数据
+        trading_signal_data = None
+        if trading_signals_dict.get("status") == "success":
+            trading_signal_data = {
+                'signal': trading_signals_dict.get('trading_signal', {}),
+                'risk_management': trading_signals_dict.get('risk_management', {}),
+                'action_suggestion': trading_signals_dict.get('action_suggestion', ''),
+                'current_price': trading_signals_dict.get('current_price', 0),
+                'disclaimer': trading_signals_dict.get('disclaimer', '')
+            }
+        
         report_data = {
             'status': 'completed',
             'ticker': original_symbol,
@@ -2107,6 +2127,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             'ai_summary': ai_summary,
             'indicator_overview': indicator_overview,
             'signal_details': signal_details,
+            'trading_signal': trading_signal_data,
             'stock_info': stock_info_dict,
             'indicators': indicators_dict,
             'levels': levels_dict
