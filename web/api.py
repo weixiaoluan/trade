@@ -2040,7 +2040,18 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             'current_step': '生成交易信号'
         })
         
-        trading_signals = await asyncio.to_thread(generate_trading_signals, indicators, levels)
+        # 提取量化分析和趋势分析数据，传递给交易信号生成器
+        quant_analysis_for_signal = trend_dict.get("quant_analysis", {})
+        trend_analysis_for_signal = trend_dict.get("trend_analysis", trend_dict)
+        
+        # 生成交易信号（整合AI分析+量化数据指标）
+        trading_signals = await asyncio.to_thread(
+            generate_trading_signals, 
+            indicators, 
+            levels,
+            quant_analysis_for_signal,
+            trend_analysis_for_signal
+        )
         trading_signals_dict = json.loads(trading_signals)
         
         print(f"[分析] {ticker} 量化分析完成 耗时{time.time()-start_time:.1f}s")
@@ -2453,17 +2464,37 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 for p in ['short', 'swing', 'long']
             )
             
-            if ai_buy_price or ai_sell_price or ai_recommendation or has_multi_period:
+            # 从交易信号中提取多周期信号类型
+            multi_period_signals = None
+            if trading_signals_dict.get("status") == "success":
+                trading_signal = trading_signals_dict.get('trading_signal', {})
+                signal_type = trading_signal.get('signal_type', 'hold')
+                
+                # 根据持有周期设置对应的信号
+                multi_period_signals = {'short': None, 'swing': None, 'long': None}
+                if holding_period == 'short':
+                    multi_period_signals['short'] = signal_type
+                elif holding_period == 'long':
+                    multi_period_signals['long'] = signal_type
+                else:
+                    multi_period_signals['swing'] = signal_type
+                
+                print(f"[交易信号] {original_symbol} 周期={holding_period}, 信号类型={signal_type}")
+            
+            if ai_buy_price or ai_sell_price or ai_recommendation or has_multi_period or multi_period_signals:
                 db_update_watchlist_ai_prices(
                     username, original_symbol, 
                     ai_buy_price, ai_sell_price, 
                     ai_buy_quantity, ai_sell_quantity, 
                     ai_recommendation,
-                    multi_period_prices if has_multi_period else None
+                    multi_period_prices if has_multi_period else None,
+                    multi_period_signals
                 )
                 print(f"[AI价格] 已更新 {original_symbol}: 评级={ai_recommendation}, 支撑位={ai_buy_price}, 阻力位={ai_sell_price}")
                 if has_multi_period:
                     print(f"[AI价格] 多周期价位已更新: {multi_period_prices}")
+                if multi_period_signals:
+                    print(f"[AI价格] 多周期信号已更新: {multi_period_signals}")
                 
                 # 将AI建议价格添加到report_data中，便于前端获取
                 report_data['ai_buy_price'] = ai_buy_price
@@ -2472,6 +2503,7 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 report_data['ai_sell_quantity'] = ai_sell_quantity
                 report_data['ai_recommendation'] = ai_recommendation
                 report_data['multi_period_prices'] = multi_period_prices
+                report_data['multi_period_signals'] = multi_period_signals
             
             # 更新持有周期到自选列表
             from web.database import db_update_watchlist_item

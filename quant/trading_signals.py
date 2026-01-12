@@ -4,7 +4,14 @@
 Trading Signal System Module
 ============================================
 
-提供买入/卖出信号触发、风险管理计算、多周期确认等功能
+综合AI分析+量化数据指标，生成可行的交易方案参考
+基于以下数据源：
+1. 技术指标分析（12+指标）
+2. 量化评分系统
+3. 趋势分析（多空信号统计）
+4. 市场状态判断
+5. 支撑阻力位分析
+
 仅供技术分析参考，不构成投资建议
 """
 
@@ -50,24 +57,30 @@ class RiskManagement:
     take_profit_3: float             # 止盈目标3 (1:5风险收益比)
     suggested_position_pct: float    # 建议仓位百分比
     risk_reward_ratio: str           # 风险收益比
-    max_loss_per_trade: float        # 单笔最大亏损金额(假设10万本金)
 
 
 @dataclass
-class MultiTimeframeSignal:
-    """多周期信号确认"""
-    daily_signal: SignalType
-    weekly_signal: Optional[SignalType]
-    monthly_signal: Optional[SignalType]
-    confirmation_level: str          # strong/medium/weak
-    description: str
+class PositionStrategy:
+    """仓位策略"""
+    empty_position: str              # 空仓时操作建议
+    first_entry: str                 # 首次建仓建议
+    add_position: str                # 加仓条件
+    reduce_position: str             # 减仓条件
+    full_exit: str                   # 清仓条件
 
 
 class TradingSignalGenerator:
     """
     交易信号生成器
     
-    基于多维技术指标生成买入/卖出信号
+    综合AI分析+量化数据指标，生成可行的交易方案参考
+    数据来源：
+    1. 技术指标（均线/MACD/RSI/KDJ/布林带/成交量/ADX/SAR/云图/MFI/DMI/BIAS）
+    2. 量化评分系统（0-100分）
+    3. 趋势分析（多空信号统计）
+    4. 市场状态（趋势市/震荡市）
+    5. 支撑阻力位
+    
     仅供技术分析参考，不构成投资建议
     """
     
@@ -89,6 +102,11 @@ class TradingSignalGenerator:
             "mfi_inflow": 1,
             "dmi_bullish": 1,
             "bias_oversold": 1,
+            # 量化分析权重
+            "quant_strong_buy": 3,
+            "quant_buy": 2,
+            "high_quant_score": 2,
+            "bullish_trend": 2,
         }
         
         # 卖出信号触发条件权重
@@ -108,14 +126,22 @@ class TradingSignalGenerator:
             "mfi_outflow": 1,
             "dmi_bearish": 1,
             "bias_overbought": 1,
+            # 量化分析权重
+            "quant_strong_sell": 3,
+            "quant_sell": 2,
+            "low_quant_score": 2,
+            "bearish_trend": 2,
         }
 
-    def generate_signal(self, indicators: Dict) -> TradingSignal:
+
+    def generate_signal(self, indicators: Dict, quant_analysis: Dict = None, trend_analysis: Dict = None) -> TradingSignal:
         """
-        根据技术指标生成交易信号
+        根据技术指标+量化分析+趋势分析生成交易信号
         
         Args:
             indicators: 技术指标字典 (来自 calculate_all_indicators)
+            quant_analysis: 量化分析数据 (包含 quant_score, recommendation, market_regime 等)
+            trend_analysis: 趋势分析数据 (包含 bullish_signals, bearish_signals 等)
         
         Returns:
             TradingSignal 对象
@@ -128,6 +154,62 @@ class TradingSignalGenerator:
         buy_score = 0
         sell_score = 0
         
+        # ========== 第一部分：量化分析数据 ==========
+        if quant_analysis:
+            quant_score = quant_analysis.get("quant_score", 50)
+            quant_reco = quant_analysis.get("recommendation", "hold")
+            market_regime = quant_analysis.get("market_regime", "unknown")
+            
+            # 量化评分判断
+            if quant_score >= 70:
+                buy_triggered.append(f"量化评分优秀({quant_score:.0f}分)")
+                buy_score += self.buy_conditions["high_quant_score"]
+            elif quant_score <= 30:
+                sell_triggered.append(f"量化评分较低({quant_score:.0f}分)")
+                sell_score += self.sell_conditions["low_quant_score"]
+            elif quant_score >= 55:
+                buy_pending.append(f"量化评分中上({quant_score:.0f}分)")
+            elif quant_score <= 45:
+                sell_pending.append(f"量化评分中下({quant_score:.0f}分)")
+            
+            # 量化建议判断
+            if quant_reco == "strong_buy":
+                buy_triggered.append("量化建议：强烈看多")
+                buy_score += self.buy_conditions["quant_strong_buy"]
+            elif quant_reco == "buy":
+                buy_triggered.append("量化建议：看多")
+                buy_score += self.buy_conditions["quant_buy"]
+            elif quant_reco == "strong_sell":
+                sell_triggered.append("量化建议：强烈看空")
+                sell_score += self.sell_conditions["quant_strong_sell"]
+            elif quant_reco == "sell":
+                sell_triggered.append("量化建议：看空")
+                sell_score += self.sell_conditions["quant_sell"]
+            
+            # 市场状态判断
+            if market_regime == "trending":
+                buy_pending.append("市场处于趋势状态")
+            elif market_regime == "ranging":
+                sell_pending.append("市场处于震荡状态")
+        
+        # ========== 第二部分：趋势分析数据 ==========
+        if trend_analysis:
+            bullish_signals = trend_analysis.get("bullish_signals", 0)
+            bearish_signals = trend_analysis.get("bearish_signals", 0)
+            
+            if bullish_signals > bearish_signals + 3:
+                buy_triggered.append(f"多头信号占优({bullish_signals}:{bearish_signals})")
+                buy_score += self.buy_conditions["bullish_trend"]
+            elif bearish_signals > bullish_signals + 3:
+                sell_triggered.append(f"空头信号占优({bearish_signals}:{bullish_signals})")
+                sell_score += self.sell_conditions["bearish_trend"]
+            elif bullish_signals > bearish_signals:
+                buy_pending.append(f"多头略占优({bullish_signals}:{bearish_signals})")
+            elif bearish_signals > bullish_signals:
+                sell_pending.append(f"空头略占优({bearish_signals}:{bullish_signals})")
+
+        
+        # ========== 第三部分：技术指标分析 ==========
         # 1. 均线系统检查
         ma_trend = indicators.get("ma_trend", "")
         ma_values = indicators.get("moving_averages", {})
@@ -186,9 +268,9 @@ class TradingSignalGenerator:
             sell_score += self.sell_conditions["rsi_overbought"]
         else:
             if rsi_value < 40:
-                buy_pending.append(f"RSI偏低({rsi_value:.1f})，待进入超卖区")
+                buy_pending.append(f"RSI偏低({rsi_value:.1f})")
             elif rsi_value > 60:
-                sell_pending.append(f"RSI偏高({rsi_value:.1f})，待进入超买区")
+                sell_pending.append(f"RSI偏高({rsi_value:.1f})")
         
         # 4. KDJ检查
         kdj = indicators.get("kdj", {})
@@ -205,6 +287,7 @@ class TradingSignalGenerator:
         elif kdj.get("status") == "overbought":
             sell_triggered.append("KDJ超买区域")
             sell_score += self.sell_conditions["kdj_overbought"]
+
         
         # 5. 布林带检查
         bb = indicators.get("bollinger_bands", {})
@@ -283,6 +366,7 @@ class TradingSignalGenerator:
             sell_triggered.append("MFI超买")
             sell_score += 1
 
+
         # 11. DMI趋向指标检查
         dmi = indicators.get("dmi", {})
         if dmi.get("status") in ["strong_bullish", "bullish"]:
@@ -301,7 +385,7 @@ class TradingSignalGenerator:
             sell_triggered.append(f"BIAS超买({bias.get('bias_6', 0):.1f}%)")
             sell_score += self.sell_conditions["bias_overbought"]
         
-        # 计算信号类型和强度
+        # ========== 第四部分：综合计算信号 ==========
         total_score = buy_score + sell_score
         if total_score == 0:
             signal_type = SignalType.HOLD
@@ -309,11 +393,13 @@ class TradingSignalGenerator:
             confidence = 0.5
         elif buy_score > sell_score:
             signal_type = SignalType.BUY
-            strength = min(5, int(buy_score / 3) + 1)
+            score_diff = buy_score - sell_score
+            strength = min(5, max(1, int(score_diff / 2.5) + 1))
             confidence = buy_score / (buy_score + sell_score + 1)
         elif sell_score > buy_score:
             signal_type = SignalType.SELL
-            strength = min(5, int(sell_score / 3) + 1)
+            score_diff = sell_score - buy_score
+            strength = min(5, max(1, int(score_diff / 2.5) + 1))
             confidence = sell_score / (buy_score + sell_score + 1)
         else:
             signal_type = SignalType.HOLD
@@ -323,10 +409,10 @@ class TradingSignalGenerator:
         # 合并触发条件
         if signal_type == SignalType.BUY:
             triggered = buy_triggered
-            pending = buy_pending + [f"⚠️ {c}" for c in sell_triggered[:2]]
+            pending = buy_pending + [f"⚠️ {c}" for c in sell_triggered[:3]]
         elif signal_type == SignalType.SELL:
             triggered = sell_triggered
-            pending = sell_pending + [f"⚠️ {c}" for c in buy_triggered[:2]]
+            pending = sell_pending + [f"⚠️ {c}" for c in buy_triggered[:3]]
         else:
             triggered = []
             pending = buy_pending + sell_pending
@@ -339,6 +425,7 @@ class TradingSignalGenerator:
             confidence=confidence
         )
 
+
     def calculate_risk_management(
         self,
         current_price: float,
@@ -346,63 +433,43 @@ class TradingSignalGenerator:
         resistance_levels: List[float],
         atr: float,
         signal_type: SignalType,
-        account_capital: float = 100000
-    ) -> RiskManagement:
+        signal_strength: int = 3
+    ) -> Tuple[RiskManagement, PositionStrategy]:
         """
-        计算风险管理参数
-        
-        Args:
-            current_price: 当前价格
-            support_levels: 支撑位列表
-            resistance_levels: 阻力位列表
-            atr: 平均真实波幅
-            signal_type: 信号类型
-            account_capital: 账户资金(默认10万)
-        
-        Returns:
-            RiskManagement 对象
+        计算风险管理参数和仓位策略
         """
         if current_price <= 0:
             return self._default_risk_management(current_price)
         
         # 计算止损位
         if signal_type == SignalType.BUY:
-            # 买入信号：止损设在最近支撑位下方 1-1.5 个 ATR
             if support_levels and len(support_levels) > 0:
                 nearest_support = max([s for s in support_levels if s < current_price], default=current_price * 0.95)
                 stop_loss = nearest_support - atr * 1.5
             else:
                 stop_loss = current_price - atr * 2
-            
-            # 确保止损不会太远
-            max_stop_loss = current_price * 0.92  # 最大8%止损
+            max_stop_loss = current_price * 0.92
             stop_loss = max(stop_loss, max_stop_loss)
             
         elif signal_type == SignalType.SELL:
-            # 卖出信号：止损设在最近阻力位上方 1-1.5 个 ATR
             if resistance_levels and len(resistance_levels) > 0:
                 nearest_resistance = min([r for r in resistance_levels if r > current_price], default=current_price * 1.05)
                 stop_loss = nearest_resistance + atr * 1.5
             else:
                 stop_loss = current_price + atr * 2
-            
-            # 确保止损不会太远
-            min_stop_loss = current_price * 1.08  # 最大8%止损
+            min_stop_loss = current_price * 1.08
             stop_loss = min(stop_loss, min_stop_loss)
         else:
             stop_loss = current_price * 0.95
         
-        # 计算止损百分比
         stop_loss_pct = abs(current_price - stop_loss) / current_price * 100
-        
-        # 计算风险金额
         risk_per_share = abs(current_price - stop_loss)
         
-        # 计算止盈目标 (基于风险收益比)
+        # 计算止盈目标
         if signal_type == SignalType.BUY:
-            take_profit_1 = current_price + risk_per_share * 2   # 1:2
-            take_profit_2 = current_price + risk_per_share * 3   # 1:3
-            take_profit_3 = current_price + risk_per_share * 5   # 1:5
+            take_profit_1 = current_price + risk_per_share * 2
+            take_profit_2 = current_price + risk_per_share * 3
+            take_profit_3 = current_price + risk_per_share * 5
         elif signal_type == SignalType.SELL:
             take_profit_1 = current_price - risk_per_share * 2
             take_profit_2 = current_price - risk_per_share * 3
@@ -412,44 +479,123 @@ class TradingSignalGenerator:
             take_profit_2 = current_price * 1.08
             take_profit_3 = current_price * 1.12
 
-        # 计算建议仓位 (基于单笔最大亏损2%原则)
-        max_risk_pct = 0.02  # 单笔最大亏损2%
-        max_loss_amount = account_capital * max_risk_pct
-        
-        if risk_per_share > 0:
-            suggested_shares = max_loss_amount / risk_per_share
-            suggested_position_value = suggested_shares * current_price
-            suggested_position_pct = (suggested_position_value / account_capital) * 100
+        # 根据信号强度计算建议仓位
+        if signal_strength >= 4:
+            base_position = 25
+        elif signal_strength >= 3:
+            base_position = 20
+        elif signal_strength >= 2:
+            base_position = 15
         else:
-            suggested_position_pct = 10
+            base_position = 10
         
-        # 限制最大仓位
-        suggested_position_pct = min(suggested_position_pct, 30)  # 最大30%
-        suggested_position_pct = max(suggested_position_pct, 5)   # 最小5%
+        if stop_loss_pct > 5:
+            base_position = base_position * 0.8
+        elif stop_loss_pct < 3:
+            base_position = base_position * 1.2
         
-        return RiskManagement(
+        suggested_position_pct = min(30, max(5, round(base_position, 1)))
+        
+        risk_mgmt = RiskManagement(
             stop_loss=round(stop_loss, 4),
             stop_loss_pct=round(stop_loss_pct, 2),
             take_profit_1=round(take_profit_1, 4),
             take_profit_2=round(take_profit_2, 4),
             take_profit_3=round(take_profit_3, 4),
-            suggested_position_pct=round(suggested_position_pct, 1),
-            risk_reward_ratio="1:2 / 1:3 / 1:5",
-            max_loss_per_trade=round(max_loss_amount, 2)
+            suggested_position_pct=suggested_position_pct,
+            risk_reward_ratio="1:2 / 1:3 / 1:5"
+        )
+        
+        position_strategy = self._generate_position_strategy(
+            signal_type, signal_strength, suggested_position_pct, 
+            stop_loss, take_profit_1, current_price
+        )
+        
+        return risk_mgmt, position_strategy
+
+    
+    def _generate_position_strategy(
+        self, 
+        signal_type: SignalType, 
+        strength: int,
+        position_pct: float,
+        stop_loss: float,
+        take_profit: float,
+        current_price: float
+    ) -> PositionStrategy:
+        """生成仓位策略建议"""
+        position_cheng = round(position_pct / 10, 1)
+        first_entry_cheng = round(position_cheng / 3, 1)
+        add_cheng = round(position_cheng * 2 / 3, 1)
+        
+        if signal_type == SignalType.BUY:
+            if strength >= 4:
+                empty = f"多指标共振看多，可考虑分批建仓，首次{first_entry_cheng}成"
+                first = f"建议首次建仓{first_entry_cheng}成，设好止损后观察"
+                add = f"站稳支撑位且放量突破可加仓至{add_cheng}成"
+                reduce = f"跌破止损位{stop_loss:.3f}减仓至{first_entry_cheng/2:.1f}成"
+            elif strength >= 2:
+                empty = f"偏多信号，可小仓位试探，建议{first_entry_cheng}成以内"
+                first = f"建议轻仓试探{first_entry_cheng}成，严格止损"
+                add = f"确认突破阻力位后可加仓至{position_cheng}成"
+                reduce = f"跌破止损位{stop_loss:.3f}建议清仓"
+            else:
+                empty = "弱多信号，建议观望等待更多确认"
+                first = f"如需建仓建议不超过{first_entry_cheng}成"
+                add = "不建议加仓，等待信号增强"
+                reduce = f"跌破{stop_loss:.3f}立即止损"
+            full_exit = f"跌破止损位{stop_loss:.3f}或出现明确卖出信号时清仓"
+        elif signal_type == SignalType.SELL:
+            if strength >= 4:
+                empty = "多指标共振看空，保持空仓观望"
+                first = "不建议此时建仓，等待企稳信号"
+                add = "不建议加仓，空头趋势明显"
+                reduce = f"持仓者建议减仓至{first_entry_cheng}成以内"
+            elif strength >= 2:
+                empty = "偏空信号，保持谨慎观望"
+                first = "不建议建仓，等待止跌信号"
+                add = "不建议加仓"
+                reduce = f"持仓者建议减仓或设好止损"
+            else:
+                empty = "弱空信号，可观望但需警惕"
+                first = "暂不建议建仓"
+                add = "不建议加仓"
+                reduce = "持仓者注意风险控制"
+            full_exit = f"跌破关键支撑或止损位{stop_loss:.3f}时清仓"
+        else:
+            empty = "多空力量均衡，建议保持空仓观望"
+            first = "等待明确信号后再考虑建仓"
+            add = "不建议加仓，等待方向明确"
+            reduce = "持仓者可考虑减仓观望"
+            full_exit = "出现明确方向信号后再做决策"
+        
+        return PositionStrategy(
+            empty_position=empty,
+            first_entry=first,
+            add_position=add,
+            reduce_position=reduce,
+            full_exit=full_exit
         )
     
-    def _default_risk_management(self, price: float) -> RiskManagement:
+    def _default_risk_management(self, price: float) -> Tuple[RiskManagement, PositionStrategy]:
         """默认风险管理参数"""
-        return RiskManagement(
+        risk_mgmt = RiskManagement(
             stop_loss=price * 0.95,
             stop_loss_pct=5.0,
             take_profit_1=price * 1.10,
             take_profit_2=price * 1.15,
             take_profit_3=price * 1.25,
             suggested_position_pct=10.0,
-            risk_reward_ratio="1:2 / 1:3 / 1:5",
-            max_loss_per_trade=2000
+            risk_reward_ratio="1:2 / 1:3 / 1:5"
         )
+        position_strategy = PositionStrategy(
+            empty_position="数据不足，建议观望",
+            first_entry="建议等待更多数据",
+            add_position="不建议加仓",
+            reduce_position="持仓者注意风险",
+            full_exit=f"跌破{price * 0.95:.3f}时止损"
+        )
+        return risk_mgmt, position_strategy
 
     def get_signal_strength_label(self, strength: int) -> str:
         """获取信号强度标签"""
@@ -470,24 +616,34 @@ class TradingSignalGenerator:
         elif signal.signal_type == SignalType.SELL:
             return f"卖出信号触发 ({len(signal.triggered_conditions)}个条件满足)"
         else:
-            return "观望信号 (条件不充分)"
+            return "观望信号 (多空力量均衡)"
 
 
-def generate_trading_analysis(indicators: Dict, support_resistance: Dict) -> Dict:
+def generate_trading_analysis(indicators: Dict, support_resistance: Dict, 
+                               quant_analysis: Dict = None, trend_analysis: Dict = None) -> Dict:
     """
     生成完整的交易分析结果
+    
+    综合以下数据源生成交易信号：
+    1. 技术指标分析（12+指标）
+    2. 量化评分系统（0-100分）
+    3. 趋势分析（多空信号统计）
+    4. 市场状态判断
+    5. 支撑阻力位分析
     
     Args:
         indicators: 技术指标数据
         support_resistance: 支撑阻力位数据
+        quant_analysis: 量化分析数据（可选）
+        trend_analysis: 趋势分析数据（可选）
     
     Returns:
         包含信号、风险管理、操作建议的完整分析结果
     """
     generator = TradingSignalGenerator()
     
-    # 生成交易信号
-    signal = generator.generate_signal(indicators)
+    # 生成交易信号（整合量化分析和趋势分析）
+    signal = generator.generate_signal(indicators, quant_analysis, trend_analysis)
     
     # 获取价格和ATR
     current_price = indicators.get("latest_price", 0)
@@ -498,35 +654,39 @@ def generate_trading_analysis(indicators: Dict, support_resistance: Dict) -> Dic
     support_levels = [l.get("price", 0) for l in support_resistance.get("support_levels", [])]
     resistance_levels = [l.get("price", 0) for l in support_resistance.get("resistance_levels", [])]
     
-    # 计算风险管理
-    risk_mgmt = generator.calculate_risk_management(
+    # 计算风险管理和仓位策略
+    risk_mgmt, position_strategy = generator.calculate_risk_management(
         current_price=current_price,
         support_levels=support_levels,
         resistance_levels=resistance_levels,
         atr=atr,
-        signal_type=signal.signal_type
+        signal_type=signal.signal_type,
+        signal_strength=signal.strength
     )
 
     # 生成操作建议
+    quant_score = quant_analysis.get("quant_score", 50) if quant_analysis else 50
     if signal.signal_type == SignalType.BUY:
         if signal.strength >= 4:
-            action_suggestion = "多个指标共振看多，可考虑分批建仓"
+            action_suggestion = f"多指标共振看多（{len(signal.triggered_conditions)}项确认，量化评分{quant_score:.0f}），技术面偏强。可考虑分批建仓，首次建议{round(risk_mgmt.suggested_position_pct/30, 1)}成，站稳后逐步加仓。严格设置止损，控制风险。"
         elif signal.strength >= 2:
-            action_suggestion = "偏多信号，可小仓位试探"
+            action_suggestion = f"偏多信号（{len(signal.triggered_conditions)}项确认），可小仓位试探。建议轻仓参与，严格止损，等待更多确认信号后再考虑加仓。"
         else:
-            action_suggestion = "弱多信号，建议等待更多确认"
+            action_suggestion = "弱多信号，建议观望等待更多确认。如需参与建议极轻仓位，做好止损准备。"
     elif signal.signal_type == SignalType.SELL:
         if signal.strength >= 4:
-            action_suggestion = "多个指标共振看空，持仓者考虑减仓"
+            action_suggestion = f"多指标共振看空（{len(signal.triggered_conditions)}项确认，量化评分{quant_score:.0f}），技术面偏弱。持仓者建议减仓或清仓，空仓者保持观望等待企稳。"
         elif signal.strength >= 2:
-            action_suggestion = "偏空信号，注意风险控制"
+            action_suggestion = f"偏空信号（{len(signal.triggered_conditions)}项确认），注意风险控制。持仓者建议减仓，设好止损。空仓者继续观望。"
         else:
-            action_suggestion = "弱空信号，密切关注走势"
+            action_suggestion = "弱空信号，密切关注走势变化。持仓者注意风险，可适当减仓。"
     else:
-        action_suggestion = "多空力量均衡，建议观望等待明确信号"
+        action_suggestion = "多空力量均衡，方向不明确。建议保持观望，等待明确的方向信号出现后再做决策。"
     
     return {
-        "signal": {
+        "status": "success",
+        "trading_signal": {
+            "signal_type": signal.signal_type.value,
             "type": signal.signal_type.value,
             "type_cn": "买入" if signal.signal_type == SignalType.BUY else ("卖出" if signal.signal_type == SignalType.SELL else "观望"),
             "strength": signal.strength,
@@ -545,10 +705,16 @@ def generate_trading_analysis(indicators: Dict, support_resistance: Dict) -> Dic
                 {"level": 3, "price": risk_mgmt.take_profit_3, "ratio": "1:5"},
             ],
             "suggested_position_pct": risk_mgmt.suggested_position_pct,
-            "max_loss_per_trade": risk_mgmt.max_loss_per_trade,
             "risk_reward_ratio": risk_mgmt.risk_reward_ratio,
+            "position_strategy": {
+                "empty_position": position_strategy.empty_position,
+                "first_entry": position_strategy.first_entry,
+                "add_position": position_strategy.add_position,
+                "reduce_position": position_strategy.reduce_position,
+                "full_exit": position_strategy.full_exit,
+            }
         },
         "action_suggestion": action_suggestion,
         "current_price": current_price,
-        "disclaimer": "以上内容仅为技术分析工具输出，不构成投资建议，请独立判断并自行承担风险。"
+        "disclaimer": "以上内容仅为技术分析工具输出，综合量化评分、技术指标、趋势分析等数据生成，不构成任何投资建议。市场有风险，投资需谨慎，请独立判断并自行承担风险。"
     }

@@ -1544,13 +1544,24 @@ def get_support_resistance_levels(ohlcv_data: str) -> str:
         }, ensure_ascii=False)
 
 
-def generate_trading_signals(indicators_json: str, support_resistance_json: str) -> str:
+def generate_trading_signals(indicators_json: str, support_resistance_json: str, 
+                             quant_analysis: dict = None, trend_analysis: dict = None) -> str:
     """
     生成交易信号和风险管理建议
+    
+    综合AI分析+量化数据指标，生成可行的交易方案参考
+    数据来源：
+    1. 技术指标分析（12+指标）
+    2. 量化评分系统（0-100分）
+    3. 趋势分析（多空信号统计）
+    4. 市场状态判断
+    5. 支撑阻力位分析
     
     Args:
         indicators_json: calculate_all_indicators 的输出
         support_resistance_json: get_support_resistance_levels 的输出
+        quant_analysis: 量化分析数据（包含 quant_score, recommendation, market_regime 等）
+        trend_analysis: 趋势分析数据（包含 bullish_signals, bearish_signals 等）
     
     Returns:
         JSON 格式的交易信号和风险管理建议
@@ -1575,17 +1586,28 @@ def generate_trading_signals(indicators_json: str, support_resistance_json: str)
         # 获取指标数据
         indicators = indicators_data.get("indicators", indicators_data)
         
-        # 生成交易分析
-        result = generate_trading_analysis(indicators, sr_data)
+        # 生成交易分析（整合量化分析和趋势分析）
+        result = generate_trading_analysis(
+            indicators, 
+            sr_data, 
+            quant_analysis=quant_analysis,
+            trend_analysis=trend_analysis
+        )
         
+        # 返回完整结果（新格式包含 position_strategy）
         return json.dumps({
             "status": "success",
             "ticker": indicators.get("ticker", ""),
-            "trading_signal": result["signal"],
+            "trading_signal": result["trading_signal"],
             "risk_management": result["risk_management"],
             "action_suggestion": result["action_suggestion"],
             "current_price": result["current_price"],
             "disclaimer": result["disclaimer"],
+            "data_sources": {
+                "technical_indicators": True,
+                "quant_analysis": quant_analysis is not None,
+                "trend_analysis": trend_analysis is not None
+            },
             "analysis_timestamp": datetime.now().isoformat()
         }, ensure_ascii=False)
         
@@ -1594,3 +1616,4 @@ def generate_trading_signals(indicators_json: str, support_resistance_json: str)
             "status": "error",
             "message": str(e)
         }, ensure_ascii=False)
+

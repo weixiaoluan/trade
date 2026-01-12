@@ -267,6 +267,17 @@ def migrate_database():
             print("迁移: 添加 ai_recommendation 字段到 watchlist 表（技术面评级）")
             cursor.execute("ALTER TABLE watchlist ADD COLUMN ai_recommendation TEXT")
         
+        # 检查 watchlist 表是否有多周期信号类型字段（buy/sell/hold）
+        if 'short_signal' not in watchlist_columns:
+            print("迁移: 添加 short_signal 字段到 watchlist 表（短线信号类型）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN short_signal TEXT")
+        if 'swing_signal' not in watchlist_columns:
+            print("迁移: 添加 swing_signal 字段到 watchlist 表（波段信号类型）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN swing_signal TEXT")
+        if 'long_signal' not in watchlist_columns:
+            print("迁移: 添加 long_signal 字段到 watchlist 表（中长线信号类型）")
+            cursor.execute("ALTER TABLE watchlist ADD COLUMN long_signal TEXT")
+        
         # 检查 watchlist 表是否有 from_ai_pick 字段（标记是否来自研究列表）
         if 'from_ai_pick' not in watchlist_columns:
             print("迁移: 添加 from_ai_pick 字段到 watchlist 表")
@@ -486,7 +497,8 @@ def db_get_user_watchlist(username: str) -> List[Dict]:
                    COALESCE(from_ai_pick, 0) as from_ai_pick,
                    short_support, short_resistance, short_risk,
                    swing_support, swing_resistance, swing_risk,
-                   long_support, long_resistance, long_risk
+                   long_support, long_resistance, long_risk,
+                   short_signal, swing_signal, long_signal
             FROM watchlist WHERE username = ? 
             ORDER BY starred DESC, added_at DESC
         ''', (username,))
@@ -561,7 +573,8 @@ def db_update_watchlist_ai_prices(username: str, symbol: str,
                                    ai_buy_quantity: int = None,
                                    ai_sell_quantity: int = None,
                                    ai_recommendation: str = None,
-                                   multi_period_prices: dict = None) -> bool:
+                                   multi_period_prices: dict = None,
+                                   multi_period_signals: dict = None) -> bool:
     """更新自选项的技术分析参考价位（支撑位/阻力位）和技术面评级
     
     注意：这些数据仅供个人学习研究参考，不构成任何投资建议。
@@ -572,6 +585,11 @@ def db_update_watchlist_ai_prices(username: str, symbol: str,
         'short': {'support': x, 'resistance': x, 'risk': x},
         'swing': {'support': x, 'resistance': x, 'risk': x},
         'long': {'support': x, 'resistance': x, 'risk': x}
+      }
+    - multi_period_signals: 多周期信号类型 {
+        'short': 'buy'/'sell'/'hold',
+        'swing': 'buy'/'sell'/'hold',
+        'long': 'buy'/'sell'/'hold'
       }
     """
     with get_db() as conn:
@@ -601,6 +619,17 @@ def db_update_watchlist_ai_prices(username: str, symbol: str,
                 short.get('support'), short.get('resistance'), short.get('risk'),
                 swing.get('support'), swing.get('resistance'), swing.get('risk'),
                 long.get('support'), long.get('resistance'), long.get('risk')
+            ])
+        
+        # 多周期信号类型更新
+        if multi_period_signals:
+            updates.extend([
+                'short_signal = ?', 'swing_signal = ?', 'long_signal = ?'
+            ])
+            params.extend([
+                multi_period_signals.get('short'),
+                multi_period_signals.get('swing'),
+                multi_period_signals.get('long')
             ])
         
         params.extend([username, symbol])

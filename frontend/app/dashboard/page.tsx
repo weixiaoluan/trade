@@ -92,6 +92,10 @@ interface WatchlistItem {
   long_support?: number;
   long_resistance?: number;
   long_risk?: number;
+  // 多周期信号类型字段
+  short_signal?: string;
+  swing_signal?: string;
+  long_signal?: string;
 }
 
 interface TaskStatus {
@@ -166,7 +170,7 @@ export default function DashboardPage() {
   // 周期筛选状态
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   
-  // 技术评级筛选状态
+  // 信号类型筛选状态
   const [ratingFilter, setRatingFilter] = useState<string>('all');
   
   // 客户端挂载后从 localStorage 读取初始状态
@@ -402,6 +406,33 @@ export default function DashboardPage() {
     }
     
     return 'bg-slate-600/30 text-slate-400';
+  }, []);
+
+  // 根据周期获取对应的信号类型
+  const getPeriodSignal = useCallback((item: WatchlistItem, period: string) => {
+    switch (period) {
+      case 'short':
+        return item.short_signal;
+      case 'long':
+        return item.long_signal;
+      case 'swing':
+      default:
+        return item.swing_signal;
+    }
+  }, []);
+
+  // 获取信号类型的显示样式和文本
+  const getSignalDisplay = useCallback((signal: string | undefined) => {
+    if (!signal) return { icon: '⚪', text: '观望', style: 'bg-slate-500/20 text-slate-400 border border-slate-500/30' };
+    
+    const s = signal.toLowerCase();
+    if (s === 'buy' || s === '买入') {
+      return { icon: '🟢', text: '买入', style: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-semibold' };
+    }
+    if (s === 'sell' || s === '卖出') {
+      return { icon: '🔴', text: '卖出', style: 'bg-rose-500/20 text-rose-400 border border-rose-500/40 font-semibold' };
+    }
+    return { icon: '⚪', text: '观望', style: 'bg-slate-500/20 text-slate-400 border border-slate-500/30' };
   }, []);
 
   const [pendingAnalysisSymbols, setPendingAnalysisSymbols] = useState<string[]>([]);
@@ -1185,23 +1216,22 @@ export default function DashboardPage() {
       sorted = sorted.filter(item => item.holding_period === periodFilter);
     }
     
-    // 技术评级筛选
+    // 信号类型筛选（根据当前显示周期筛选）
     if (ratingFilter !== "all") {
       sorted = sorted.filter(item => {
-        const rating = (item.ai_recommendation || '').toLowerCase();
+        // 获取当前显示周期的信号
+        const displayPeriod = itemDisplayPeriods[item.symbol] || item.holding_period || 'swing';
+        const signal = (displayPeriod === 'short' ? item.short_signal : 
+                       displayPeriod === 'long' ? item.long_signal : 
+                       item.swing_signal) || '';
+        const s = signal.toLowerCase();
         switch (ratingFilter) {
-          case 'strong':
-            return rating.includes('强势') || rating === '强势';
-          case 'bullish':
-            return rating.includes('偏强') || rating === '偏强';
-          case 'neutral':
-            return rating.includes('中性') || rating.includes('震荡') || rating === '中性' || rating === '震荡';
-          case 'bearish':
-            return rating.includes('偏弱') || rating === '偏弱';
-          case 'weak':
-            return rating.includes('弱势') || rating === '弱势';
-          case 'none':
-            return !item.ai_recommendation;
+          case 'buy':
+            return s === 'buy' || s === '买入';
+          case 'sell':
+            return s === 'sell' || s === '卖出';
+          case 'hold':
+            return s === 'hold' || s === '观望' || !signal;
           default:
             return true;
         }
@@ -1257,7 +1287,7 @@ export default function DashboardPage() {
     }
     
     return sorted;
-  }, [watchlist, sortField, sortOrder, quotes, searchQuery, periodFilter, ratingFilter, reportsBySymbol]);
+  }, [watchlist, sortField, sortOrder, quotes, searchQuery, periodFilter, ratingFilter, reportsBySymbol, itemDisplayPeriods]);
 
   const pagedWatchlist = useMemo(() => {
     return sortedWatchlist.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -2060,7 +2090,7 @@ export default function DashboardPage() {
               <option value="swing" className="bg-slate-800">波段</option>
               <option value="long" className="bg-slate-800">中长线</option>
             </select>
-            {/* 技术评级筛选 */}
+            {/* 信号类型筛选 */}
             <select
               value={ratingFilter}
               onChange={(e) => {
@@ -2069,13 +2099,10 @@ export default function DashboardPage() {
               }}
               className="px-2 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs sm:text-sm cursor-pointer"
             >
-              <option value="all" className="bg-slate-800">全部评级</option>
-              <option value="strong" className="bg-slate-800">强势</option>
-              <option value="bullish" className="bg-slate-800">偏强</option>
-              <option value="neutral" className="bg-slate-800">中性/震荡</option>
-              <option value="bearish" className="bg-slate-800">偏弱</option>
-              <option value="weak" className="bg-slate-800">弱势</option>
-              <option value="none" className="bg-slate-800">未评级</option>
+              <option value="all" className="bg-slate-800">全部信号</option>
+              <option value="buy" className="bg-slate-800">🟢 买入</option>
+              <option value="sell" className="bg-slate-800">🔴 卖出</option>
+              <option value="hold" className="bg-slate-800">⚪ 观望</option>
             </select>
             {/* 排序选择 */}
             <select
@@ -2189,7 +2216,7 @@ export default function DashboardPage() {
               <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">成本价</div>
               <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">持仓盈亏</div>
               <div className="w-16 flex-shrink-0 text-sm font-semibold text-slate-300">周期</div>
-              <div className="w-20 flex-shrink-0 text-sm font-semibold text-indigo-400">技术评级</div>
+              <div className="w-20 flex-shrink-0 text-sm font-semibold text-indigo-400">信号类型</div>
               <div 
                 className="w-28 flex-shrink-0 text-sm font-semibold text-emerald-400 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-emerald-300"
                 onClick={() => handleSort("ai_buy_price")}
@@ -2379,14 +2406,17 @@ export default function DashboardPage() {
                           {/* 技术指标参考价位 - 移动端（始终显示预留空间） */}
                           <div className="flex flex-wrap items-start gap-4 mb-3 pt-2 border-t border-white/[0.05]">
                             <div className="min-w-[70px]">
-                              <div className="text-xs text-indigo-400/80 mb-1">技术评级</div>
-                              {item.ai_recommendation ? (
-                                <span className={`px-2 py-1 text-sm rounded-md ${getRatingStyle(item.ai_recommendation)}`}>
-                                  {item.ai_recommendation}
-                                </span>
-                              ) : (
-                                <span className="text-sm text-slate-500">-</span>
-                              )}
+                              <div className="text-xs text-indigo-400/80 mb-1">信号类型</div>
+                              {(() => {
+                                const signal = getPeriodSignal(item, getItemDisplayPeriod(item));
+                                const display = getSignalDisplay(signal);
+                                return (
+                                  <span className={`px-2 py-1 text-sm rounded-md inline-flex items-center gap-1 ${display.style}`}>
+                                    <span>{display.icon}</span>
+                                    <span>{display.text}</span>
+                                  </span>
+                                );
+                              })()}
                             </div>
                             <div className="min-w-[95px]">
                               <div className="text-xs text-emerald-400/80 mb-1">支撑位</div>
@@ -2620,15 +2650,18 @@ export default function DashboardPage() {
                         </button>
                       </div>
 
-                      {/* 技术评级 */}
+                      {/* 信号类型 */}
                       <div className="w-20 flex-shrink-0">
-                        {item.ai_recommendation ? (
-                          <span className={`px-2.5 py-1.5 text-sm rounded-md whitespace-nowrap ${getRatingStyle(item.ai_recommendation)}`}>
-                            {item.ai_recommendation}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-slate-500">-</span>
-                        )}
+                        {(() => {
+                          const signal = getPeriodSignal(item, getItemDisplayPeriod(item));
+                          const display = getSignalDisplay(signal);
+                          return (
+                            <span className={`px-2.5 py-1.5 text-sm rounded-md whitespace-nowrap inline-flex items-center gap-1 ${display.style}`}>
+                              <span>{display.icon}</span>
+                              <span>{display.text}</span>
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       {/* 支撑位 - 根据选择的周期显示 */}
