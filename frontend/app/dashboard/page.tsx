@@ -749,18 +749,28 @@ export default function DashboardPage() {
     }
   }, [getToken, watchlist]);
 
+  // 信号刷新状态
+  const [signalRefreshing, setSignalRefreshing] = useState(false);
+  const [lastSignalUpdate, setLastSignalUpdate] = useState<string | null>(null);
+
   // 获取实时交易信号
-  const fetchRealtimeSignals = useCallback(async () => {
+  const fetchRealtimeSignals = useCallback(async (forceRefresh: boolean = false) => {
     const token = getToken();
     if (!token || watchlist.length === 0) return;
 
     try {
-      // 只获取没有信号或信号过期的标的
-      const symbolsToUpdate = watchlist
-        .filter(item => !item.short_signal || !item.swing_signal || !item.long_signal)
-        .map(item => item.symbol);
+      // 如果是强制刷新，获取所有标的；否则只获取没有信号的标的
+      const symbolsToUpdate = forceRefresh 
+        ? watchlist.map(item => item.symbol)
+        : watchlist
+            .filter(item => !item.short_signal || !item.swing_signal || !item.long_signal)
+            .map(item => item.symbol);
       
       if (symbolsToUpdate.length === 0) return;
+      
+      if (forceRefresh) {
+        setSignalRefreshing(true);
+      }
       
       // 分批获取，每批最多10个
       const batchSize = 10;
@@ -788,6 +798,10 @@ export default function DashboardPage() {
               }
               return item;
             }));
+            // 更新最后刷新时间
+            if (data.timestamp) {
+              setLastSignalUpdate(data.timestamp);
+            }
           }
         }
         
@@ -798,6 +812,8 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error("获取实时信号失败:", error);
+    } finally {
+      setSignalRefreshing(false);
     }
   }, [getToken, watchlist]);
 
@@ -1209,6 +1225,15 @@ export default function DashboardPage() {
       "warning"
     );
   }, [showAlertModal]);
+
+  // 手动刷新所有信号
+  const handleRefreshSignals = useCallback(() => {
+    if (!canUseFeatures()) {
+      showPendingAlert();
+      return;
+    }
+    fetchRealtimeSignals(true);
+  }, [canUseFeatures, showPendingAlert, fetchRealtimeSignals]);
 
   // 打开研究列表弹窗
   const handleOpenAiPicks = useCallback(() => {
@@ -2168,6 +2193,16 @@ export default function DashboardPage() {
               <option value="sell" className="bg-slate-800">🔴 卖出</option>
               <option value="hold" className="bg-slate-800">⚪ 观望</option>
             </select>
+            {/* 信号刷新按钮 */}
+            <button
+              onClick={handleRefreshSignals}
+              disabled={signalRefreshing}
+              className="flex items-center gap-1.5 px-2 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg transition-all disabled:opacity-50 text-xs sm:text-sm"
+              title={lastSignalUpdate ? `上次更新: ${new Date(lastSignalUpdate).toLocaleTimeString('zh-CN')}` : '刷新信号'}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${signalRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{signalRefreshing ? '刷新中...' : '刷新信号'}</span>
+            </button>
             {/* 排序选择 */}
             <select
               value={sortField ? `${sortField}:${sortOrder}` : "default"}

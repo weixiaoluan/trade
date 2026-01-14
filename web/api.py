@@ -4091,7 +4091,7 @@ async def get_quotes(symbols: str, authorization: str = Header(None)):
 async def get_realtime_signals(symbols: str, authorization: str = Header(None)):
     """获取实时交易信号
     
-    根据最新行情数据实时计算交易信号，不依赖缓存的报告数据。
+    根据最新行情数据实时计算交易信号，并持久化到数据库。
     适用于自选列表的信号实时更新。
     
     Args:
@@ -4111,6 +4111,7 @@ async def get_realtime_signals(symbols: str, authorization: str = Header(None)):
     if not user:
         raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
+    username = user['username']
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
     
     if len(symbol_list) > 20:
@@ -4122,7 +4123,7 @@ async def get_realtime_signals(symbols: str, authorization: str = Header(None)):
     
     loop = asyncio.get_event_loop()
     with ThreadPoolExecutor(max_workers=5) as executor:
-        signals = await loop.run_in_executor(executor, calculate_realtime_signals, symbol_list)
+        signals = await loop.run_in_executor(executor, calculate_realtime_signals, symbol_list, username)
     
     return {
         "status": "success", 
@@ -4132,13 +4133,18 @@ async def get_realtime_signals(symbols: str, authorization: str = Header(None)):
     }
 
 
-def calculate_realtime_signals(symbols: list) -> dict:
+def calculate_realtime_signals(symbols: list, username: str = None) -> dict:
     """计算实时交易信号
     
-    为每个标的计算最新的多周期交易信号。
+    为每个标的计算最新的多周期交易信号，并持久化到数据库。
+    
+    Args:
+        symbols: 标的代码列表
+        username: 用户名（用于持久化信号到数据库）
     """
     import time
     from quant.trading_signals import generate_multi_period_analysis
+    from web.database import db_update_watchlist_ai_prices
     
     signals = {}
     
@@ -4188,7 +4194,7 @@ def calculate_realtime_signals(symbols: list) -> dict:
             )
             
             # 7. 提取信号类型
-            signals[symbol] = {
+            signal_data = {
                 "short": {
                     "signal": multi_period['short']['signal_type'],
                     "type_cn": multi_period['short']['type_cn'],
@@ -4208,8 +4214,27 @@ def calculate_realtime_signals(symbols: list) -> dict:
                     "confidence": multi_period['long']['confidence']
                 },
                 "current_price": indicators.get("latest_price", 0),
-                "calc_time": round(time.time() - start_time, 2)
+                "calc_time": round(time.time() - start_time, 2),
+                "updated_at": get_beijing_now().isoformat()
             }
+            
+            signals[symbol] = signal_data
+            
+            # 8. 持久化信号到数据库（如果提供了用户名）
+            if username:
+                try:
+                    multi_period_signals = {
+                        'short': multi_period['short']['signal_type'],
+                        'swing': multi_period['swing']['signal_type'],
+                        'long': multi_period['long']['signal_type']
+                    }
+                    db_update_watchlist_ai_prices(
+                        username=username,
+                        symbol=symbol,
+                        multi_period_signals=multi_period_signals
+                    )
+                except Exception as db_err:
+                    print(f"[Signals] {symbol} 信号持久化失败: {db_err}")
             
             print(f"[Signals] {symbol} 信号计算完成: 短线={multi_period['short']['signal_type']}, 波段={multi_period['swing']['signal_type']}, 中长线={multi_period['long']['signal_type']}, 耗时={time.time()-start_time:.2f}s")
             
