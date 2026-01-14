@@ -354,6 +354,8 @@ export default function ReportPage() {
                 riskManagement={result.tradingSignal.risk_management}
                 actionSuggestion={result.tradingSignal.action_suggestion}
                 currentPrice={result.tradingSignal.current_price}
+                quantScore={result.tradingSignal.quant_score || result.quantScore}
+                multiPeriodAnalysis={result.tradingSignal.multi_period_analysis}
               />
             </div>
           )}

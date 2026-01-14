@@ -889,3 +889,377 @@ def generate_multi_period_signals(indicators: Dict, support_resistance: Dict,
         signals['long'] = 'hold'
     
     return signals
+
+
+def generate_multi_period_analysis(indicators: Dict, support_resistance: Dict,
+                                    quant_analysis: Dict = None, trend_analysis: Dict = None) -> Dict:
+    """
+    为所有三个周期（短线/波段/中长线）生成完整的交易分析
+    包含信号、风险管理、操作策略
+    
+    Args:
+        indicators: 技术指标数据
+        support_resistance: 支撑阻力位数据
+        quant_analysis: 量化分析数据（可选）
+        trend_analysis: 趋势分析数据（可选）
+    
+    Returns:
+        包含三个周期完整交易分析的字典
+    """
+    generator = TradingSignalGenerator()
+    
+    # 获取基础数据
+    current_price = indicators.get("latest_price", 0)
+    atr_data = indicators.get("atr", {})
+    atr = atr_data.get("value", current_price * 0.02)
+    quant_score = quant_analysis.get("quant_score", 50) if quant_analysis else 50
+    
+    support_levels = [l.get("price", 0) for l in support_resistance.get("support_levels", [])]
+    resistance_levels = [l.get("price", 0) for l in support_resistance.get("resistance_levels", [])]
+    
+    # 生成基础信号（波段周期使用标准权重）
+    base_signal = generator.generate_signal(indicators, quant_analysis, trend_analysis)
+    
+    # 存储三个周期的完整分析结果
+    result = {}
+    
+    # ========== 短线分析 ==========
+    short_buy_score = 0
+    short_sell_score = 0
+    short_buy_conds = []
+    short_sell_conds = []
+    
+    rsi = indicators.get("rsi", {})
+    rsi_value = rsi.get("value", 50)
+    if rsi.get("status") == "oversold":
+        short_buy_score += 3
+        short_buy_conds.append(f"RSI超卖({rsi_value:.1f})")
+    elif rsi.get("status") == "overbought":
+        short_sell_score += 3
+        short_sell_conds.append(f"RSI超买({rsi_value:.1f})")
+    
+    kdj = indicators.get("kdj", {})
+    if kdj.get("crossover") == "golden_cross":
+        short_buy_score += 3
+        short_buy_conds.append("KDJ金叉")
+    elif kdj.get("crossover") == "death_cross":
+        short_sell_score += 3
+        short_sell_conds.append("KDJ死叉")
+    if kdj.get("status") == "oversold":
+        short_buy_score += 2
+        short_buy_conds.append("KDJ超卖区")
+    elif kdj.get("status") == "overbought":
+        short_sell_score += 2
+        short_sell_conds.append("KDJ超买区")
+    
+    macd = indicators.get("macd", {})
+    if macd.get("crossover") == "golden_cross":
+        short_buy_score += 3
+        short_buy_conds.append("MACD金叉")
+    elif macd.get("crossover") == "death_cross":
+        short_sell_score += 3
+        short_sell_conds.append("MACD死叉")
+    
+    bb = indicators.get("bollinger_bands", {})
+    if bb.get("status") == "near_lower":
+        short_buy_score += 2
+        short_buy_conds.append("触及布林下轨")
+    elif bb.get("status") == "near_upper":
+        short_sell_score += 2
+        short_sell_conds.append("触及布林上轨")
+    
+    vol = indicators.get("volume_analysis", {})
+    vol_ratio = vol.get("volume_ratio", 1)
+    if vol.get("status") == "high_volume" and vol_ratio > 1.5:
+        if short_buy_score > short_sell_score:
+            short_buy_score += 2
+            short_buy_conds.append(f"放量({vol_ratio:.1f}倍)")
+        else:
+            short_sell_score += 2
+            short_sell_conds.append(f"放量下跌")
+    
+    if short_buy_score > short_sell_score + 2:
+        short_type = SignalType.BUY
+        short_strength = min(5, max(1, int((short_buy_score - short_sell_score) / 2) + 1))
+        short_conds = short_buy_conds
+        short_conf = round(short_buy_score / (short_buy_score + short_sell_score + 1) * 100, 1)
+    elif short_sell_score > short_buy_score + 2:
+        short_type = SignalType.SELL
+        short_strength = min(5, max(1, int((short_sell_score - short_buy_score) / 2) + 1))
+        short_conds = short_sell_conds
+        short_conf = round(short_sell_score / (short_buy_score + short_sell_score + 1) * 100, 1)
+    else:
+        short_type = SignalType.HOLD
+        short_strength = 0
+        short_conds = []
+        short_conf = 50
+    
+    short_stop_pct = 3.0
+    short_stop = current_price * (1 - short_stop_pct / 100) if short_type == SignalType.BUY else current_price * (1 + short_stop_pct / 100)
+    short_risk = abs(current_price - short_stop)
+    
+    result['short'] = _build_period_result(short_type, short_strength, short_conds, short_conf, 
+                                           current_price, short_stop, short_stop_pct, short_risk,
+                                           '短线(1-5天)', quant_score, generator)
+    
+    # ========== 波段分析 ==========
+    swing_risk_mgmt, swing_pos_strategy = generator.calculate_risk_management(
+        current_price, support_levels, resistance_levels, atr, base_signal.signal_type, base_signal.strength
+    )
+    
+    result['swing'] = {
+        'signal_type': base_signal.signal_type.value,
+        'type_cn': "买入" if base_signal.signal_type == SignalType.BUY else ("卖出" if base_signal.signal_type == SignalType.SELL else "观望"),
+        'strength': base_signal.strength,
+        'strength_label': generator.get_signal_strength_label(base_signal.strength),
+        'confidence': round(base_signal.confidence * 100, 1),
+        'triggered_conditions': base_signal.triggered_conditions,
+        'period_label': '波段(1-4周)',
+        'risk_management': {
+            'stop_loss': swing_risk_mgmt.stop_loss,
+            'stop_loss_pct': swing_risk_mgmt.stop_loss_pct,
+            'take_profit_targets': [
+                {"level": 1, "price": swing_risk_mgmt.take_profit_1, "ratio": "1:2"},
+                {"level": 2, "price": swing_risk_mgmt.take_profit_2, "ratio": "1:3"},
+                {"level": 3, "price": swing_risk_mgmt.take_profit_3, "ratio": "1:5"},
+            ],
+            'suggested_position_pct': swing_risk_mgmt.suggested_position_pct,
+        },
+        'action_suggestion': _get_action_text(base_signal.signal_type, base_signal.strength, '波段', quant_score, len(base_signal.triggered_conditions)),
+        'position_strategy': {
+            'empty_position': swing_pos_strategy.empty_position,
+            'first_entry': swing_pos_strategy.first_entry,
+            'add_position': swing_pos_strategy.add_position,
+            'reduce_position': swing_pos_strategy.reduce_position,
+            'full_exit': swing_pos_strategy.full_exit,
+        }
+    }
+    
+    # ========== 中长线分析 ==========
+    long_buy_score = 0
+    long_sell_score = 0
+    long_buy_conds = []
+    long_sell_conds = []
+    
+    ma_trend = indicators.get("ma_trend", "")
+    if ma_trend == "bullish_alignment":
+        long_buy_score += 4
+        long_buy_conds.append("均线多头排列")
+    elif ma_trend == "bearish_alignment":
+        long_sell_score += 4
+        long_sell_conds.append("均线空头排列")
+    
+    ma_values = indicators.get("moving_averages", {})
+    ma60 = ma_values.get("MA60", 0)
+    ma120 = ma_values.get("MA120", 0)
+    if current_price > 0:
+        if ma60 > 0 and current_price > ma60:
+            long_buy_score += 2
+            long_buy_conds.append("站上MA60")
+        elif ma60 > 0 and current_price < ma60:
+            long_sell_score += 2
+            long_sell_conds.append("跌破MA60")
+        if ma120 > 0 and current_price > ma120:
+            long_buy_score += 2
+            long_buy_conds.append("站上MA120")
+        elif ma120 > 0 and current_price < ma120:
+            long_sell_score += 2
+            long_sell_conds.append("跌破MA120")
+    
+    adx = indicators.get("adx", {})
+    if adx.get("trend_strength") == "strong":
+        if adx.get("trend_direction") == "bullish":
+            long_buy_score += 3
+            long_buy_conds.append(f"ADX强势上涨({adx.get('adx', 0):.1f})")
+        else:
+            long_sell_score += 3
+            long_sell_conds.append(f"ADX强势下跌({adx.get('adx', 0):.1f})")
+    
+    ichimoku = indicators.get("ichimoku", {})
+    if ichimoku.get("status") == "strong_bullish":
+        long_buy_score += 3
+        long_buy_conds.append("云图强势看多")
+    elif ichimoku.get("status") == "strong_bearish":
+        long_sell_score += 3
+        long_sell_conds.append("云图强势看空")
+    elif ichimoku.get("cloud_position") == "above_cloud":
+        long_buy_score += 2
+        long_buy_conds.append("价格在云层上方")
+    elif ichimoku.get("cloud_position") == "below_cloud":
+        long_sell_score += 2
+        long_sell_conds.append("价格在云层下方")
+    
+    mfi = indicators.get("money_flow", {})
+    if mfi.get("mfi_status") == "inflow":
+        long_buy_score += 2
+        long_buy_conds.append("资金净流入")
+    elif mfi.get("mfi_status") == "outflow":
+        long_sell_score += 2
+        long_sell_conds.append("资金净流出")
+    
+    if quant_score >= 65:
+        long_buy_score += 2
+        long_buy_conds.append(f"量化评分优秀({quant_score:.0f})")
+    elif quant_score <= 35:
+        long_sell_score += 2
+        long_sell_conds.append(f"量化评分较低({quant_score:.0f})")
+    
+    if long_buy_score > long_sell_score + 3:
+        long_type = SignalType.BUY
+        long_strength = min(5, max(1, int((long_buy_score - long_sell_score) / 2.5) + 1))
+        long_conds = long_buy_conds
+        long_conf = round(long_buy_score / (long_buy_score + long_sell_score + 1) * 100, 1)
+    elif long_sell_score > long_buy_score + 3:
+        long_type = SignalType.SELL
+        long_strength = min(5, max(1, int((long_sell_score - long_buy_score) / 2.5) + 1))
+        long_conds = long_sell_conds
+        long_conf = round(long_sell_score / (long_buy_score + long_sell_score + 1) * 100, 1)
+    else:
+        long_type = SignalType.HOLD
+        long_strength = 0
+        long_conds = []
+        long_conf = 50
+    
+    long_stop_pct = 8.0
+    long_stop = current_price * (1 - long_stop_pct / 100) if long_type == SignalType.BUY else current_price * (1 + long_stop_pct / 100)
+    long_risk = abs(current_price - long_stop)
+    
+    result['long'] = _build_period_result(long_type, long_strength, long_conds, long_conf,
+                                          current_price, long_stop, long_stop_pct, long_risk,
+                                          '中长线(1月+)', quant_score, generator)
+    
+    return result
+
+
+def _build_period_result(signal_type: SignalType, strength: int, conditions: List[str], confidence: float,
+                         current_price: float, stop_loss: float, stop_loss_pct: float, risk: float,
+                         period_label: str, quant_score: float, generator: TradingSignalGenerator) -> Dict:
+    """构建周期分析结果"""
+    is_buy = signal_type == SignalType.BUY
+    is_sell = signal_type == SignalType.SELL
+    
+    # 止盈目标
+    if is_buy:
+        tp1 = current_price + risk * 2
+        tp2 = current_price + risk * 3
+        tp3 = current_price + risk * 5
+    elif is_sell:
+        tp1 = current_price - risk * 2
+        tp2 = current_price - risk * 3
+        tp3 = current_price - risk * 5
+    else:
+        tp1 = current_price * 1.05
+        tp2 = current_price * 1.08
+        tp3 = current_price * 1.12
+    
+    # 建议仓位
+    if strength >= 4:
+        pos_pct = 25 if '中长' in period_label else (20 if '波段' in period_label else 15)
+    elif strength >= 2:
+        pos_pct = 20 if '中长' in period_label else (15 if '波段' in period_label else 10)
+    else:
+        pos_pct = 10
+    
+    return {
+        'signal_type': signal_type.value,
+        'type_cn': "买入" if is_buy else ("卖出" if is_sell else "观望"),
+        'strength': strength,
+        'strength_label': generator.get_signal_strength_label(strength),
+        'confidence': confidence,
+        'triggered_conditions': conditions,
+        'period_label': period_label,
+        'risk_management': {
+            'stop_loss': round(stop_loss, 4),
+            'stop_loss_pct': stop_loss_pct,
+            'take_profit_targets': [
+                {"level": 1, "price": round(tp1, 4), "ratio": "1:2"},
+                {"level": 2, "price": round(tp2, 4), "ratio": "1:3"},
+                {"level": 3, "price": round(tp3, 4), "ratio": "1:5"},
+            ],
+            'suggested_position_pct': pos_pct,
+        },
+        'action_suggestion': _get_action_text(signal_type, strength, period_label.split('(')[0], quant_score, len(conditions)),
+        'position_strategy': _get_position_strategy(signal_type, strength, stop_loss, period_label.split('(')[0])
+    }
+
+
+def _get_action_text(signal_type: SignalType, strength: int, period: str, quant_score: float, cond_count: int) -> str:
+    """生成操作建议文本"""
+    if signal_type == SignalType.BUY:
+        if strength >= 4:
+            return f"{period}多指标共振看多（{cond_count}项确认，量化评分{quant_score:.0f}），技术面偏强。可考虑分批建仓，严格设置止损。"
+        elif strength >= 2:
+            return f"{period}偏多信号（{cond_count}项确认），可小仓位试探，严格止损。"
+        else:
+            return f"{period}弱多信号，建议观望等待更多确认。"
+    elif signal_type == SignalType.SELL:
+        if strength >= 4:
+            return f"{period}多指标共振看空（{cond_count}项确认，量化评分{quant_score:.0f}），技术面偏弱。持仓者建议减仓或清仓。"
+        elif strength >= 2:
+            return f"{period}偏空信号（{cond_count}项确认），注意风险控制，持仓者建议减仓。"
+        else:
+            return f"{period}弱空信号，密切关注走势变化，持仓者注意风险。"
+    else:
+        return f"{period}多空力量均衡，方向不明确。建议保持观望，等待明确信号。"
+
+
+def _get_position_strategy(signal_type: SignalType, strength: int, stop_loss: float, period: str) -> Dict:
+    """生成仓位策略"""
+    if signal_type == SignalType.BUY:
+        if strength >= 4:
+            return {
+                'empty_position': f"{period}多指标共振看多，可考虑分批建仓",
+                'first_entry': f"建议首次建仓1-2成，设好止损后观察",
+                'add_position': f"站稳支撑位且放量突破可加仓",
+                'reduce_position': f"跌破止损位{stop_loss:.3f}减仓",
+                'full_exit': f"跌破止损位{stop_loss:.3f}或出现明确卖出信号时清仓"
+            }
+        elif strength >= 2:
+            return {
+                'empty_position': f"{period}偏多信号，可小仓位试探",
+                'first_entry': f"建议轻仓试探1成，严格止损",
+                'add_position': f"确认突破阻力位后可加仓",
+                'reduce_position': f"跌破止损位{stop_loss:.3f}建议清仓",
+                'full_exit': f"跌破止损位{stop_loss:.3f}时清仓"
+            }
+        else:
+            return {
+                'empty_position': f"{period}弱多信号，建议观望",
+                'first_entry': "如需建仓建议不超过0.5成",
+                'add_position': "不建议加仓，等待信号增强",
+                'reduce_position': f"跌破{stop_loss:.3f}立即止损",
+                'full_exit': f"跌破{stop_loss:.3f}时清仓"
+            }
+    elif signal_type == SignalType.SELL:
+        if strength >= 4:
+            return {
+                'empty_position': f"{period}多指标共振看空，保持空仓观望",
+                'first_entry': "不建议此时建仓，等待企稳信号",
+                'add_position': "不建议加仓，空头趋势明显",
+                'reduce_position': "持仓者建议减仓至1成以内",
+                'full_exit': f"跌破关键支撑或止损位{stop_loss:.3f}时清仓"
+            }
+        elif strength >= 2:
+            return {
+                'empty_position': f"{period}偏空信号，保持谨慎观望",
+                'first_entry': "不建议建仓，等待止跌信号",
+                'add_position': "不建议加仓",
+                'reduce_position': "持仓者建议减仓或设好止损",
+                'full_exit': f"跌破止损位{stop_loss:.3f}时清仓"
+            }
+        else:
+            return {
+                'empty_position': f"{period}弱空信号，可观望但需警惕",
+                'first_entry': "暂不建议建仓",
+                'add_position': "不建议加仓",
+                'reduce_position': "持仓者注意风险控制",
+                'full_exit': "出现明确方向信号后再做决策"
+            }
+    else:
+        return {
+            'empty_position': f"{period}多空力量均衡，建议保持空仓观望",
+            'first_entry': "等待明确信号后再考虑建仓",
+            'add_position': "不建议加仓，等待方向明确",
+            'reduce_position': "持仓者可考虑减仓观望",
+            'full_exit': "出现明确方向信号后再做决策"
+        }

@@ -2118,14 +2118,22 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         completed_at = get_beijing_now()
         report = normalize_report_timestamp(report, completed_at)
         
-        # 提取交易信号数据
+        # 提取交易信号数据（包含多周期信号）
         trading_signal_data = None
         if trading_signals_dict.get("status") == "success":
+            # 获取多周期信号和完整分析
+            multi_period_signals = trading_signals_dict.get('multi_period_signals', {})
+            multi_period_analysis = trading_signals_dict.get('multi_period_analysis', {})
+            
             trading_signal_data = {
                 'signal': trading_signals_dict.get('trading_signal', {}),
                 'risk_management': trading_signals_dict.get('risk_management', {}),
                 'action_suggestion': trading_signals_dict.get('action_suggestion', ''),
                 'current_price': trading_signals_dict.get('current_price', 0),
+                'holding_period': holding_period,
+                'quant_score': quant_score,  # 添加量化评分，确保与仪表盘一致
+                'multi_period_signals': multi_period_signals,  # 多周期信号类型
+                'multi_period_analysis': multi_period_analysis,  # 多周期完整分析
                 'disclaimer': trading_signals_dict.get('disclaimer', '')
             }
         

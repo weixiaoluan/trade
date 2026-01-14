@@ -1573,7 +1573,7 @@ def generate_trading_signals(indicators_json: str, support_resistance_json: str,
         import sys
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).parent.parent))
-        from quant.trading_signals import generate_trading_analysis, generate_multi_period_signals
+        from quant.trading_signals import generate_trading_analysis, generate_multi_period_signals, generate_multi_period_analysis
         
         # 解析输入数据
         indicators_data = json.loads(indicators_json)
@@ -1597,15 +1597,22 @@ def generate_trading_signals(indicators_json: str, support_resistance_json: str,
             holding_period=holding_period
         )
         
-        # 生成多周期信号（短线/波段/中长线）
-        multi_period_signals = generate_multi_period_signals(
+        # 生成多周期完整分析（短线/波段/中长线，包含风险管理和操作策略）
+        multi_period_analysis = generate_multi_period_analysis(
             indicators,
             sr_data,
             quant_analysis=quant_analysis,
             trend_analysis=trend_analysis
         )
         
-        # 返回完整结果（包含多周期信号）
+        # 提取简单的多周期信号类型（用于自选列表显示）
+        multi_period_signals = {
+            'short': multi_period_analysis['short']['signal_type'],
+            'swing': multi_period_analysis['swing']['signal_type'],
+            'long': multi_period_analysis['long']['signal_type']
+        }
+        
+        # 返回完整结果（包含多周期完整分析）
         return json.dumps({
             "status": "success",
             "ticker": indicators.get("ticker", ""),
@@ -1616,6 +1623,7 @@ def generate_trading_signals(indicators_json: str, support_resistance_json: str,
             "holding_period": holding_period,
             "disclaimer": result["disclaimer"],
             "multi_period_signals": multi_period_signals,
+            "multi_period_analysis": multi_period_analysis,
             "data_sources": {
                 "technical_indicators": True,
                 "quant_analysis": quant_analysis is not None,
