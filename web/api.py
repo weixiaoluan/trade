@@ -2041,7 +2041,12 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         })
         
         # 提取量化分析和趋势分析数据，传递给交易信号生成器
-        quant_analysis_for_signal = trend_dict.get("quant_analysis", {})
+        quant_analysis_raw = trend_dict.get("quant_analysis", {})
+        # 确保 quant_score 字段存在（trading_signals.py 使用 quant_score，而 quant_analysis 使用 score）
+        quant_analysis_for_signal = {
+            **quant_analysis_raw,
+            'quant_score': quant_analysis_raw.get('score', quant_analysis_raw.get('quant_score', 50))
+        }
         trend_analysis_for_signal = trend_dict.get("trend_analysis", trend_dict)
         
         # 生成交易信号（整合AI分析+量化数据指标，包含多周期信号）
@@ -4109,8 +4114,9 @@ def get_batch_quotes(symbols: list) -> dict:
     now = datetime.now()
     quotes = {}
     
-    # 根据是否交易时间调整缓存时间
-    cache_ttl = _cache_ttl if is_trading_time() else _cache_ttl_non_trading
+    # 根据市场时段动态调整缓存时间
+    cache_ttl = get_quote_cache_ttl()
+    market_session = get_market_session()
     
     # 提取纯数字代码
     code_map = {}
@@ -4119,7 +4125,7 @@ def get_batch_quotes(symbols: list) -> dict:
         code_map[code] = symbol
     
     codes = set(code_map.keys())
-    print(f"[Quotes] 请求代码: {codes}, 交易时间: {is_trading_time()}, 缓存TTL: {cache_ttl}s")
+    print(f"[Quotes] 请求代码: {codes}, 市场时段: {market_session}, 缓存TTL: {cache_ttl}s")
     
     # 获取 ETF 数据（使用缓存）
     try:
@@ -4380,6 +4386,60 @@ def is_trading_time() -> bool:
     current_time = now.strftime("%H:%M")
     # A股交易时间
     return ("09:30" <= current_time <= "11:30") or ("13:00" <= current_time <= "15:00")
+
+
+def get_market_session() -> str:
+    """
+    获取当前市场时段
+    返回值:
+    - 'pre_market': 集合竞价时段 (9:15-9:25)
+    - 'morning': 上午交易时段 (9:30-11:30)
+    - 'noon_break': 午间休市 (11:30-13:00)
+    - 'afternoon': 下午交易时段 (13:00-15:00)
+    - 'after_hours': 盘后时段 (15:00-15:30)
+    - 'closed': 非交易时间
+    """
+    now = datetime.now()
+    if now.weekday() >= 5:  # 周末
+        return 'closed'
+    
+    current_time = now.strftime("%H:%M")
+    
+    if "09:15" <= current_time < "09:25":
+        return 'pre_market'
+    elif "09:25" <= current_time < "09:30":
+        return 'pre_market'  # 集合竞价撮合
+    elif "09:30" <= current_time <= "11:30":
+        return 'morning'
+    elif "11:30" < current_time < "13:00":
+        return 'noon_break'
+    elif "13:00" <= current_time <= "15:00":
+        return 'afternoon'
+    elif "15:00" < current_time <= "15:30":
+        return 'after_hours'
+    else:
+        return 'closed'
+
+
+def get_quote_cache_ttl() -> int:
+    """
+    根据市场时段返回合适的行情缓存时间（秒）
+    - 交易时段: 5秒（实时性要求高）
+    - 集合竞价: 10秒
+    - 午间休市: 60秒
+    - 盘后: 300秒
+    - 非交易时间: 600秒
+    """
+    session = get_market_session()
+    cache_ttl_map = {
+        'pre_market': 10,
+        'morning': 5,
+        'noon_break': 60,
+        'afternoon': 5,
+        'after_hours': 300,
+        'closed': 600
+    }
+    return cache_ttl_map.get(session, 60)
 
 
 def should_analyze_today(frequency: str, last_analysis_at: str, weekday: int = None, day_of_month: int = None) -> bool:

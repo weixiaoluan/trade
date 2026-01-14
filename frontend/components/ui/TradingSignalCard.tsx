@@ -82,6 +82,7 @@ interface TradingSignalProps {
     swing: PeriodAnalysis;
     long: PeriodAnalysis;
   };
+  defaultPeriod?: 'short' | 'swing' | 'long';  // 默认周期，从自选列表传入
 }
 
 export const TradingSignalCard = memo(function TradingSignalCard({
@@ -90,11 +91,12 @@ export const TradingSignalCard = memo(function TradingSignalCard({
   actionSuggestion,
   currentPrice,
   quantScore,
-  multiPeriodAnalysis
+  multiPeriodAnalysis,
+  defaultPeriod = 'swing'  // 默认周期，从自选列表传入
 }: TradingSignalProps) {
   const periods = ['short', 'swing', 'long'] as const;
   const periodLabels = { short: '短线', swing: '波段', long: '中长线' };
-  const [activePeriod, setActivePeriod] = useState<'short' | 'swing' | 'long'>('swing');
+  const [activePeriod, setActivePeriod] = useState<'short' | 'swing' | 'long'>(defaultPeriod);
 
   // 获取当前周期的分析数据
   const getCurrentAnalysis = () => {
