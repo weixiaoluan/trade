@@ -69,11 +69,28 @@ class PositionStrategy:
     full_exit: str                   # 清仓条件
 
 
+class TrendState(Enum):
+    """趋势状态枚举 - 用于趋势识别"""
+    STRONG_UP = "strong_up"       # 强势上涨
+    UP = "up"                     # 上涨趋势
+    WEAK_UP = "weak_up"           # 弱势上涨
+    SIDEWAYS = "sideways"         # 横盘震荡
+    WEAK_DOWN = "weak_down"       # 弱势下跌
+    DOWN = "down"                 # 下跌趋势
+    STRONG_DOWN = "strong_down"   # 强势下跌
+
+
 class TradingSignalGenerator:
     """
-    交易信号生成器
+    交易信号生成器 v2.0 - 优化版
     
-    综合AI分析+量化数据指标，生成可行的交易方案参考
+    核心优化原则：
+    1. 趋势跟随优先：在明确趋势中不轻易发出反向信号
+    2. 多重确认机制：单一指标不够，需要多指标共振
+    3. 区分回调与反转：超买超卖是警告，不是直接卖出信号
+    4. 动态阈值：根据趋势强度调整信号敏感度
+    5. 趋势保护：上涨趋势中提高卖出门槛，下跌趋势中提高买入门槛
+    
     数据来源：
     1. 技术指标（均线/MACD/RSI/KDJ/布林带/成交量/ADX/SAR/云图/MFI/DMI/BIAS）
     2. 量化评分系统（0-100分）
@@ -85,58 +102,312 @@ class TradingSignalGenerator:
     """
     
     def __init__(self):
-        # 买入信号触发条件权重
+        # 信号触发的最低要求
+        self.min_score_for_signal = 4      # 最低分数要求
+        self.min_conditions_for_signal = 2  # 最少确认条件数
+        
+        # 趋势保护系数 - 在趋势中发出反向信号需要更高的分数
+        self.trend_protection_factor = 1.5
+        
+        # 买入信号触发条件权重 (优化后)
         self.buy_conditions = {
+            # 趋势类指标 (权重较高)
             "price_above_ma20": 1,
-            "price_above_ma60": 1,
-            "macd_golden_cross": 2,
+            "price_above_ma60": 1.5,
+            "ma_bullish_alignment": 3,      # 均线多头排列
+            "macd_golden_cross": 2.5,
             "macd_bullish": 1,
+            "adx_strong_bullish": 2.5,
+            "sar_bullish": 1.5,
+            "ichimoku_above_cloud": 2.5,
+            "dmi_bullish": 1.5,
+            # 超卖反弹类 (在上涨趋势中权重更高)
             "rsi_oversold_recovery": 2,
-            "kdj_golden_cross": 1,
-            "kdj_oversold": 1,
-            "bb_near_lower": 1,
-            "volume_breakout": 1,
-            "adx_strong_bullish": 2,
-            "sar_bullish": 1,
-            "ichimoku_above_cloud": 2,
-            "mfi_inflow": 1,
-            "dmi_bullish": 1,
-            "bias_oversold": 1,
+            "kdj_golden_cross": 1.5,
+            "kdj_oversold": 1.5,
+            "bb_near_lower": 1.5,
+            "bias_oversold": 1.5,
+            # 量能确认
+            "volume_breakout": 2,
+            "mfi_inflow": 1.5,
             # 量化分析权重
             "quant_strong_buy": 3,
             "quant_buy": 2,
             "high_quant_score": 2,
-            "bullish_trend": 2,
+            "bullish_trend": 2.5,
         }
         
-        # 卖出信号触发条件权重
+        # 卖出信号触发条件权重 (优化后 - 整体降低权重，避免卖飞)
         self.sell_conditions = {
-            "price_below_ma20": 1,
-            "price_below_ma60": 1,
-            "macd_death_cross": 2,
-            "macd_bearish": 1,
-            "rsi_overbought": 2,
-            "kdj_death_cross": 1,
-            "kdj_overbought": 1,
-            "bb_near_upper": 1,
-            "volume_decline": 1,
-            "adx_strong_bearish": 2,
-            "sar_bearish": 1,
+            # 趋势类指标 (只有趋势反转才给高权重)
+            "price_below_ma20": 0.5,        # 降低权重，短期跌破不急于卖出
+            "price_below_ma60": 1,          # 中期均线更重要
+            "ma_bearish_alignment": 3,      # 均线空头排列才是强卖出信号
+            "macd_death_cross": 2,          # 降低权重
+            "macd_bearish": 0.5,            # 大幅降低，MACD为负不代表要卖
+            "adx_strong_bearish": 2.5,
+            "sar_bearish": 1,               # 降低权重
             "ichimoku_below_cloud": 2,
-            "mfi_outflow": 1,
             "dmi_bearish": 1,
-            "bias_overbought": 1,
+            # 超买类 (作为警告，不直接触发卖出)
+            "rsi_overbought": 0.5,          # 大幅降低！超买不等于要卖
+            "kdj_death_cross": 1,           # 降低权重
+            "kdj_overbought": 0.5,          # 大幅降低！超买不等于要卖
+            "bb_near_upper": 0.5,           # 大幅降低！触及上轨可能是强势
+            "bias_overbought": 0.5,         # 大幅降低
+            # 量能确认
+            "volume_decline": 1,
+            "mfi_outflow": 1.5,
             # 量化分析权重
             "quant_strong_sell": 3,
             "quant_sell": 2,
             "low_quant_score": 2,
-            "bearish_trend": 2,
+            "bearish_trend": 2.5,
         }
 
 
+    def _assess_trend_state(self, indicators: Dict, quant_analysis: Dict = None) -> Tuple[TrendState, int]:
+        """
+        评估当前趋势状态
+        
+        返回:
+            (TrendState, trend_score): 趋势状态和趋势分数(-100到+100)
+            正数表示上涨趋势，负数表示下跌趋势，绝对值越大趋势越强
+        """
+        trend_score = 0
+        
+        # 1. 均线系统评估 (权重最高)
+        ma_trend = indicators.get("ma_trend", "")
+        ma_values = indicators.get("moving_averages", {})
+        latest_price = indicators.get("latest_price", 0)
+        
+        if ma_trend == "bullish_alignment":
+            trend_score += 25
+        elif ma_trend == "bearish_alignment":
+            trend_score -= 25
+        
+        # 价格与均线的关系
+        ma20 = ma_values.get("MA20", 0)
+        ma60 = ma_values.get("MA60", 0)
+        ma120 = ma_values.get("MA120", 0)
+        
+        if latest_price > 0:
+            if ma20 > 0:
+                trend_score += 8 if latest_price > ma20 else -8
+            if ma60 > 0:
+                trend_score += 10 if latest_price > ma60 else -10
+            if ma120 > 0:
+                trend_score += 12 if latest_price > ma120 else -12
+        
+        # 2. MACD趋势评估
+        macd = indicators.get("macd", {})
+        if macd.get("trend") == "bullish":
+            trend_score += 10
+        elif macd.get("trend") == "bearish":
+            trend_score -= 10
+        
+        # MACD柱状图方向（动量）
+        histogram = macd.get("histogram", 0)
+        if histogram > 0:
+            trend_score += 5
+        elif histogram < 0:
+            trend_score -= 5
+        
+        # 3. ADX趋势强度
+        adx = indicators.get("adx", {})
+        adx_value = adx.get("adx", 0)
+        if adx_value > 25:  # 强趋势
+            if adx.get("trend_direction") == "bullish":
+                trend_score += 15
+            else:
+                trend_score -= 15
+        elif adx_value > 15:  # 中等趋势
+            if adx.get("trend_direction") == "bullish":
+                trend_score += 8
+            else:
+                trend_score -= 8
+        
+        # 4. 云图评估
+        ichimoku = indicators.get("ichimoku", {})
+        if ichimoku.get("status") == "strong_bullish":
+            trend_score += 15
+        elif ichimoku.get("status") == "strong_bearish":
+            trend_score -= 15
+        elif ichimoku.get("cloud_position") == "above_cloud":
+            trend_score += 8
+        elif ichimoku.get("cloud_position") == "below_cloud":
+            trend_score -= 8
+        
+        # 5. 量化评分参考
+        if quant_analysis:
+            quant_score = quant_analysis.get("quant_score", 50)
+            if quant_score >= 70:
+                trend_score += 10
+            elif quant_score >= 60:
+                trend_score += 5
+            elif quant_score <= 30:
+                trend_score -= 10
+            elif quant_score <= 40:
+                trend_score -= 5
+        
+        # 根据分数确定趋势状态
+        if trend_score >= 50:
+            state = TrendState.STRONG_UP
+        elif trend_score >= 25:
+            state = TrendState.UP
+        elif trend_score >= 10:
+            state = TrendState.WEAK_UP
+        elif trend_score <= -50:
+            state = TrendState.STRONG_DOWN
+        elif trend_score <= -25:
+            state = TrendState.DOWN
+        elif trend_score <= -10:
+            state = TrendState.WEAK_DOWN
+        else:
+            state = TrendState.SIDEWAYS
+        
+        return state, trend_score
+
+    def _check_reversal_signals(self, indicators: Dict, current_trend: TrendState) -> Tuple[int, List[str]]:
+        """
+        检查趋势反转信号 - 需要多重确认
+        
+        返回:
+            (reversal_score, reversal_conditions): 反转分数和反转条件列表
+            正数表示向上反转信号，负数表示向下反转信号
+        """
+        reversal_score = 0
+        reversal_conditions = []
+        
+        # 只有在下跌趋势中才检查向上反转
+        if current_trend in [TrendState.DOWN, TrendState.STRONG_DOWN, TrendState.WEAK_DOWN]:
+            # MACD金叉
+            macd = indicators.get("macd", {})
+            if macd.get("crossover") == "golden_cross":
+                reversal_score += 3
+                reversal_conditions.append("MACD金叉(反转信号)")
+            
+            # KDJ金叉 + 超卖
+            kdj = indicators.get("kdj", {})
+            if kdj.get("crossover") == "golden_cross" and kdj.get("status") == "oversold":
+                reversal_score += 3
+                reversal_conditions.append("KDJ超卖金叉(反转信号)")
+            
+            # RSI从超卖区回升
+            rsi = indicators.get("rsi", {})
+            rsi_value = rsi.get("value", 50)
+            if rsi_value < 35 and rsi_value > 30:  # 刚从超卖区回升
+                reversal_score += 2
+                reversal_conditions.append(f"RSI超卖回升({rsi_value:.1f})")
+            
+            # 放量止跌
+            vol = indicators.get("volume_analysis", {})
+            if vol.get("status") == "high_volume" and vol.get("volume_ratio", 1) > 1.5:
+                reversal_score += 2
+                reversal_conditions.append("放量止跌")
+        
+        # 只有在上涨趋势中才检查向下反转
+        elif current_trend in [TrendState.UP, TrendState.STRONG_UP, TrendState.WEAK_UP]:
+            # MACD死叉
+            macd = indicators.get("macd", {})
+            if macd.get("crossover") == "death_cross":
+                reversal_score -= 2  # 降低权重，上涨中的死叉可能只是调整
+                reversal_conditions.append("MACD死叉(警告)")
+            
+            # KDJ死叉 + 超买 (需要同时满足才算反转信号)
+            kdj = indicators.get("kdj", {})
+            if kdj.get("crossover") == "death_cross" and kdj.get("status") == "overbought":
+                reversal_score -= 2
+                reversal_conditions.append("KDJ超买死叉(警告)")
+            
+            # 跌破关键均线
+            ma_values = indicators.get("moving_averages", {})
+            latest_price = indicators.get("latest_price", 0)
+            ma60 = ma_values.get("MA60", 0)
+            if latest_price > 0 and ma60 > 0 and latest_price < ma60:
+                reversal_score -= 3
+                reversal_conditions.append("跌破MA60(反转警告)")
+        
+        return reversal_score, reversal_conditions
+
+    def _check_momentum_warnings(self, indicators: Dict, current_trend: TrendState) -> List[str]:
+        """
+        检查动量警告信号 - 超买超卖作为警告，不直接触发交易
+        
+        在上涨趋势中：
+        - 超卖 = 买入机会
+        - 超买 = 仅作为警告，不触发卖出
+        
+        在下跌趋势中：
+        - 超买 = 卖出/做空机会
+        - 超卖 = 仅作为警告，不触发买入
+        """
+        warnings = []
+        
+        rsi = indicators.get("rsi", {})
+        rsi_value = rsi.get("value", 50)
+        
+        kdj = indicators.get("kdj", {})
+        j_value = kdj.get("j", 50)
+        
+        bb = indicators.get("bollinger_bands", {})
+        
+        if current_trend in [TrendState.UP, TrendState.STRONG_UP, TrendState.WEAK_UP]:
+            # 上涨趋势中的超买只是警告
+            if rsi_value > 70:
+                warnings.append(f"⚠️ RSI超买({rsi_value:.1f})，注意短期回调风险")
+            if j_value > 80:
+                warnings.append(f"⚠️ KDJ超买(J={j_value:.1f})，可能有短期调整")
+            if bb.get("status") == "near_upper":
+                warnings.append("⚠️ 触及布林上轨，短期可能回调")
+        
+        elif current_trend in [TrendState.DOWN, TrendState.STRONG_DOWN, TrendState.WEAK_DOWN]:
+            # 下跌趋势中的超卖只是警告
+            if rsi_value < 30:
+                warnings.append(f"⚠️ RSI超卖({rsi_value:.1f})，但下跌趋势未改变")
+            if j_value < 20:
+                warnings.append(f"⚠️ KDJ超卖(J={j_value:.1f})，但趋势仍偏空")
+            if bb.get("status") == "near_lower":
+                warnings.append("⚠️ 触及布林下轨，但需等待企稳信号")
+        
+        return warnings
+
+    def _check_volume_confirmation(self, indicators: Dict, signal_direction: str) -> Tuple[bool, str]:
+        """
+        检查成交量确认
+        
+        返回:
+            (is_confirmed, message): 是否确认和确认信息
+        """
+        vol = indicators.get("volume_analysis", {})
+        vol_ratio = vol.get("volume_ratio", 1)
+        vol_status = vol.get("status", "normal")
+        
+        if signal_direction == "buy":
+            if vol_status == "high_volume" and vol_ratio > 1.5:
+                return True, f"放量确认({vol_ratio:.1f}倍)"
+            elif vol_status == "low_volume":
+                return False, "成交量萎缩，信号待确认"
+            else:
+                return True, "成交量正常"
+        
+        elif signal_direction == "sell":
+            if vol_status == "high_volume" and vol_ratio > 2:
+                return True, f"放量下跌({vol_ratio:.1f}倍)"
+            else:
+                return False, "缩量下跌，可能是洗盘"
+        
+        return True, ""
+
     def generate_signal(self, indicators: Dict, quant_analysis: Dict = None, trend_analysis: Dict = None) -> TradingSignal:
         """
-        根据技术指标+量化分析+趋势分析生成交易信号
+        根据技术指标+量化分析+趋势分析生成交易信号 (优化版 v2.0)
+        
+        核心逻辑：
+        1. 首先评估当前趋势状态
+        2. 在趋势方向上寻找入场机会
+        3. 反向信号需要多重确认
+        4. 超买超卖作为警告，不直接触发交易
         
         Args:
             indicators: 技术指标字典 (来自 calculate_all_indicators)
@@ -154,7 +425,14 @@ class TradingSignalGenerator:
         buy_score = 0
         sell_score = 0
         
-        # ========== 第一部分：量化分析数据 ==========
+        # ========== 第一步：评估当前趋势状态 ==========
+        trend_state, trend_score_val = self._assess_trend_state(indicators, quant_analysis)
+        
+        # 趋势保护：在明确趋势中，提高反向信号的门槛
+        is_uptrend = trend_state in [TrendState.UP, TrendState.STRONG_UP, TrendState.WEAK_UP]
+        is_downtrend = trend_state in [TrendState.DOWN, TrendState.STRONG_DOWN, TrendState.WEAK_DOWN]
+        
+        # ========== 第二步：量化分析数据 ==========
         if quant_analysis:
             quant_score = quant_analysis.get("quant_score", 50)
             quant_reco = quant_analysis.get("recommendation", "hold")
@@ -209,7 +487,7 @@ class TradingSignalGenerator:
                 sell_pending.append(f"空头略占优({bearish_signals}:{bullish_signals})")
 
         
-        # ========== 第三部分：技术指标分析 ==========
+        # ========== 第四步：技术指标分析 (趋势感知) ==========
         # 1. 均线系统检查
         ma_trend = indicators.get("ma_trend", "")
         ma_values = indicators.get("moving_averages", {})
@@ -217,10 +495,10 @@ class TradingSignalGenerator:
         
         if ma_trend == "bullish_alignment":
             buy_triggered.append("均线多头排列")
-            buy_score += 2
+            buy_score += self.buy_conditions["ma_bullish_alignment"]
         elif ma_trend == "bearish_alignment":
             sell_triggered.append("均线空头排列")
-            sell_score += 2
+            sell_score += self.sell_conditions["ma_bearish_alignment"]
         
         ma20 = ma_values.get("MA20", 0)
         ma60 = ma_values.get("MA60", 0)
@@ -230,8 +508,12 @@ class TradingSignalGenerator:
                 buy_triggered.append("价格站上MA20")
                 buy_score += self.buy_conditions["price_above_ma20"]
             else:
-                sell_triggered.append("价格跌破MA20")
-                sell_score += self.sell_conditions["price_below_ma20"]
+                # 在上涨趋势中，短期跌破MA20只是警告
+                if is_uptrend:
+                    sell_pending.append("⚠️ 短期跌破MA20")
+                else:
+                    sell_triggered.append("价格跌破MA20")
+                    sell_score += self.sell_conditions["price_below_ma20"]
         
         if latest_price > 0 and ma60 > 0:
             if latest_price > ma60:
@@ -247,65 +529,104 @@ class TradingSignalGenerator:
             buy_triggered.append("MACD金叉")
             buy_score += self.buy_conditions["macd_golden_cross"]
         elif macd.get("crossover") == "death_cross":
-            sell_triggered.append("MACD死叉")
-            sell_score += self.sell_conditions["macd_death_cross"]
+            # 在上涨趋势中，MACD死叉权重降低
+            if is_uptrend:
+                sell_pending.append("⚠️ MACD死叉(趋势中可能是调整)")
+                sell_score += self.sell_conditions["macd_death_cross"] * 0.5
+            else:
+                sell_triggered.append("MACD死叉")
+                sell_score += self.sell_conditions["macd_death_cross"]
         
         if macd.get("trend") == "bullish":
             buy_triggered.append("MACD柱状图为正")
             buy_score += self.buy_conditions["macd_bullish"]
         elif macd.get("trend") == "bearish":
-            sell_triggered.append("MACD柱状图为负")
-            sell_score += self.sell_conditions["macd_bearish"]
+            # MACD为负在上涨趋势中不作为卖出信号
+            if not is_uptrend:
+                sell_triggered.append("MACD柱状图为负")
+                sell_score += self.sell_conditions["macd_bearish"]
 
-        # 3. RSI检查
+        # 3. RSI检查 (趋势感知 - 核心优化点)
         rsi = indicators.get("rsi", {})
         rsi_value = rsi.get("value", 50)
+        
         if rsi.get("status") == "oversold":
-            buy_triggered.append(f"RSI超卖({rsi_value:.1f})")
-            buy_score += self.buy_conditions["rsi_oversold_recovery"]
+            # 超卖在上涨趋势中是买入机会
+            if is_uptrend:
+                buy_triggered.append(f"RSI超卖回调买点({rsi_value:.1f})")
+                buy_score += self.buy_conditions["rsi_oversold_recovery"] * 1.5
+            else:
+                buy_triggered.append(f"RSI超卖({rsi_value:.1f})")
+                buy_score += self.buy_conditions["rsi_oversold_recovery"]
         elif rsi.get("status") == "overbought":
-            sell_triggered.append(f"RSI超买({rsi_value:.1f})")
-            sell_score += self.sell_conditions["rsi_overbought"]
+            # 超买在上涨趋势中只是警告，不触发卖出！
+            if is_uptrend:
+                sell_pending.append(f"⚠️ RSI超买({rsi_value:.1f})，强势股可持续超买")
+            else:
+                sell_triggered.append(f"RSI超买({rsi_value:.1f})")
+                sell_score += self.sell_conditions["rsi_overbought"]
         else:
             if rsi_value < 40:
                 buy_pending.append(f"RSI偏低({rsi_value:.1f})")
             elif rsi_value > 60:
                 sell_pending.append(f"RSI偏高({rsi_value:.1f})")
         
-        # 4. KDJ检查
+        # 4. KDJ检查 (趋势感知)
         kdj = indicators.get("kdj", {})
         if kdj.get("crossover") == "golden_cross":
             buy_triggered.append("KDJ金叉")
             buy_score += self.buy_conditions["kdj_golden_cross"]
         elif kdj.get("crossover") == "death_cross":
-            sell_triggered.append("KDJ死叉")
-            sell_score += self.sell_conditions["kdj_death_cross"]
+            # 在上涨趋势中，KDJ死叉权重降低
+            if is_uptrend:
+                sell_pending.append("⚠️ KDJ死叉(可能是短期调整)")
+                sell_score += self.sell_conditions["kdj_death_cross"] * 0.5
+            else:
+                sell_triggered.append("KDJ死叉")
+                sell_score += self.sell_conditions["kdj_death_cross"]
         
         if kdj.get("status") == "oversold":
-            buy_triggered.append("KDJ超卖区域")
-            buy_score += self.buy_conditions["kdj_oversold"]
+            if is_uptrend:
+                buy_triggered.append("KDJ超卖(趋势中买点)")
+                buy_score += self.buy_conditions["kdj_oversold"] * 1.5
+            else:
+                buy_triggered.append("KDJ超卖区域")
+                buy_score += self.buy_conditions["kdj_oversold"]
         elif kdj.get("status") == "overbought":
-            sell_triggered.append("KDJ超买区域")
-            sell_score += self.sell_conditions["kdj_overbought"]
+            # 超买在上涨趋势中只是警告
+            if is_uptrend:
+                sell_pending.append("⚠️ KDJ超买(强势可持续)")
+            else:
+                sell_triggered.append("KDJ超买区域")
+                sell_score += self.sell_conditions["kdj_overbought"]
 
         
-        # 5. 布林带检查
+        # 5. 布林带检查 (趋势感知)
         bb = indicators.get("bollinger_bands", {})
         if bb.get("status") == "near_lower":
-            buy_triggered.append("触及布林带下轨")
-            buy_score += self.buy_conditions["bb_near_lower"]
+            if is_uptrend:
+                buy_triggered.append("触及布林下轨(趋势中买点)")
+                buy_score += self.buy_conditions["bb_near_lower"] * 1.5
+            else:
+                buy_triggered.append("触及布林带下轨")
+                buy_score += self.buy_conditions["bb_near_lower"]
         elif bb.get("status") == "near_upper":
-            sell_triggered.append("触及布林带上轨")
-            sell_score += self.sell_conditions["bb_near_upper"]
+            # 触及上轨在上涨趋势中可能是强势表现
+            if is_uptrend:
+                sell_pending.append("⚠️ 触及布林上轨(强势股特征)")
+            else:
+                sell_triggered.append("触及布林带上轨")
+                sell_score += self.sell_conditions["bb_near_upper"]
         
         # 6. 成交量检查
         vol = indicators.get("volume_analysis", {})
         vol_ratio = vol.get("volume_ratio", 1)
         if vol.get("status") == "high_volume" and vol_ratio > 1.5:
-            if buy_score > sell_score:
+            # 放量需要结合趋势判断
+            if is_uptrend or buy_score > sell_score:
                 buy_triggered.append(f"放量确认({vol_ratio:.1f}倍)")
                 buy_score += self.buy_conditions["volume_breakout"]
-            else:
+            elif is_downtrend:
                 sell_triggered.append(f"放量下跌({vol_ratio:.1f}倍)")
                 sell_score += self.sell_conditions["volume_decline"]
         elif vol.get("status") == "low_volume":
@@ -327,14 +648,20 @@ class TradingSignalGenerator:
             buy_triggered.append("SAR趋势反转向上")
             buy_score += self.buy_conditions["sar_bullish"]
         elif sar.get("signal") == "sell":
-            sell_triggered.append("SAR趋势反转向下")
-            sell_score += self.sell_conditions["sar_bearish"]
+            # 在上涨趋势中，SAR卖出信号权重降低
+            if is_uptrend:
+                sell_pending.append("⚠️ SAR反转信号(趋势中需确认)")
+                sell_score += self.sell_conditions["sar_bearish"] * 0.5
+            else:
+                sell_triggered.append("SAR趋势反转向下")
+                sell_score += self.sell_conditions["sar_bearish"]
         elif sar.get("status") == "bullish":
             buy_triggered.append("SAR上升趋势")
             buy_score += 0.5
         elif sar.get("status") == "bearish":
-            sell_triggered.append("SAR下降趋势")
-            sell_score += 0.5
+            if not is_uptrend:
+                sell_triggered.append("SAR下降趋势")
+                sell_score += 0.5
         
         # 9. Ichimoku云图检查
         ichimoku = indicators.get("ichimoku", {})
@@ -363,8 +690,12 @@ class TradingSignalGenerator:
             buy_triggered.append("MFI超卖")
             buy_score += 1
         elif mfi.get("mfi_status") == "overbought":
-            sell_triggered.append("MFI超买")
-            sell_score += 1
+            # MFI超买在上涨趋势中只是警告
+            if is_uptrend:
+                sell_pending.append("⚠️ MFI超买")
+            else:
+                sell_triggered.append("MFI超买")
+                sell_score += 1
 
 
         # 11. DMI趋向指标检查
@@ -382,25 +713,57 @@ class TradingSignalGenerator:
             buy_triggered.append(f"BIAS超卖({bias.get('bias_6', 0):.1f}%)")
             buy_score += self.buy_conditions["bias_oversold"]
         elif bias.get("signal") == "sell":
-            sell_triggered.append(f"BIAS超买({bias.get('bias_6', 0):.1f}%)")
-            sell_score += self.sell_conditions["bias_overbought"]
+            # BIAS超买在上涨趋势中只是警告
+            if is_uptrend:
+                sell_pending.append(f"⚠️ BIAS偏高({bias.get('bias_6', 0):.1f}%)")
+            else:
+                sell_triggered.append(f"BIAS超买({bias.get('bias_6', 0):.1f}%)")
+                sell_score += self.sell_conditions["bias_overbought"]
         
-        # ========== 第四部分：综合计算信号 ==========
+        # ========== 第五步：趋势保护机制 ==========
+        # 在明确趋势中，提高反向信号的门槛
+        if is_uptrend and sell_score > 0:
+            # 上涨趋势中，卖出信号需要更强的确认
+            sell_score = sell_score / self.trend_protection_factor
+            sell_pending.append(f"📈 当前处于上涨趋势(趋势分:{trend_score_val})")
+        
+        if is_downtrend and buy_score > 0:
+            # 下跌趋势中，买入信号需要更强的确认
+            buy_score = buy_score / self.trend_protection_factor
+            buy_pending.append(f"📉 当前处于下跌趋势(趋势分:{trend_score_val})")
+        
+        # ========== 第六步：综合计算信号 ==========
         total_score = buy_score + sell_score
+        
+        # 信号判定需要满足最低要求
         if total_score == 0:
             signal_type = SignalType.HOLD
             strength = 0
             confidence = 0.5
         elif buy_score > sell_score:
-            signal_type = SignalType.BUY
-            score_diff = buy_score - sell_score
-            strength = min(5, max(1, int(score_diff / 2.5) + 1))
-            confidence = buy_score / (buy_score + sell_score + 1)
+            # 买入信号需要满足最低分数和条件数
+            if buy_score >= self.min_score_for_signal and len(buy_triggered) >= self.min_conditions_for_signal:
+                signal_type = SignalType.BUY
+                score_diff = buy_score - sell_score
+                strength = min(5, max(1, int(score_diff / 3) + 1))
+                confidence = buy_score / (buy_score + sell_score + 1)
+            else:
+                signal_type = SignalType.HOLD
+                strength = 0
+                confidence = 0.5
+                buy_pending.append(f"买入信号不足(分数:{buy_score:.1f},条件:{len(buy_triggered)})")
         elif sell_score > buy_score:
-            signal_type = SignalType.SELL
-            score_diff = sell_score - buy_score
-            strength = min(5, max(1, int(score_diff / 2.5) + 1))
-            confidence = sell_score / (buy_score + sell_score + 1)
+            # 卖出信号需要满足最低分数和条件数
+            if sell_score >= self.min_score_for_signal and len(sell_triggered) >= self.min_conditions_for_signal:
+                signal_type = SignalType.SELL
+                score_diff = sell_score - buy_score
+                strength = min(5, max(1, int(score_diff / 3) + 1))
+                confidence = sell_score / (buy_score + sell_score + 1)
+            else:
+                signal_type = SignalType.HOLD
+                strength = 0
+                confidence = 0.5
+                sell_pending.append(f"卖出信号不足(分数:{sell_score:.1f},条件:{len(sell_triggered)})")
         else:
             signal_type = SignalType.HOLD
             strength = 0
@@ -409,10 +772,10 @@ class TradingSignalGenerator:
         # 合并触发条件
         if signal_type == SignalType.BUY:
             triggered = buy_triggered
-            pending = buy_pending + [f"⚠️ {c}" for c in sell_triggered[:3]]
+            pending = buy_pending + [f"⚠️ {c}" for c in sell_triggered[:3] if not c.startswith("⚠️")]
         elif signal_type == SignalType.SELL:
             triggered = sell_triggered
-            pending = sell_pending + [f"⚠️ {c}" for c in buy_triggered[:3]]
+            pending = sell_pending + [f"⚠️ {c}" for c in buy_triggered[:3] if not c.startswith("⚠️")]
         else:
             triggered = []
             pending = buy_pending + sell_pending
