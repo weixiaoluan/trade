@@ -109,26 +109,26 @@ class TradingSignalGenerator:
         # 趋势保护系数 - 在趋势中发出反向信号需要更高的分数
         self.trend_protection_factor = 1.5
         
-        # 买入信号触发条件权重 (优化后)
+        # 买入信号触发条件权重 (优化后 - 提高门槛，避免追高)
         self.buy_conditions = {
-            # 趋势类指标 (权重较高)
-            "price_above_ma20": 1,
-            "price_above_ma60": 1.5,
-            "ma_bullish_alignment": 3,      # 均线多头排列
-            "macd_golden_cross": 2.5,
-            "macd_bullish": 1,
+            # 趋势类指标 (权重较高，但需要多重确认)
+            "price_above_ma20": 0.8,        # 降低权重，单独站上MA20不足以买入
+            "price_above_ma60": 1.2,        # 中期均线更重要
+            "ma_bullish_alignment": 3,      # 均线多头排列是强买入信号
+            "macd_golden_cross": 2.5,       # MACD金叉重要
+            "macd_bullish": 0.8,            # MACD为正单独不足以买入
             "adx_strong_bullish": 2.5,
-            "sar_bullish": 1.5,
+            "sar_bullish": 1.2,
             "ichimoku_above_cloud": 2.5,
-            "dmi_bullish": 1.5,
-            # 超卖反弹类 (在上涨趋势中权重更高)
-            "rsi_oversold_recovery": 2,
-            "kdj_golden_cross": 1.5,
-            "kdj_oversold": 1.5,
-            "bb_near_lower": 1.5,
-            "bias_oversold": 1.5,
-            # 量能确认
-            "volume_breakout": 2,
+            "dmi_bullish": 1.2,
+            # 超卖反弹类 (在下跌趋势中需要更多确认)
+            "rsi_oversold_recovery": 1.5,   # 降低权重，超卖不等于要买
+            "kdj_golden_cross": 1.2,
+            "kdj_oversold": 1,              # 降低权重
+            "bb_near_lower": 1,             # 降低权重，触及下轨可能继续跌
+            "bias_oversold": 1,
+            # 量能确认 (重要)
+            "volume_breakout": 2.5,         # 放量突破是重要确认
             "mfi_inflow": 1.5,
             # 量化分析权重
             "quant_strong_buy": 3,
@@ -163,6 +163,13 @@ class TradingSignalGenerator:
             "quant_sell": 2,
             "low_quant_score": 2,
             "bearish_trend": 2.5,
+        }
+        
+        # 观望信号的判定标准
+        self.hold_threshold = {
+            "max_score_diff": 3,            # 买卖分数差小于此值时观望
+            "min_confidence": 0.55,         # 置信度低于此值时观望
+            "conflicting_signals": 3,       # 矛盾信号数超过此值时观望
         }
 
 
@@ -551,8 +558,11 @@ class TradingSignalGenerator:
         rsi_value = rsi.get("value", 50)
         
         if rsi.get("status") == "oversold":
-            # 超卖在上涨趋势中是买入机会
-            if is_uptrend:
+            # 超卖在下跌趋势中只是警告，不直接触发买入！
+            if is_downtrend:
+                buy_pending.append(f"⚠️ RSI超卖({rsi_value:.1f})，但趋势仍偏空，等待企稳")
+            elif is_uptrend:
+                # 上涨趋势中的超卖是买入机会
                 buy_triggered.append(f"RSI超卖回调买点({rsi_value:.1f})")
                 buy_score += self.buy_conditions["rsi_oversold_recovery"] * 1.5
             else:
@@ -574,8 +584,13 @@ class TradingSignalGenerator:
         # 4. KDJ检查 (趋势感知)
         kdj = indicators.get("kdj", {})
         if kdj.get("crossover") == "golden_cross":
-            buy_triggered.append("KDJ金叉")
-            buy_score += self.buy_conditions["kdj_golden_cross"]
+            # 在下跌趋势中，KDJ金叉权重降低
+            if is_downtrend:
+                buy_pending.append("⚠️ KDJ金叉(下跌趋势中可能是反弹)")
+                buy_score += self.buy_conditions["kdj_golden_cross"] * 0.5
+            else:
+                buy_triggered.append("KDJ金叉")
+                buy_score += self.buy_conditions["kdj_golden_cross"]
         elif kdj.get("crossover") == "death_cross":
             # 在上涨趋势中，KDJ死叉权重降低
             if is_uptrend:
@@ -586,7 +601,10 @@ class TradingSignalGenerator:
                 sell_score += self.sell_conditions["kdj_death_cross"]
         
         if kdj.get("status") == "oversold":
-            if is_uptrend:
+            # 超卖在下跌趋势中只是警告
+            if is_downtrend:
+                buy_pending.append("⚠️ KDJ超卖(趋势偏空，等待企稳)")
+            elif is_uptrend:
                 buy_triggered.append("KDJ超卖(趋势中买点)")
                 buy_score += self.buy_conditions["kdj_oversold"] * 1.5
             else:
@@ -604,7 +622,10 @@ class TradingSignalGenerator:
         # 5. 布林带检查 (趋势感知)
         bb = indicators.get("bollinger_bands", {})
         if bb.get("status") == "near_lower":
-            if is_uptrend:
+            # 触及下轨在下跌趋势中可能继续跌
+            if is_downtrend:
+                buy_pending.append("⚠️ 触及布林下轨(下跌趋势中可能继续跌)")
+            elif is_uptrend:
                 buy_triggered.append("触及布林下轨(趋势中买点)")
                 buy_score += self.buy_conditions["bb_near_lower"] * 1.5
             else:
@@ -732,38 +753,71 @@ class TradingSignalGenerator:
             buy_score = buy_score / self.trend_protection_factor
             buy_pending.append(f"📉 当前处于下跌趋势(趋势分:{trend_score_val})")
         
-        # ========== 第六步：综合计算信号 ==========
+        # ========== 第六步：综合计算信号 (优化版) ==========
         total_score = buy_score + sell_score
+        score_diff = abs(buy_score - sell_score)
         
-        # 信号判定需要满足最低要求
+        # 计算矛盾信号数量
+        conflicting_buy = len([c for c in sell_triggered if not c.startswith("⚠️")])
+        conflicting_sell = len([c for c in buy_triggered if not c.startswith("⚠️")])
+        
+        # 信号判定需要满足最低要求，并考虑矛盾信号
         if total_score == 0:
             signal_type = SignalType.HOLD
             strength = 0
             confidence = 0.5
         elif buy_score > sell_score:
-            # 买入信号需要满足最低分数和条件数
-            if buy_score >= self.min_score_for_signal and len(buy_triggered) >= self.min_conditions_for_signal:
+            # 买入信号判定 - 更严格的条件
+            has_enough_score = buy_score >= self.min_score_for_signal
+            has_enough_conditions = len(buy_triggered) >= self.min_conditions_for_signal
+            score_diff_ok = score_diff >= self.hold_threshold["max_score_diff"]
+            not_too_many_conflicts = conflicting_buy <= self.hold_threshold["conflicting_signals"]
+            
+            if has_enough_score and has_enough_conditions and score_diff_ok and not_too_many_conflicts:
                 signal_type = SignalType.BUY
-                score_diff = buy_score - sell_score
                 strength = min(5, max(1, int(score_diff / 3) + 1))
                 confidence = buy_score / (buy_score + sell_score + 1)
             else:
+                # 条件不足，转为观望
                 signal_type = SignalType.HOLD
                 strength = 0
                 confidence = 0.5
-                buy_pending.append(f"买入信号不足(分数:{buy_score:.1f},条件:{len(buy_triggered)})")
+                reasons = []
+                if not has_enough_score:
+                    reasons.append(f"分数不足({buy_score:.1f}<{self.min_score_for_signal})")
+                if not has_enough_conditions:
+                    reasons.append(f"条件不足({len(buy_triggered)}<{self.min_conditions_for_signal})")
+                if not score_diff_ok:
+                    reasons.append(f"多空分歧大(差值{score_diff:.1f})")
+                if not not_too_many_conflicts:
+                    reasons.append(f"矛盾信号多({conflicting_buy}个)")
+                buy_pending.append(f"买入信号不足: {', '.join(reasons)}")
         elif sell_score > buy_score:
-            # 卖出信号需要满足最低分数和条件数
-            if sell_score >= self.min_score_for_signal and len(sell_triggered) >= self.min_conditions_for_signal:
+            # 卖出信号判定 - 更严格的条件
+            has_enough_score = sell_score >= self.min_score_for_signal
+            has_enough_conditions = len(sell_triggered) >= self.min_conditions_for_signal
+            score_diff_ok = score_diff >= self.hold_threshold["max_score_diff"]
+            not_too_many_conflicts = conflicting_sell <= self.hold_threshold["conflicting_signals"]
+            
+            if has_enough_score and has_enough_conditions and score_diff_ok and not_too_many_conflicts:
                 signal_type = SignalType.SELL
-                score_diff = sell_score - buy_score
                 strength = min(5, max(1, int(score_diff / 3) + 1))
                 confidence = sell_score / (buy_score + sell_score + 1)
             else:
+                # 条件不足，转为观望
                 signal_type = SignalType.HOLD
                 strength = 0
                 confidence = 0.5
-                sell_pending.append(f"卖出信号不足(分数:{sell_score:.1f},条件:{len(sell_triggered)})")
+                reasons = []
+                if not has_enough_score:
+                    reasons.append(f"分数不足({sell_score:.1f}<{self.min_score_for_signal})")
+                if not has_enough_conditions:
+                    reasons.append(f"条件不足({len(sell_triggered)}<{self.min_conditions_for_signal})")
+                if not score_diff_ok:
+                    reasons.append(f"多空分歧大(差值{score_diff:.1f})")
+                if not not_too_many_conflicts:
+                    reasons.append(f"矛盾信号多({conflicting_sell}个)")
+                sell_pending.append(f"卖出信号不足: {', '.join(reasons)}")
         else:
             signal_type = SignalType.HOLD
             strength = 0
@@ -777,7 +831,13 @@ class TradingSignalGenerator:
             triggered = sell_triggered
             pending = sell_pending + [f"⚠️ {c}" for c in buy_triggered[:3] if not c.startswith("⚠️")]
         else:
+            # 观望信号：显示多空双方的主要条件
             triggered = []
+            # 添加观望原因说明
+            if buy_score > 0 or sell_score > 0:
+                triggered.append(f"多空力量对比: 多方{buy_score:.1f}分 vs 空方{sell_score:.1f}分")
+            if trend_state == TrendState.SIDEWAYS:
+                triggered.append("市场处于横盘震荡状态")
             pending = buy_pending + sell_pending
         
         return TradingSignal(

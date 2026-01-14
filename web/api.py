@@ -4083,6 +4083,222 @@ async def get_quotes(symbols: str, authorization: str = Header(None)):
     return {"status": "success", "quotes": quotes}
 
 
+# ============================================
+# 实时交易信号 API
+# ============================================
+
+@app.get("/api/signals/realtime")
+async def get_realtime_signals(symbols: str, authorization: str = Header(None)):
+    """获取实时交易信号
+    
+    根据最新行情数据实时计算交易信号，不依赖缓存的报告数据。
+    适用于自选列表的信号实时更新。
+    
+    Args:
+        symbols: 逗号分隔的标的代码列表
+    
+    Returns:
+        包含每个标的的多周期信号（short/swing/long）
+    
+    注意：此接口仅供技术分析参考，不构成任何投资建议。
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    
+    if len(symbol_list) > 20:
+        raise HTTPException(status_code=400, detail="单次最多查询20个标的")
+    
+    # 使用线程池异步执行
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        signals = await loop.run_in_executor(executor, calculate_realtime_signals, symbol_list)
+    
+    return {
+        "status": "success", 
+        "signals": signals,
+        "timestamp": get_beijing_now().isoformat(),
+        "disclaimer": "以上信号仅为技术分析工具输出，不构成任何投资建议。市场有风险，投资需谨慎。"
+    }
+
+
+def calculate_realtime_signals(symbols: list) -> dict:
+    """计算实时交易信号
+    
+    为每个标的计算最新的多周期交易信号。
+    """
+    import time
+    from quant.trading_signals import generate_multi_period_analysis
+    
+    signals = {}
+    
+    for symbol in symbols:
+        try:
+            start_time = time.time()
+            
+            # 1. 获取行情数据
+            stock_data = get_stock_data(symbol, period="1y")
+            stock_data_dict = json.loads(stock_data)
+            
+            if stock_data_dict.get("status") != "success":
+                signals[symbol] = {"error": "获取行情数据失败"}
+                continue
+            
+            # 2. 计算技术指标
+            indicators_json = calculate_all_indicators(stock_data)
+            indicators_dict = json.loads(indicators_json)
+            
+            if indicators_dict.get("status") != "success":
+                signals[symbol] = {"error": "计算技术指标失败"}
+                continue
+            
+            indicators = indicators_dict.get("indicators", indicators_dict)
+            
+            # 3. 获取支撑阻力位
+            sr_json = get_support_resistance_levels(stock_data)
+            sr_dict = json.loads(sr_json)
+            
+            # 4. 简单的趋势分析（基于技术指标）
+            trend_json = analyze_trend(indicators_json)
+            trend_dict = json.loads(trend_json)
+            
+            # 5. 构建量化分析数据（简化版，基于技术指标）
+            quant_analysis = {
+                "quant_score": _calculate_quick_quant_score(indicators),
+                "recommendation": _get_quick_recommendation(indicators),
+                "market_regime": indicators.get("adx", {}).get("trend_strength", "unknown")
+            }
+            
+            # 6. 生成多周期信号
+            multi_period = generate_multi_period_analysis(
+                indicators,
+                sr_dict,
+                quant_analysis=quant_analysis,
+                trend_analysis=trend_dict
+            )
+            
+            # 7. 提取信号类型
+            signals[symbol] = {
+                "short": {
+                    "signal": multi_period['short']['signal_type'],
+                    "type_cn": multi_period['short']['type_cn'],
+                    "strength": multi_period['short']['strength'],
+                    "confidence": multi_period['short']['confidence']
+                },
+                "swing": {
+                    "signal": multi_period['swing']['signal_type'],
+                    "type_cn": multi_period['swing']['type_cn'],
+                    "strength": multi_period['swing']['strength'],
+                    "confidence": multi_period['swing']['confidence']
+                },
+                "long": {
+                    "signal": multi_period['long']['signal_type'],
+                    "type_cn": multi_period['long']['type_cn'],
+                    "strength": multi_period['long']['strength'],
+                    "confidence": multi_period['long']['confidence']
+                },
+                "current_price": indicators.get("latest_price", 0),
+                "calc_time": round(time.time() - start_time, 2)
+            }
+            
+            print(f"[Signals] {symbol} 信号计算完成: 短线={multi_period['short']['signal_type']}, 波段={multi_period['swing']['signal_type']}, 中长线={multi_period['long']['signal_type']}, 耗时={time.time()-start_time:.2f}s")
+            
+        except Exception as e:
+            print(f"[Signals] {symbol} 信号计算失败: {e}")
+            import traceback
+            traceback.print_exc()
+            signals[symbol] = {"error": str(e)}
+    
+    return signals
+
+
+def _calculate_quick_quant_score(indicators: dict) -> float:
+    """快速计算量化评分（简化版）
+    
+    基于技术指标快速计算一个0-100的评分。
+    """
+    score = 50  # 基础分
+    
+    # 均线趋势
+    ma_trend = indicators.get("ma_trend", "")
+    if ma_trend == "bullish_alignment":
+        score += 15
+    elif ma_trend == "bearish_alignment":
+        score -= 15
+    
+    # MACD
+    macd = indicators.get("macd", {})
+    if macd.get("trend") == "bullish":
+        score += 8
+    elif macd.get("trend") == "bearish":
+        score -= 8
+    if macd.get("crossover") == "golden_cross":
+        score += 5
+    elif macd.get("crossover") == "death_cross":
+        score -= 5
+    
+    # RSI
+    rsi = indicators.get("rsi", {})
+    rsi_value = rsi.get("value", 50)
+    if 40 <= rsi_value <= 60:
+        score += 5  # 中性区间加分
+    elif rsi_value < 30:
+        score += 3  # 超卖可能反弹
+    elif rsi_value > 70:
+        score -= 3  # 超买可能回调
+    
+    # ADX趋势强度
+    adx = indicators.get("adx", {})
+    if adx.get("trend_strength") == "strong":
+        if adx.get("trend_direction") == "bullish":
+            score += 10
+        else:
+            score -= 10
+    
+    # 资金流向
+    mfi = indicators.get("money_flow", {})
+    if mfi.get("mfi_status") == "inflow":
+        score += 8
+    elif mfi.get("mfi_status") == "outflow":
+        score -= 8
+    
+    # 云图
+    ichimoku = indicators.get("ichimoku", {})
+    if ichimoku.get("status") == "strong_bullish":
+        score += 8
+    elif ichimoku.get("status") == "strong_bearish":
+        score -= 8
+    
+    # 限制在0-100范围内
+    return max(0, min(100, score))
+
+
+def _get_quick_recommendation(indicators: dict) -> str:
+    """快速获取推荐（简化版）"""
+    score = _calculate_quick_quant_score(indicators)
+    
+    if score >= 75:
+        return "strong_buy"
+    elif score >= 60:
+        return "buy"
+    elif score <= 25:
+        return "strong_sell"
+    elif score <= 40:
+        return "sell"
+    else:
+        return "hold"
+
+
 # 缓存行情数据，避免频繁请求
 _quote_cache = {
     'etf': {'data': None, 'time': None},

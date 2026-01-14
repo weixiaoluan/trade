@@ -749,6 +749,58 @@ export default function DashboardPage() {
     }
   }, [getToken, watchlist]);
 
+  // 获取实时交易信号
+  const fetchRealtimeSignals = useCallback(async () => {
+    const token = getToken();
+    if (!token || watchlist.length === 0) return;
+
+    try {
+      // 只获取没有信号或信号过期的标的
+      const symbolsToUpdate = watchlist
+        .filter(item => !item.short_signal || !item.swing_signal || !item.long_signal)
+        .map(item => item.symbol);
+      
+      if (symbolsToUpdate.length === 0) return;
+      
+      // 分批获取，每批最多10个
+      const batchSize = 10;
+      for (let i = 0; i < symbolsToUpdate.length; i += batchSize) {
+        const batch = symbolsToUpdate.slice(i, i + batchSize);
+        const symbols = batch.join(",");
+        
+        const response = await fetch(`${API_BASE}/api/signals/realtime?symbols=${encodeURIComponent(symbols)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.signals) {
+            // 更新本地状态
+            setWatchlist(prev => prev.map(item => {
+              const signal = data.signals[item.symbol];
+              if (signal && !signal.error) {
+                return {
+                  ...item,
+                  short_signal: signal.short?.signal || item.short_signal,
+                  swing_signal: signal.swing?.signal || item.swing_signal,
+                  long_signal: signal.long?.signal || item.long_signal,
+                };
+              }
+              return item;
+            }));
+          }
+        }
+        
+        // 批次间延迟，避免请求过快
+        if (i + batchSize < symbolsToUpdate.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    } catch (error) {
+      console.error("获取实时信号失败:", error);
+    }
+  }, [getToken, watchlist]);
+
   // 获取用户设置
   const fetchUserSettings = useCallback(async () => {
     try {
@@ -1077,11 +1129,14 @@ export default function DashboardPage() {
     if (authChecked && watchlist.length > 0) {
       // 立即获取一次行情
       fetchQuotes();
+      // 获取实时信号（首次加载时）
+      fetchRealtimeSignals();
       
       // 根据是否交易时间动态调整刷新频率
       // 交易时间: 3秒刷新一次
       // 非交易时间: 60秒刷新一次（使用缓存数据）
       let quoteInterval: NodeJS.Timeout;
+      let signalInterval: NodeJS.Timeout;
       
       const setupInterval = () => {
         const interval = isTradingTime() ? 3000 : 60000;
@@ -1089,6 +1144,13 @@ export default function DashboardPage() {
           if (document.visibilityState !== "visible") return;
           fetchQuotes();
         }, interval);
+        
+        // 信号更新频率：交易时间5分钟，非交易时间30分钟
+        const signalIntervalMs = isTradingTime() ? 300000 : 1800000;
+        signalInterval = setInterval(() => {
+          if (document.visibilityState !== "visible") return;
+          fetchRealtimeSignals();
+        }, signalIntervalMs);
       };
       
       setupInterval();
@@ -1096,15 +1158,17 @@ export default function DashboardPage() {
       // 每分钟检查一次是否需要调整刷新频率
       const checkInterval = setInterval(() => {
         clearInterval(quoteInterval);
+        clearInterval(signalInterval);
         setupInterval();
       }, 60000);
 
       return () => {
         clearInterval(quoteInterval);
+        clearInterval(signalInterval);
         clearInterval(checkInterval);
       };
     }
-  }, [authChecked, watchlist, fetchQuotes, isTradingTime]);
+  }, [authChecked, watchlist, fetchQuotes, fetchRealtimeSignals, isTradingTime]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
