@@ -868,7 +868,61 @@ export default function DashboardPage() {
   const [pricesRefreshing, setPricesRefreshing] = useState(false);
   const [lastPricesUpdate, setLastPricesUpdate] = useState<string | null>(null);
 
-  // 批量刷新所有标的的价位数据
+  // 获取实时行情和缓存的价位数据（轻量级，适合高频轮询）
+  const fetchRealtimeData = useCallback(async () => {
+    const token = getToken();
+    if (!token || watchlist.length === 0) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/watchlist/realtime-prices`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.items) {
+          // 更新行情数据
+          const newQuotes: Record<string, QuoteData> = {};
+          data.items.forEach((item: any) => {
+            newQuotes[item.symbol] = {
+              symbol: item.symbol,
+              current_price: item.current_price,
+              change_percent: item.change_pct,
+            };
+          });
+          setQuotes(newQuotes);
+          
+          // 更新价位数据到watchlist
+          setWatchlist(prev => prev.map(w => {
+            const item = data.items.find((i: any) => i.symbol.toUpperCase() === w.symbol.toUpperCase());
+            if (item) {
+              return {
+                ...w,
+                short_support: item.short_support || w.short_support,
+                short_resistance: item.short_resistance || w.short_resistance,
+                short_risk: item.short_risk || w.short_risk,
+                swing_support: item.swing_support || w.swing_support,
+                swing_resistance: item.swing_resistance || w.swing_resistance,
+                swing_risk: item.swing_risk || w.swing_risk,
+                long_support: item.long_support || w.long_support,
+                long_resistance: item.long_resistance || w.long_resistance,
+                long_risk: item.long_risk || w.long_risk,
+              };
+            }
+            return w;
+          }));
+          
+          if (data.timestamp) {
+            setLastPricesUpdate(data.timestamp);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("获取实时数据失败:", error);
+    }
+  }, [getToken, watchlist]);
+
+  // 批量计算所有标的的价位数据（重量级，手动触发）
   const refreshAllPrices = useCallback(async () => {
     const token = getToken();
     if (!token || watchlist.length === 0) return;
@@ -878,82 +932,57 @@ export default function DashboardPage() {
     try {
       const symbols = watchlist.map(item => item.symbol);
       
-      // 分批获取，每批最多10个
-      const batchSize = 10;
-      const periods = ['short', 'swing', 'long'];
+      // 调用计算接口
+      const response = await fetch(`${API_BASE}/api/watchlist/calculate-prices`, {
+        method: 'POST',
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ symbols, force: true })
+      });
       
-      for (const period of periods) {
-        for (let i = 0; i < symbols.length; i += batchSize) {
-          const batch = symbols.slice(i, i + batchSize);
-          const symbolsStr = batch.join(",");
-          
-          const response = await fetch(`${API_BASE}/api/watchlist/prices/realtime?symbols=${encodeURIComponent(symbolsStr)}&period=${period}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.prices) {
-              // 更新缓存
-              setRealtimePricesCache(prev => {
-                const newCache = { ...prev };
-                Object.entries(data.prices).forEach(([symbol, priceData]: [string, any]) => {
-                  if (!priceData.error) {
-                    if (!newCache[symbol]) {
-                      newCache[symbol] = {};
-                    }
-                    newCache[symbol][period] = {
-                      support: priceData.support,
-                      resistance: priceData.resistance,
-                      risk: priceData.risk,
-                      updated_at: priceData.updated_at
-                    };
-                  }
-                });
-                return newCache;
-              });
-              
-              // 更新watchlist状态
-              setWatchlist(prev => prev.map(item => {
-                const priceData = data.prices[item.symbol];
-                if (priceData && !priceData.error) {
-                  const updates: Partial<WatchlistItem> = {};
-                  if (period === 'short') {
-                    updates.short_support = priceData.support;
-                    updates.short_resistance = priceData.resistance;
-                    updates.short_risk = priceData.risk;
-                  } else if (period === 'swing') {
-                    updates.swing_support = priceData.support;
-                    updates.swing_resistance = priceData.resistance;
-                    updates.swing_risk = priceData.risk;
-                  } else if (period === 'long') {
-                    updates.long_support = priceData.support;
-                    updates.long_resistance = priceData.resistance;
-                    updates.long_risk = priceData.risk;
-                  }
-                  return { ...item, ...updates };
-                }
-                return item;
-              }));
-              
-              if (data.timestamp) {
-                setLastPricesUpdate(data.timestamp);
-              }
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.async) {
+          // 异步处理，显示提示
+          showAlertModal("计算中", `正在后台计算 ${symbols.length} 个标的的价位，请稍后刷新查看`, "info");
+        } else if (data.results) {
+          // 同步处理完成，更新本地状态
+          setWatchlist(prev => prev.map(item => {
+            const result = data.results[item.symbol];
+            if (result && !result.error && result.prices) {
+              return {
+                ...item,
+                short_support: result.prices.short?.support,
+                short_resistance: result.prices.short?.resistance,
+                short_risk: result.prices.short?.risk,
+                swing_support: result.prices.swing?.support,
+                swing_resistance: result.prices.swing?.resistance,
+                swing_risk: result.prices.swing?.risk,
+                long_support: result.prices.long?.support,
+                long_resistance: result.prices.long?.resistance,
+                long_risk: result.prices.long?.risk,
+              };
             }
+            return item;
+          }));
+          
+          if (data.timestamp) {
+            setLastPricesUpdate(data.timestamp);
           }
           
-          // 批次间延迟
-          if (i + batchSize < symbols.length) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
+          showAlertModal("刷新完成", `已更新 ${Object.keys(data.results).length} 个标的的价位数据`, "success");
         }
       }
     } catch (error) {
       console.error("刷新价位失败:", error);
+      showAlertModal("刷新失败", "请稍后重试", "error");
     } finally {
       setPricesRefreshing(false);
     }
-  }, [getToken, watchlist]);
+  }, [getToken, watchlist, showAlertModal]);
 
   // 获取实时交易信号
   const fetchRealtimeSignals = useCallback(async (forceRefresh: boolean = false) => {
@@ -1345,22 +1374,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authChecked && watchlist.length > 0) {
-      // 立即获取一次行情
-      fetchQuotes();
+      // 立即获取一次实时数据（行情+价位）
+      fetchRealtimeData();
       // 获取实时信号（首次加载时）
       fetchRealtimeSignals();
       
       // 根据是否交易时间动态调整刷新频率
-      // 交易时间: 3秒刷新一次
-      // 非交易时间: 60秒刷新一次（使用缓存数据）
+      // 交易时间: 1秒刷新一次行情
+      // 非交易时间: 30秒刷新一次
       let quoteInterval: NodeJS.Timeout;
       let signalInterval: NodeJS.Timeout;
       
       const setupInterval = () => {
-        const interval = isTradingTime() ? 3000 : 60000;
+        const interval = isTradingTime() ? 1000 : 30000;
         quoteInterval = setInterval(() => {
           if (document.visibilityState !== "visible") return;
-          fetchQuotes();
+          fetchRealtimeData();
         }, interval);
         
         // 信号更新频率：交易时间5分钟，非交易时间30分钟
@@ -1386,7 +1415,7 @@ export default function DashboardPage() {
         clearInterval(checkInterval);
       };
     }
-  }, [authChecked, watchlist, fetchQuotes, fetchRealtimeSignals, isTradingTime]);
+  }, [authChecked, watchlist.length, fetchRealtimeData, fetchRealtimeSignals, isTradingTime]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem("token");

@@ -6741,6 +6741,275 @@ async def get_sim_trade_signals(authorization: str = Header(None)):
 
 
 # ============================================
+# 自选列表实时价位 API
+# ============================================
+
+@app.get("/api/watchlist/realtime-prices")
+async def get_watchlist_realtime_prices(authorization: str = Header(None)):
+    """获取自选列表所有标的的实时行情和价位
+    
+    实时获取行情，价位数据从数据库缓存读取。
+    适合高频轮询（交易时间1秒/非交易30秒）。
+    
+    返回数据：
+    - 实时行情（价格、涨跌幅）
+    - 支撑位/阻力位/风险位（从数据库缓存读取）
+    - 距离支撑位/阻力位的百分比
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    
+    # 获取自选列表
+    watchlist = get_user_watchlist(username)
+    if not watchlist:
+        return {"status": "success", "items": [], "message": "自选列表为空"}
+    
+    # 批量获取实时行情
+    symbols = [item['symbol'] for item in watchlist]
+    from tools.data_fetcher import get_batch_quotes
+    quotes_result = get_batch_quotes(symbols)
+    quotes = {}
+    if quotes_result.get('status') == 'success':
+        for q in quotes_result.get('quotes', []):
+            quotes[q['symbol'].upper()] = q
+    
+    # 构建返回数据
+    items = []
+    for item in watchlist:
+        symbol = item['symbol'].upper()
+        quote = quotes.get(symbol, {})
+        holding_period = item.get('holding_period', 'swing')
+        
+        current_price = quote.get('current_price', 0)
+        change_pct = quote.get('change_percent', 0)
+        prev_close = quote.get('prev_close', 0)
+        
+        # 从数据库获取缓存的价位数据
+        support = item.get(f'{holding_period}_support') or item.get('ai_buy_price', 0)
+        resistance = item.get(f'{holding_period}_resistance') or item.get('ai_sell_price', 0)
+        risk = item.get(f'{holding_period}_risk', 0)
+        
+        # 计算距离
+        dist_to_support = None
+        dist_to_resistance = None
+        
+        if current_price > 0 and support > 0:
+            dist_to_support = round((current_price - support) / support * 100, 2)
+        
+        if current_price > 0 and resistance > 0:
+            dist_to_resistance = round((resistance - current_price) / current_price * 100, 2)
+        
+        items.append({
+            'symbol': symbol,
+            'name': item.get('name', symbol),
+            'type': item.get('type', 'stock'),
+            'holding_period': holding_period,
+            'current_price': current_price,
+            'change_pct': round(change_pct, 2),
+            'prev_close': prev_close,
+            'support': support,
+            'resistance': resistance,
+            'risk': risk,
+            'dist_to_support': dist_to_support,
+            'dist_to_resistance': dist_to_resistance,
+            'starred': item.get('starred', 0),
+            # 多周期价位
+            'short_support': item.get('short_support', 0),
+            'short_resistance': item.get('short_resistance', 0),
+            'short_risk': item.get('short_risk', 0),
+            'swing_support': item.get('swing_support', 0),
+            'swing_resistance': item.get('swing_resistance', 0),
+            'swing_risk': item.get('swing_risk', 0),
+            'long_support': item.get('long_support', 0),
+            'long_resistance': item.get('long_resistance', 0),
+            'long_risk': item.get('long_risk', 0),
+        })
+    
+    return {
+        "status": "success",
+        "items": items,
+        "count": len(items),
+        "timestamp": get_beijing_now().isoformat()
+    }
+
+
+@app.post("/api/watchlist/calculate-prices")
+async def calculate_watchlist_prices(
+    data: dict,
+    background_tasks: BackgroundTasks,
+    authorization: str = Header(None)
+):
+    """实时计算自选列表标的的支撑位/阻力位/风险位
+    
+    基于ATR动态计算，不依赖AI报告。
+    计算完成后自动保存到数据库。
+    
+    Args:
+        data: {
+            symbols: 要计算的标的列表（可选，默认全部）
+            force: 是否强制重新计算（可选，默认false）
+        }
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    symbols = data.get('symbols', [])
+    force = data.get('force', False)
+    
+    # 如果没有指定标的，获取全部自选
+    if not symbols:
+        watchlist = get_user_watchlist(username)
+        symbols = [item['symbol'] for item in watchlist]
+    
+    if not symbols:
+        return {"status": "success", "message": "没有需要计算的标的"}
+    
+    if len(symbols) > 30:
+        # 超过30个标的，后台异步处理
+        background_tasks.add_task(batch_calculate_prices_task, symbols, username)
+        return {
+            "status": "success",
+            "message": f"已开始后台计算 {len(symbols)} 个标的的价位",
+            "async": True
+        }
+    
+    # 同步计算
+    results = await calculate_prices_for_symbols(symbols, username)
+    
+    return {
+        "status": "success",
+        "results": results,
+        "count": len(results),
+        "timestamp": get_beijing_now().isoformat()
+    }
+
+
+async def calculate_prices_for_symbols(symbols: list, username: str) -> dict:
+    """计算指定标的的价位数据"""
+    import time
+    from web.database import db_update_watchlist_ai_prices
+    
+    results = {}
+    
+    for symbol in symbols:
+        try:
+            start_time = time.time()
+            
+            # 获取行情数据（使用较短周期以加快速度）
+            stock_data = await asyncio.to_thread(get_stock_data, symbol, "6mo")
+            stock_data_dict = json.loads(stock_data)
+            
+            if stock_data_dict.get("status") != "success":
+                results[symbol] = {"error": "获取行情数据失败"}
+                continue
+            
+            # 计算技术指标
+            indicators_json = await asyncio.to_thread(calculate_all_indicators, stock_data)
+            indicators_dict = json.loads(indicators_json)
+            
+            if indicators_dict.get("status") != "success":
+                results[symbol] = {"error": "计算技术指标失败"}
+                continue
+            
+            indicators = indicators_dict.get("indicators", indicators_dict)
+            current_price = indicators.get("latest_price", 0)
+            
+            if current_price <= 0:
+                results[symbol] = {"error": "无法获取当前价格"}
+                continue
+            
+            # 获取ATR值
+            atr_data = indicators.get("atr", {})
+            atr = atr_data.get("value", current_price * 0.02)
+            
+            # 获取支撑阻力位
+            sr_json = await asyncio.to_thread(get_support_resistance_levels, stock_data)
+            sr_dict = json.loads(sr_json)
+            
+            support_levels = [l.get("price", 0) for l in sr_dict.get("support_levels", []) if l.get("price", 0) > 0]
+            resistance_levels = [l.get("price", 0) for l in sr_dict.get("resistance_levels", []) if l.get("price", 0) > 0]
+            
+            # ATR倍数配置
+            atr_configs = {
+                'short': {'support': 0.5, 'resistance': 1.0, 'risk': 1.5},
+                'swing': {'support': 1.0, 'resistance': 1.5, 'risk': 2.0},
+                'long': {'support': 1.5, 'resistance': 2.0, 'risk': 3.0},
+            }
+            
+            # 计算三个周期的价位
+            multi_period_prices = {}
+            for period, multipliers in atr_configs.items():
+                # 支撑位：优先使用技术支撑位，否则用ATR计算
+                if support_levels:
+                    nearest_support = max([s for s in support_levels if s < current_price], default=None)
+                    support = nearest_support if nearest_support else current_price - atr * multipliers['support']
+                else:
+                    support = current_price - atr * multipliers['support']
+                
+                # 阻力位：优先使用技术阻力位，否则用ATR计算
+                if resistance_levels:
+                    nearest_resistance = min([r for r in resistance_levels if r > current_price], default=None)
+                    resistance = nearest_resistance if nearest_resistance else current_price + atr * multipliers['resistance']
+                else:
+                    resistance = current_price + atr * multipliers['resistance']
+                
+                # 风险位（止损位）
+                risk = current_price - atr * multipliers['risk']
+                
+                multi_period_prices[period] = {
+                    'support': round(support, 4),
+                    'resistance': round(resistance, 4),
+                    'risk': round(risk, 4)
+                }
+            
+            # 保存到数据库
+            db_update_watchlist_ai_prices(
+                username=username,
+                symbol=symbol,
+                multi_period_prices=multi_period_prices
+            )
+            
+            results[symbol] = {
+                'current_price': round(current_price, 4),
+                'atr': round(atr, 4),
+                'atr_pct': round(atr / current_price * 100, 2),
+                'prices': multi_period_prices,
+                'calc_time': round(time.time() - start_time, 2)
+            }
+            
+        except Exception as e:
+            results[symbol] = {"error": str(e)}
+    
+    return results
+
+
+def batch_calculate_prices_task(symbols: list, username: str):
+    """后台任务：批量计算价位"""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(calculate_prices_for_symbols(symbols, username))
+    finally:
+        loop.close()
+
+
+# ============================================
 # 启动服务
 # ============================================
 
