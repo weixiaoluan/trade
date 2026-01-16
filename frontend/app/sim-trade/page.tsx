@@ -357,7 +357,10 @@ export default function SimTradePage() {
       ]);
       if (monitorRes.ok) {
         const data = await monitorRes.json();
+        console.log("监控数据:", data);
         setMonitorItems(data.monitor_items || []);
+      } else {
+        console.error("获取监控数据失败:", await monitorRes.text());
       }
       if (logsRes.ok) {
         const data = await logsRes.json();
@@ -410,24 +413,30 @@ export default function SimTradePage() {
   // 处理自动交易
   const processAutoTrade = useCallback(async () => {
     const token = getToken();
-    if (!token) return;
+    if (!token) {
+      showAlertModal("未登录", "请先登录", "error");
+      return;
+    }
     setProcessingTrade(true);
     try {
       const response = await fetch(`${API_BASE}/api/sim-trade/process`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      const data = await response.json();
       if (response.ok) {
-        const data = await response.json();
         if (data.trades && data.trades.length > 0) {
           showAlertModal("交易执行完成", `执行了 ${data.trades.length} 笔交易`, "success");
         } else {
-          showAlertModal("无交易信号", "当前没有符合条件的交易信号", "info");
+          showAlertModal("无交易信号", data.message || "当前没有符合条件的交易信号", "info");
         }
         await Promise.all([fetchAccountInfo(), fetchRecords(), fetchMonitorData()]);
+      } else {
+        showAlertModal("执行失败", data.detail || data.message || "请稍后重试", "error");
       }
     } catch (error) {
-      showAlertModal("处理失败", "请稍后重试", "error");
+      console.error("处理自动交易失败:", error);
+      showAlertModal("处理失败", "网络错误，请稍后重试", "error");
     } finally {
       setProcessingTrade(false);
     }
