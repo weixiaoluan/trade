@@ -162,6 +162,22 @@ def init_database():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_reminder_logs_username ON reminder_logs(username)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_reminder_logs_symbol ON reminder_logs(username, symbol)')
         
+        # 用户操作记录表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_activity_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                action_detail TEXT,
+                ip_address TEXT,
+                user_agent TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_activity_logs_username ON user_activity_logs(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_activity_logs_created_at ON user_activity_logs(created_at)')
+        
         conn.commit()
         print("数据库初始化完成")
 
