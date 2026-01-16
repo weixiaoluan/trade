@@ -291,6 +291,9 @@ export default function DashboardPage() {
   // 正在加载价位的标的
   const [loadingPrices, setLoadingPrices] = useState<Set<string>>(new Set());
 
+  // 获取token（提前定义，供后续函数使用）
+  const getToken = useCallback(() => localStorage.getItem("token"), []);
+
   // 获取标的当前显示周期（默认使用标的的holding_period）
   const getItemDisplayPeriod = useCallback((item: WatchlistItem) => {
     return itemDisplayPeriods[item.symbol] || item.holding_period || 'swing';
@@ -570,8 +573,6 @@ export default function DashboardPage() {
 
   // 新增的研究列表数量（用于角标显示）
   const newAiPicksCount = availableAiPicks.length;
-
-  const getToken = useCallback(() => localStorage.getItem("token"), []);
 
   const tasksRef = useRef(tasks);
   useEffect(() => {
