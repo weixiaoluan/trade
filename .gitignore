@@ -44,4 +44,6 @@ reports/*.json
 # Database and data files
 web/data/*.json
 web/data/*.db
+web/data/*.backup
+web/data/backups/
 web/data/.migrated
