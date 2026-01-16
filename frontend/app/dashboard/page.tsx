@@ -1577,23 +1577,23 @@ export default function DashboardPage() {
           aVal = a.position || 0;
           bVal = b.position || 0;
         } else if (sortField === "ai_buy_price") {
-          // 支撑位排序：按距离当前价的百分比排序
+          // 支撑位排序：按距离当前价的百分比绝对值排序（由近到远）
           const aPrice = aQuote?.current_price || 0;
           const bPrice = bQuote?.current_price || 0;
           const aBuyPrice = a.ai_buy_price || 0;
           const bBuyPrice = b.ai_buy_price || 0;
-          // 计算距离百分比：(当前价 - 支撑位) / 支撑位 * 100
-          aVal = aBuyPrice > 0 && aPrice > 0 ? ((aPrice - aBuyPrice) / aBuyPrice * 100) : Infinity;
-          bVal = bBuyPrice > 0 && bPrice > 0 ? ((bPrice - bBuyPrice) / bBuyPrice * 100) : Infinity;
+          // 计算距离百分比绝对值：|当前价 - 支撑位| / 当前价 * 100
+          aVal = aBuyPrice > 0 && aPrice > 0 ? Math.abs((aPrice - aBuyPrice) / aPrice * 100) : Infinity;
+          bVal = bBuyPrice > 0 && bPrice > 0 ? Math.abs((bPrice - bBuyPrice) / bPrice * 100) : Infinity;
         } else if (sortField === "ai_sell_price") {
-          // 阻力位排序：按距离当前价的百分比排序
+          // 阻力位排序：按距离当前价的百分比绝对值排序（由近到远）
           const aPrice = aQuote?.current_price || 0;
           const bPrice = bQuote?.current_price || 0;
           const aSellPrice = a.ai_sell_price || 0;
           const bSellPrice = b.ai_sell_price || 0;
-          // 计算距离百分比：(阻力位 - 当前价) / 当前价 * 100
-          aVal = aSellPrice > 0 && aPrice > 0 ? ((aSellPrice - aPrice) / aPrice * 100) : Infinity;
-          bVal = bSellPrice > 0 && bPrice > 0 ? ((bSellPrice - bPrice) / bPrice * 100) : Infinity;
+          // 计算距离百分比绝对值：|阻力位 - 当前价| / 当前价 * 100
+          aVal = aSellPrice > 0 && aPrice > 0 ? Math.abs((aSellPrice - aPrice) / aPrice * 100) : Infinity;
+          bVal = bSellPrice > 0 && bPrice > 0 ? Math.abs((bSellPrice - bPrice) / bPrice * 100) : Infinity;
         } else if (sortField === "report_time") {
           // 报告更新时间排序
           const aReport = reportsBySymbol[a.symbol] || reportsBySymbol[a.symbol.replace(/\./g, '_')] || reportsBySymbol[a.symbol.replace(/_/g, '.')];
