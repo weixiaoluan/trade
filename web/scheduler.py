@@ -341,7 +341,8 @@ def process_auto_trades():
         from web.database import (
             db_get_all_auto_trade_users, 
             db_get_user_watchlist,
-            db_get_auto_trade_user_count
+            db_get_auto_trade_user_count,
+            db_add_monitor_log
         )
         from web.sim_trade import process_auto_trade
         from tools.data_fetcher import get_batch_quotes
@@ -369,6 +370,13 @@ def process_auto_trades():
                 
                 symbols = [item['symbol'] for item in watchlist]
                 
+                # 记录扫描开始日志
+                db_add_monitor_log(
+                    username, 'scan', 
+                    f'开始扫描 {len(symbols)} 个标的',
+                    details=f'标的列表: {", ".join(symbols[:10])}{"..." if len(symbols) > 10 else ""}'
+                )
+                
                 # 批量获取实时行情
                 quotes_result = get_batch_quotes(symbols)
                 quotes = {}
@@ -378,10 +386,19 @@ def process_auto_trades():
                 
                 if not quotes:
                     logger.warning(f"[自动交易] {username} 获取行情失败，跳过")
+                    db_add_monitor_log(username, 'error', '获取行情数据失败，跳过本轮扫描')
                     continue
+                
+                # 记录行情获取成功
+                db_add_monitor_log(
+                    username, 'info', 
+                    f'获取到 {len(quotes)} 个标的的实时行情'
+                )
                 
                 # 生成量化信号
                 signals = {}
+                signal_summary = {'buy': [], 'sell': [], 'hold': []}
+                
                 for item in watchlist:
                     symbol = item['symbol']
                     try:
@@ -393,8 +410,37 @@ def process_auto_trades():
                             'swing': signal,
                             'long': signal
                         }
+                        
+                        # 记录信号
+                        signal_type = signal.get('signal_type', 'hold')
+                        if signal_type == 'buy':
+                            signal_summary['buy'].append(symbol)
+                            db_add_monitor_log(
+                                username, 'signal',
+                                f'{item.get("name", symbol)}({symbol}) 触发买入信号',
+                                symbol=symbol,
+                                details=f'信号强度: {signal.get("strength", 0)}, 置信度: {signal.get("confidence", 0)}%, 原因: {signal.get("reason", "")}'
+                            )
+                        elif signal_type == 'sell':
+                            signal_summary['sell'].append(symbol)
+                            db_add_monitor_log(
+                                username, 'signal',
+                                f'{item.get("name", symbol)}({symbol}) 触发卖出信号',
+                                symbol=symbol,
+                                details=f'信号强度: {signal.get("strength", 0)}, 置信度: {signal.get("confidence", 0)}%, 原因: {signal.get("reason", "")}'
+                            )
+                        else:
+                            signal_summary['hold'].append(symbol)
+                            
                     except Exception as e:
                         logger.error(f"[自动交易] {username} - {symbol} 信号生成失败: {e}")
+                        db_add_monitor_log(username, 'error', f'{symbol} 信号生成失败: {str(e)}', symbol=symbol)
+                
+                # 记录信号汇总
+                db_add_monitor_log(
+                    username, 'info',
+                    f'信号扫描完成: 买入{len(signal_summary["buy"])}个, 卖出{len(signal_summary["sell"])}个, 持有{len(signal_summary["hold"])}个'
+                )
                 
                 # 执行自动交易
                 results = process_auto_trade(username, signals, quotes, watchlist)
@@ -411,13 +457,28 @@ def process_auto_trades():
                         
                         if trade_type == 'buy':
                             logger.info(f"[自动交易] {username} 买入 {name}({symbol}) {quantity}股 @ ¥{price:.3f} - {reason}")
+                            db_add_monitor_log(
+                                username, 'trade',
+                                f'买入 {name}({symbol}) {quantity}股 @ ¥{price:.3f}',
+                                symbol=symbol,
+                                details=f'原因: {reason}'
+                            )
                         else:
                             profit = result.get('profit', 0)
                             profit_pct = result.get('profit_pct', 0)
                             logger.info(f"[自动交易] {username} 卖出 {name}({symbol}) {quantity}股 @ ¥{price:.3f}, 盈亏: {profit:.2f}({profit_pct:.2f}%) - {reason}")
+                            db_add_monitor_log(
+                                username, 'trade',
+                                f'卖出 {name}({symbol}) {quantity}股 @ ¥{price:.3f}, 盈亏: {"+" if profit >= 0 else ""}¥{profit:.2f}({profit_pct:.2f}%)',
+                                symbol=symbol,
+                                details=f'原因: {reason}'
+                            )
+                else:
+                    db_add_monitor_log(username, 'info', '本轮扫描无交易执行')
                 
             except Exception as e:
                 logger.error(f"[自动交易] 处理用户 {username} 失败: {e}")
+                db_add_monitor_log(username, 'error', f'自动交易处理失败: {str(e)}')
                 import traceback
                 traceback.print_exc()
         

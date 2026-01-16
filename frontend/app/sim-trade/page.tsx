@@ -133,6 +133,16 @@ interface TradeLog {
   created_at: string;
 }
 
+interface MonitorLog {
+  id: number;
+  type: string;
+  icon: string;
+  symbol?: string;
+  message: string;
+  details?: string;
+  created_at: string;
+}
+
 interface QuoteData {
   symbol: string;
   current_price: number;
@@ -156,6 +166,7 @@ export default function SimTradePage() {
   // 监控相关状态
   const [monitorItems, setMonitorItems] = useState<MonitorItem[]>([]);
   const [tradeLogs, setTradeLogs] = useState<TradeLog[]>([]);
+  const [monitorLogs, setMonitorLogs] = useState<MonitorLog[]>([]);
   const [monitorLoading, setMonitorLoading] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'monitor' | 'positions' | 'records' | 'stats'>('monitor');
@@ -351,9 +362,10 @@ export default function SimTradePage() {
     if (!token) return;
     setMonitorLoading(true);
     try {
-      const [monitorRes, logsRes] = await Promise.all([
+      const [monitorRes, logsRes, monitorLogsRes] = await Promise.all([
         fetch(`${API_BASE}/api/sim-trade/monitor`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE}/api/sim-trade/logs?limit=30`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/api/sim-trade/monitor-logs?limit=50`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (monitorRes.ok) {
         const data = await monitorRes.json();
@@ -365,6 +377,10 @@ export default function SimTradePage() {
       if (logsRes.ok) {
         const data = await logsRes.json();
         setTradeLogs(data.logs || []);
+      }
+      if (monitorLogsRes.ok) {
+        const data = await monitorLogsRes.json();
+        setMonitorLogs(data.logs || []);
       }
     } catch (error) {
       console.error("获取监控数据失败:", error);
@@ -807,6 +823,58 @@ export default function SimTradePage() {
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-white">{log.message}</div>
                           <div className="text-xs text-slate-400 mt-0.5">{log.created_at}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* 自动交易监控日志 */}
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-cyan-400" />
+                  <span className="text-sm font-medium text-white">自动交易监控日志</span>
+                </div>
+                <span className="text-xs text-slate-400">{monitorLogs.length} 条记录</span>
+              </div>
+              <div className="divide-y divide-slate-700/50 max-h-[400px] overflow-y-auto">
+                {monitorLogs.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400">
+                    <Activity className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">暂无监控日志</p>
+                    <p className="text-xs mt-1">开启自动交易后，系统将记录监控活动</p>
+                  </div>
+                ) : (
+                  monitorLogs.map(log => (
+                    <div key={log.id} className="px-4 py-2 hover:bg-slate-700/30 transition-colors">
+                      <div className="flex items-start gap-2">
+                        <span className="text-lg">{log.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              log.type === 'trade' ? 'bg-emerald-500/20 text-emerald-400' :
+                              log.type === 'signal' ? 'bg-amber-500/20 text-amber-400' :
+                              log.type === 'scan' ? 'bg-blue-500/20 text-blue-400' :
+                              log.type === 'risk' ? 'bg-rose-500/20 text-rose-400' :
+                              log.type === 'error' ? 'bg-red-500/20 text-red-400' :
+                              'bg-slate-500/20 text-slate-400'
+                            }`}>
+                              {log.type === 'trade' ? '交易' :
+                               log.type === 'signal' ? '信号' :
+                               log.type === 'scan' ? '扫描' :
+                               log.type === 'risk' ? '风控' :
+                               log.type === 'error' ? '错误' : '信息'}
+                            </span>
+                            {log.symbol && <span className="text-xs text-slate-400">{log.symbol}</span>}
+                          </div>
+                          <div className="text-sm text-white mt-1">{log.message}</div>
+                          {log.details && (
+                            <div className="text-xs text-slate-400 mt-0.5">{log.details}</div>
+                          )}
+                          <div className="text-xs text-slate-500 mt-0.5">{log.created_at}</div>
                         </div>
                       </div>
                     </div>

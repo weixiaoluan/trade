@@ -1446,6 +1446,22 @@ def init_sim_trade_tables():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_sim_records_username ON sim_trade_records(username)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_sim_records_symbol ON sim_trade_records(username, symbol)')
         
+        # 监控日志表（记录自动交易的监控活动）
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sim_trade_monitor_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                log_type TEXT NOT NULL,
+                symbol TEXT,
+                message TEXT NOT NULL,
+                details TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_monitor_logs_username ON sim_trade_monitor_logs(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_monitor_logs_created_at ON sim_trade_monitor_logs(created_at)')
+        
         conn.commit()
         print("模拟交易表初始化完成")
 
@@ -1541,25 +1557,110 @@ def db_get_sim_position(username: str, symbol: str) -> Optional[Dict]:
         return None
 
 
+# 交易日历缓存
+_trading_calendar_cache = {
+    'data': None,
+    'year': None
+}
+
+
+def get_trading_calendar(year: int = None) -> set:
+    """
+    获取交易日历（使用 akshare 接口）
+    返回指定年份的所有交易日集合
+    """
+    from datetime import timezone, timedelta
+    
+    if year is None:
+        beijing_tz = timezone(timedelta(hours=8))
+        year = datetime.now(beijing_tz).year
+    
+    # 检查缓存
+    if _trading_calendar_cache['data'] and _trading_calendar_cache['year'] == year:
+        return _trading_calendar_cache['data']
+    
+    try:
+        import akshare as ak
+        # 获取交易日历
+        df = ak.tool_trade_date_hist_sina()
+        # 筛选指定年份的交易日
+        trading_days = set()
+        for _, row in df.iterrows():
+            date_str = str(row['trade_date'])
+            if date_str.startswith(str(year)):
+                trading_days.add(date_str)
+        
+        # 也获取下一年的数据（用于跨年计算）
+        next_year = year + 1
+        for _, row in df.iterrows():
+            date_str = str(row['trade_date'])
+            if date_str.startswith(str(next_year)):
+                trading_days.add(date_str)
+        
+        if trading_days:
+            _trading_calendar_cache['data'] = trading_days
+            _trading_calendar_cache['year'] = year
+            print(f"[交易日历] 已加载 {year} 年交易日历，共 {len(trading_days)} 个交易日")
+            return trading_days
+    except Exception as e:
+        print(f"[交易日历] 获取失败: {e}，使用简化判断")
+    
+    return None
+
+
+def is_trading_day_real(date_str: str) -> bool:
+    """
+    判断指定日期是否为交易日（使用真实交易日历）
+    date_str: 格式 'YYYY-MM-DD'
+    """
+    from datetime import timezone, timedelta
+    
+    # 尝试获取交易日历
+    year = int(date_str[:4])
+    calendar = get_trading_calendar(year)
+    
+    if calendar:
+        # 转换格式 'YYYY-MM-DD' -> 'YYYYMMDD'
+        date_compact = date_str.replace('-', '')
+        return date_compact in calendar
+    
+    # 降级：简单判断周末
+    from datetime import datetime as dt
+    date_obj = dt.strptime(date_str, '%Y-%m-%d')
+    return date_obj.weekday() < 5
+
+
 def get_next_n_trading_day(start_date, n: int) -> str:
     """
     获取从start_date开始的第N个交易日
     T+0: n=0, T+1: n=1, T+2: n=2
-    只计算交易日（周一到周五），跳过周末
+    使用真实交易日历，跳过周末和节假日
     """
     from datetime import timedelta
     
     if n == 0:
         return start_date.strftime('%Y-%m-%d')
     
+    # 尝试获取交易日历
+    year = start_date.year
+    calendar = get_trading_calendar(year)
+    
     current = start_date
     trading_days_counted = 0
     
     while trading_days_counted < n:
         current = current + timedelta(days=1)
-        # 周一到周五是交易日 (weekday: 0=周一, 4=周五)
-        if current.weekday() < 5:
-            trading_days_counted += 1
+        date_str = current.strftime('%Y-%m-%d')
+        
+        if calendar:
+            # 使用真实交易日历
+            date_compact = date_str.replace('-', '')
+            if date_compact in calendar:
+                trading_days_counted += 1
+        else:
+            # 降级：只判断周末
+            if current.weekday() < 5:
+                trading_days_counted += 1
     
     return current.strftime('%Y-%m-%d')
 
@@ -1866,6 +1967,63 @@ def db_get_auto_trade_user_count() -> int:
             WHERE a.auto_trade_enabled = 1 AND u.status = 'approved'
         ''')
         return cursor.fetchone()[0]
+
+
+def db_add_monitor_log(username: str, log_type: str, message: str, 
+                       symbol: str = None, details: str = None) -> bool:
+    """添加监控日志
+    
+    log_type: 
+        - 'scan': 扫描监控
+        - 'signal': 信号触发
+        - 'trade': 交易执行
+        - 'risk': 风控触发
+        - 'error': 错误
+        - 'info': 信息
+    """
+    from datetime import timezone, timedelta
+    beijing_tz = timezone(timedelta(hours=8))
+    now = datetime.now(beijing_tz).isoformat()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO sim_trade_monitor_logs 
+            (username, log_type, symbol, message, details, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (username, log_type, symbol, message, details, now))
+        return True
+
+
+def db_get_monitor_logs(username: str, limit: int = 100, log_type: str = None) -> List[Dict]:
+    """获取监控日志"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if log_type:
+            cursor.execute('''
+                SELECT * FROM sim_trade_monitor_logs 
+                WHERE username = ? AND log_type = ?
+                ORDER BY created_at DESC LIMIT ?
+            ''', (username, log_type, limit))
+        else:
+            cursor.execute('''
+                SELECT * FROM sim_trade_monitor_logs 
+                WHERE username = ?
+                ORDER BY created_at DESC LIMIT ?
+            ''', (username, limit))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_clear_old_monitor_logs(days: int = 7) -> int:
+    """清理旧的监控日志"""
+    from datetime import timezone, timedelta
+    beijing_tz = timezone(timedelta(hours=8))
+    cutoff = (datetime.now(beijing_tz) - timedelta(days=days)).isoformat()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM sim_trade_monitor_logs WHERE created_at < ?', (cutoff,))
+        return cursor.rowcount
 
 
 # 初始化模拟交易表
