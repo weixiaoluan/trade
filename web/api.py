@@ -5816,14 +5816,16 @@ async def process_sim_auto_trade(
 
 def generate_quant_signal_fast(symbol: str, watchlist_item: Dict, quote: Dict) -> Dict:
     """
-    快速生成量化交易信号（纯量化指标，不使用AI）
+    快速生成量化交易信号 v2.0（纯量化指标，不使用AI）
     
     核心逻辑：
     1. 基于价格与支撑位/阻力位的关系
     2. 基于涨跌幅和成交量
     3. 基于自选列表中保存的技术指标数据
+    4. 高胜率策略：严格的入场条件
     
     这是一个轻量级的信号生成器，用于自动交易
+    目标：95%+胜率
     """
     current_price = quote.get('current_price', 0)
     if current_price <= 0:
@@ -5834,103 +5836,171 @@ def generate_quant_signal_fast(symbol: str, watchlist_item: Dict, quote: Dict) -
     support_price = watchlist_item.get(f'{holding_period}_support') or watchlist_item.get('ai_buy_price', 0)
     resistance_price = watchlist_item.get(f'{holding_period}_resistance') or watchlist_item.get('ai_sell_price', 0)
     
-    # 获取涨跌幅
+    # 获取涨跌幅和成交量
     change_pct = quote.get('change_percent', 0)
+    volume_ratio = quote.get('volume_ratio', 1)  # 量比
     
     # 初始化信号
     buy_score = 0
     sell_score = 0
     conditions = []
+    veto_reasons = []  # 一票否决原因
     
-    # ========== 价格位置分析 ==========
-    # 1. 支撑位分析
+    # ========== 一票否决条件（高胜率核心）==========
+    # 1. 大跌超过5%不买
+    if change_pct <= -5:
+        veto_reasons.append(f"大跌{change_pct:.1f}%，不抄底")
+    
+    # 2. 大涨超过7%不追
+    if change_pct >= 7:
+        veto_reasons.append(f"大涨{change_pct:.1f}%，不追高")
+    
+    # 3. 远离支撑位超过10%不买
+    if support_price and support_price > 0:
+        pct_from_support = (current_price / support_price - 1) * 100
+        if pct_from_support > 10:
+            veto_reasons.append(f"远离支撑位{pct_from_support:.1f}%")
+    
+    # 4. 接近阻力位不买（距离<3%）
+    if resistance_price and resistance_price > 0:
+        pct_to_resistance = (resistance_price / current_price - 1) * 100
+        if pct_to_resistance < 3:
+            veto_reasons.append(f"接近阻力位{pct_to_resistance:.1f}%")
+    
+    # 5. 量化评分太低不买
+    quant_score = watchlist_item.get('quant_score', 50)
+    if quant_score < 40:
+        veto_reasons.append(f"量化评分过低({quant_score})")
+    
+    # 如果有一票否决条件，直接返回观望
+    if veto_reasons:
+        return {
+            'signal_type': 'hold',
+            'signal': 'hold',
+            'strength': 0,
+            'confidence': 0,
+            'triggered_conditions': veto_reasons,
+            'buy_score': 0,
+            'sell_score': 0,
+            'veto': True
+        }
+    
+    # ========== 价格位置分析（高胜率核心）==========
+    # 1. 支撑位分析 - 必须接近支撑位才买
     if support_price and support_price > 0:
         pct_from_support = (current_price / support_price - 1) * 100
         if pct_from_support <= 1.5:
-            # 接近支撑位，买入信号
-            buy_score += 3
-            conditions.append(f"接近支撑位({pct_from_support:.1f}%)")
+            # 完美位置：接近支撑位1.5%以内
+            buy_score += 4
+            conditions.append(f"✅ 完美接近支撑位({pct_from_support:.1f}%)")
         elif pct_from_support <= 3:
-            buy_score += 2
-            conditions.append(f"支撑位上方({pct_from_support:.1f}%)")
-        elif pct_from_support > 8:
-            # 远离支撑位，不买
+            buy_score += 3
+            conditions.append(f"✅ 支撑位上方({pct_from_support:.1f}%)")
+        elif pct_from_support <= 5:
+            buy_score += 1
+            conditions.append(f"⚠️ 距支撑位较远({pct_from_support:.1f}%)")
+        else:
+            # 远离支撑位，减分
             sell_score += 1
-            conditions.append(f"远离支撑位({pct_from_support:.1f}%)")
+            conditions.append(f"❌ 远离支撑位({pct_from_support:.1f}%)")
     
     # 2. 阻力位分析
     if resistance_price and resistance_price > 0:
         pct_to_resistance = (resistance_price / current_price - 1) * 100
-        if pct_to_resistance <= 2:
-            # 接近阻力位，卖出信号
-            sell_score += 2
-            conditions.append(f"接近阻力位({pct_to_resistance:.1f}%)")
-        elif pct_to_resistance >= 8:
+        if pct_to_resistance >= 10:
             # 远离阻力位，有上涨空间
+            buy_score += 2
+            conditions.append(f"✅ 远离阻力位({pct_to_resistance:.1f}%)")
+        elif pct_to_resistance >= 5:
             buy_score += 1
-            conditions.append(f"远离阻力位({pct_to_resistance:.1f}%)")
+            conditions.append(f"✅ 阻力位较远({pct_to_resistance:.1f}%)")
+        elif pct_to_resistance < 3:
+            # 接近阻力位，卖出信号
+            sell_score += 3
+            conditions.append(f"❌ 接近阻力位({pct_to_resistance:.1f}%)")
     
     # ========== 涨跌幅分析 ==========
-    if change_pct <= -3:
-        # 大跌，可能是买入机会（如果在支撑位附近）
+    if change_pct <= -3 and change_pct > -5:
+        # 适度下跌，可能是买入机会（如果在支撑位附近）
         if support_price and current_price <= support_price * 1.02:
-            buy_score += 2
-            conditions.append(f"大跌至支撑位(跌{change_pct:.1f}%)")
+            buy_score += 3
+            conditions.append(f"✅ 回调至支撑位(跌{change_pct:.1f}%)")
         else:
-            sell_score += 1
-            conditions.append(f"大跌(跌{change_pct:.1f}%)")
-    elif change_pct >= 5:
-        # 大涨，可能需要止盈
+            conditions.append(f"⚠️ 下跌中(跌{change_pct:.1f}%)")
+    elif change_pct >= 5 and change_pct < 7:
+        # 涨幅较大，考虑止盈
         sell_score += 2
-        conditions.append(f"大涨(涨{change_pct:.1f}%)")
+        conditions.append(f"⚠️ 涨幅较大(涨{change_pct:.1f}%)")
     elif change_pct >= 3:
-        # 涨幅较大，观察
+        # 小涨，观察
         sell_score += 1
-        conditions.append(f"涨幅较大(涨{change_pct:.1f}%)")
+        conditions.append(f"涨幅适中(涨{change_pct:.1f}%)")
+    elif -1 <= change_pct <= 1:
+        # 横盘，适合观察
+        conditions.append(f"横盘整理({change_pct:+.1f}%)")
+    
+    # ========== 量比分析 ==========
+    if volume_ratio > 0:
+        if volume_ratio >= 2:
+            # 放量，需要结合涨跌判断
+            if change_pct > 0:
+                buy_score += 1
+                conditions.append(f"✅ 放量上涨(量比{volume_ratio:.1f})")
+            else:
+                sell_score += 2
+                conditions.append(f"❌ 放量下跌(量比{volume_ratio:.1f})")
+        elif volume_ratio >= 1.2:
+            conditions.append(f"温和放量(量比{volume_ratio:.1f})")
+        elif volume_ratio < 0.7:
+            conditions.append(f"缩量(量比{volume_ratio:.1f})")
     
     # ========== 量化评分参考 ==========
-    quant_score = watchlist_item.get('quant_score', 50)
-    if quant_score >= 70:
+    if quant_score >= 75:
+        buy_score += 3
+        conditions.append(f"✅ 量化评分优秀({quant_score})")
+    elif quant_score >= 65:
         buy_score += 2
-        conditions.append(f"量化评分优秀({quant_score})")
-    elif quant_score >= 60:
+        conditions.append(f"✅ 量化评分良好({quant_score})")
+    elif quant_score >= 55:
         buy_score += 1
-        conditions.append(f"量化评分良好({quant_score})")
-    elif quant_score <= 35:
+        conditions.append(f"量化评分中等({quant_score})")
+    elif quant_score <= 40:
         sell_score += 2
-        conditions.append(f"量化评分较低({quant_score})")
-    elif quant_score <= 45:
+        conditions.append(f"❌ 量化评分较低({quant_score})")
+    elif quant_score <= 50:
         sell_score += 1
-        conditions.append(f"量化评分偏低({quant_score})")
+        conditions.append(f"⚠️ 量化评分偏低({quant_score})")
     
-    # ========== 生成最终信号 ==========
+    # ========== 生成最终信号（高胜率版本）==========
     score_diff = buy_score - sell_score
     
-    if score_diff >= 4:
+    # 高胜率策略：提高买入门槛
+    if score_diff >= 6:
         signal_type = 'buy'
         strength = 5
+        confidence = 95
+    elif score_diff >= 5:
+        signal_type = 'buy'
+        strength = 4
         confidence = 90
-    elif score_diff >= 3:
+    elif score_diff >= 4:
         signal_type = 'buy'
         strength = 4
         confidence = 85
-    elif score_diff >= 2:
-        signal_type = 'buy'
-        strength = 3
-        confidence = 75
-    elif score_diff <= -4:
+    elif score_diff <= -5:
         signal_type = 'sell'
         strength = 5
+        confidence = 95
+    elif score_diff <= -4:
+        signal_type = 'sell'
+        strength = 4
         confidence = 90
     elif score_diff <= -3:
         signal_type = 'sell'
         strength = 4
         confidence = 85
-    elif score_diff <= -2:
-        signal_type = 'sell'
-        strength = 3
-        confidence = 75
     else:
+        # 不满足高胜率条件，观望
         signal_type = 'hold'
         strength = 0
         confidence = 50
@@ -5942,7 +6012,8 @@ def generate_quant_signal_fast(symbol: str, watchlist_item: Dict, quote: Dict) -
         'confidence': confidence,
         'triggered_conditions': conditions,
         'buy_score': buy_score,
-        'sell_score': sell_score
+        'sell_score': sell_score,
+        'score_diff': score_diff
     }
 
 
