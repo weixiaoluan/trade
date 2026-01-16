@@ -105,6 +105,7 @@ export default function SimTradePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [autoTrading, setAutoTrading] = useState(false);
   const [processingTrade, setProcessingTrade] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState<string>('');
 
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -154,7 +155,21 @@ export default function SimTradePage() {
     }
   }, [router, getToken]);
 
-  // 获取账户信息
+  // 判断是否为交易时间
+  const isTradingTime = useCallback(() => {
+    const now = new Date();
+    const day = now.getDay();
+    if (day === 0 || day === 6) return false;
+    
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const time = hours * 60 + minutes;
+    
+    // 上午 9:30-11:30 (570-690), 下午 13:00-15:00 (780-900)
+    return (time >= 570 && time <= 690) || (time >= 780 && time <= 900);
+  }, []);
+
+  // 获取账户信息（不更新价格，快速）
   const fetchAccountInfo = useCallback(async () => {
     const token = getToken();
     if (!token) return;
@@ -197,7 +212,34 @@ export default function SimTradePage() {
     }
   }, [getToken]);
 
-  // 更新持仓价格
+  // 更新持仓价格（静默更新，不显示loading）
+  const updatePricesSilent = useCallback(async () => {
+    const token = getToken();
+    if (!token || positions.length === 0) return;
+
+    try {
+      await fetch(`${API_BASE}/api/sim-trade/update-prices`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // 只获取账户信息，不触发loading
+      const response = await fetch(`${API_BASE}/api/sim-trade/account`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // 增量更新，只更新变化的数据
+        setPositions(data.data.positions || []);
+        setTotalAssets(data.data.total_assets || 0);
+        setPositionValue(data.data.position_value || 0);
+        setLastUpdateTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      }
+    } catch (error) {
+      console.error("静默更新价格失败:", error);
+    }
+  }, [getToken, positions.length]);
+
+  // 更新持仓价格（手动刷新，显示loading）
   const updatePrices = useCallback(async () => {
     const token = getToken();
     if (!token) return;
@@ -209,6 +251,7 @@ export default function SimTradePage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       await fetchAccountInfo();
+      setLastUpdateTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     } catch (error) {
       console.error("更新价格失败:", error);
     } finally {
@@ -300,6 +343,24 @@ export default function SimTradePage() {
     fetchRecords();
   }, [fetchAccountInfo, fetchRecords]);
 
+  // 实时行情轮询（交易时间10秒，非交易时间60秒）
+  useEffect(() => {
+    if (positions.length === 0) return;
+
+    // 首次加载时更新价格
+    updatePricesSilent();
+
+    const interval = setInterval(() => {
+      const trading = isTradingTime();
+      // 交易时间内才自动刷新
+      if (trading) {
+        updatePricesSilent();
+      }
+    }, isTradingTime() ? 10000 : 60000); // 交易时间10秒，非交易时间60秒
+
+    return () => clearInterval(interval);
+  }, [positions.length, updatePricesSilent, isTradingTime]);
+
   // 格式化金额
   const formatMoney = (value: number) => {
     if (value >= 10000) {
@@ -334,7 +395,12 @@ export default function SimTradePage() {
             >
               <ArrowLeft className="w-5 h-5 text-slate-400" />
             </button>
-            <h1 className="text-lg font-bold text-white">模拟交易</h1>
+            <div>
+              <h1 className="text-lg font-bold text-white">模拟交易</h1>
+              {lastUpdateTime && (
+                <p className="text-[10px] text-slate-500">更新: {lastUpdateTime}</p>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
