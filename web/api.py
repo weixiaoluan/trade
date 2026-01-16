@@ -5750,15 +5750,17 @@ async def process_sim_auto_trade(
     background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
-    """处理自动交易（根据量化指标自动买卖）
+    """处理自动交易（根据量化指标自动买卖）- 手动执行
     
     核心逻辑：
     1. 获取实时行情数据
     2. 基于量化指标生成交易信号（纯量化，不使用AI）
     3. 根据高胜率策略执行买卖
     
-    注意：本功能仅供学习研究使用，不构成任何投资建议。
-    模拟交易结果不代表真实交易表现。
+    注意：
+    - 手动点击"立即执行"时，不检查auto_trade_enabled开关
+    - 本功能仅供学习研究使用，不构成任何投资建议。
+    - 模拟交易结果不代表真实交易表现。
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
@@ -5801,9 +5803,9 @@ async def process_sim_auto_trade(
         except Exception as e:
             print(f"[SimTrade] 获取 {symbol} 信号失败: {e}")
     
-    # 处理自动交易
+    # 处理自动交易 - 手动执行模式（不检查auto_trade_enabled和交易时间）
     from web.sim_trade import process_auto_trade
-    results = process_auto_trade(username, signals, quotes, watchlist)
+    results = process_auto_trade(username, signals, quotes, watchlist, manual_execute=True)
     
     return {
         "status": "success",

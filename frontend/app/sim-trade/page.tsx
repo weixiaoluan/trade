@@ -469,7 +469,7 @@ export default function SimTradePage() {
   useEffect(() => {
     if (positions.length === 0) return;
     fetchQuotesOnly();
-    const getInterval = () => isTradingTime() ? 3000 : 30000;
+    const getInterval = () => isTradingTime() ? 1000 : 30000;  // 交易时间1秒，非交易30秒
     let intervalId = setInterval(() => { fetchQuotesOnly(); }, getInterval());
     const checkIntervalId = setInterval(() => {
       clearInterval(intervalId);
@@ -484,7 +484,7 @@ export default function SimTradePage() {
       if (activeTab === 'monitor') {
         fetchMonitorData();
       }
-    }, isTradingTime() ? 10000 : 60000);
+    }, isTradingTime() ? 5000 : 30000);  // 交易时间5秒，非交易30秒
     return () => clearInterval(interval);
   }, [activeTab, fetchMonitorData, isTradingTime]);
 

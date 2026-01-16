@@ -1020,7 +1020,8 @@ def process_auto_trade(
     username: str, 
     signals: Dict[str, Dict], 
     quotes: Dict[str, Dict],
-    watchlist_data: List[Dict] = None
+    watchlist_data: List[Dict] = None,
+    manual_execute: bool = False
 ) -> List[Dict]:
     """处理自动交易
     
@@ -1029,6 +1030,7 @@ def process_auto_trade(
         signals: {symbol: {period: {signal_type, strength, confidence, ...}}}
         quotes: {symbol: {current_price, change_percent, ...}}
         watchlist_data: 自选列表数据（可选，包含支撑位阻力位）
+        manual_execute: 是否为手动执行（手动执行时不检查auto_trade_enabled和交易时间）
     
     Returns:
         交易结果列表
@@ -1037,13 +1039,15 @@ def process_auto_trade(
     account_info = engine.get_account_info()
     account = account_info['account']
     
-    # 检查是否开启自动交易
-    if not account.get('auto_trade_enabled'):
-        return []
-    
-    # 检查是否交易时间
-    if not is_trading_time():
-        return []
+    # 手动执行时不检查自动交易开关
+    if not manual_execute:
+        # 检查是否开启自动交易
+        if not account.get('auto_trade_enabled'):
+            return []
+        
+        # 检查是否交易时间
+        if not is_trading_time():
+            return []
     
     results = []
     
