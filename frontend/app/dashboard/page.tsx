@@ -1580,20 +1580,34 @@ export default function DashboardPage() {
           // 支撑位排序：按距离当前价的百分比绝对值排序（由近到远）
           const aPrice = aQuote?.current_price || 0;
           const bPrice = bQuote?.current_price || 0;
-          const aBuyPrice = a.ai_buy_price || 0;
-          const bBuyPrice = b.ai_buy_price || 0;
+          // 获取当前显示周期的支撑位
+          const aDisplayPeriod = itemDisplayPeriods[a.symbol] || a.holding_period || 'swing';
+          const bDisplayPeriod = itemDisplayPeriods[b.symbol] || b.holding_period || 'swing';
+          const aSupport = (aDisplayPeriod === 'short' ? a.short_support : 
+                           aDisplayPeriod === 'long' ? a.long_support : 
+                           a.swing_support) || a.ai_buy_price || 0;
+          const bSupport = (bDisplayPeriod === 'short' ? b.short_support : 
+                           bDisplayPeriod === 'long' ? b.long_support : 
+                           b.swing_support) || b.ai_buy_price || 0;
           // 计算距离百分比绝对值：|当前价 - 支撑位| / 当前价 * 100
-          aVal = aBuyPrice > 0 && aPrice > 0 ? Math.abs((aPrice - aBuyPrice) / aPrice * 100) : Infinity;
-          bVal = bBuyPrice > 0 && bPrice > 0 ? Math.abs((bPrice - bBuyPrice) / bPrice * 100) : Infinity;
+          aVal = aSupport > 0 && aPrice > 0 ? Math.abs((aPrice - aSupport) / aPrice * 100) : Infinity;
+          bVal = bSupport > 0 && bPrice > 0 ? Math.abs((bPrice - bSupport) / bPrice * 100) : Infinity;
         } else if (sortField === "ai_sell_price") {
           // 阻力位排序：按距离当前价的百分比绝对值排序（由近到远）
           const aPrice = aQuote?.current_price || 0;
           const bPrice = bQuote?.current_price || 0;
-          const aSellPrice = a.ai_sell_price || 0;
-          const bSellPrice = b.ai_sell_price || 0;
+          // 获取当前显示周期的阻力位
+          const aDisplayPeriod = itemDisplayPeriods[a.symbol] || a.holding_period || 'swing';
+          const bDisplayPeriod = itemDisplayPeriods[b.symbol] || b.holding_period || 'swing';
+          const aResistance = (aDisplayPeriod === 'short' ? a.short_resistance : 
+                              aDisplayPeriod === 'long' ? a.long_resistance : 
+                              a.swing_resistance) || a.ai_sell_price || 0;
+          const bResistance = (bDisplayPeriod === 'short' ? b.short_resistance : 
+                              bDisplayPeriod === 'long' ? b.long_resistance : 
+                              b.swing_resistance) || b.ai_sell_price || 0;
           // 计算距离百分比绝对值：|阻力位 - 当前价| / 当前价 * 100
-          aVal = aSellPrice > 0 && aPrice > 0 ? Math.abs((aSellPrice - aPrice) / aPrice * 100) : Infinity;
-          bVal = bSellPrice > 0 && bPrice > 0 ? Math.abs((bSellPrice - bPrice) / bPrice * 100) : Infinity;
+          aVal = aResistance > 0 && aPrice > 0 ? Math.abs((aResistance - aPrice) / aPrice * 100) : Infinity;
+          bVal = bResistance > 0 && bPrice > 0 ? Math.abs((bResistance - bPrice) / bPrice * 100) : Infinity;
         } else if (sortField === "report_time") {
           // 报告更新时间排序
           const aReport = reportsBySymbol[a.symbol] || reportsBySymbol[a.symbol.replace(/\./g, '_')] || reportsBySymbol[a.symbol.replace(/_/g, '.')];
