@@ -1687,37 +1687,94 @@ def get_trade_rule(symbol: str, type_: str = None) -> str:
     
     A股交易规则：
     - 股票: T+1 (当天买入，次日才能卖出)
-    - ETF: T+0 (当天买入，当天可卖出) - 部分ETF如货币ETF
+    - 境内ETF: T+1 (如沪深300ETF、中证500ETF等)
+    - 跨境ETF/境外ETF: T+0 (如纳指ETF、标普ETF、恒生ETF、日经ETF等)
+    - 货币ETF: T+0
+    - 债券ETF: T+0
+    - 黄金ETF: T+0
     - 场内基金LOF: T+1
     - 可转债: T+0
     - 港股通: T+0
     - 美股: T+0 (但有T+2结算)
+    
+    跨境ETF代码规则（T+0）：
+    - 上证: 513xxx (跨境ETF), 518xxx (黄金ETF), 511xxx (货币/债券ETF)
+    - 深证: 159941 (纳指ETF), 159920 (恒生ETF) 等特定代码
     """
     symbol = symbol.upper()
     
     # 根据代码判断类型
     if symbol.isdigit() and len(symbol) == 6:
         # 中国市场
-        # ETF: 51xxxx/52xxxx/56xxxx/58xxxx(上证), 159xxx(深证)
-        if symbol.startswith(('510', '511', '512', '513', '515', '516', '517', '518', '520', '560', '561', '562', '563', '588')) or symbol.startswith('159'):
-            # 大部分ETF是T+1，但货币ETF等是T+0
-            # 简化处理：场内ETF统一T+1
-            return 'T+1'
-        # 可转债: 11xxxx(上证), 12xxxx(深证)
-        elif symbol.startswith('11') or symbol.startswith('12'):
+        
+        # 可转债: 11xxxx(上证), 12xxxx(深证) - T+0
+        if symbol.startswith('11') or symbol.startswith('12'):
             return 'T+0'
-        # LOF: 16xxxx(深证)
-        elif symbol.startswith('16'):
+        
+        # 上证ETF
+        if symbol.startswith('5'):
+            # 跨境ETF: 513xxx (纳指、标普、日经、德国、法国、恒生科技等) - T+0
+            if symbol.startswith('513'):
+                return 'T+0'
+            # 黄金ETF: 518xxx - T+0
+            if symbol.startswith('518'):
+                return 'T+0'
+            # 货币ETF/债券ETF: 511xxx - T+0
+            if symbol.startswith('511'):
+                return 'T+0'
+            # 其他上证ETF: 510xxx, 512xxx, 515xxx, 516xxx, 517xxx, 520xxx, 560xxx, 561xxx, 562xxx, 563xxx, 588xxx - T+1
             return 'T+1'
-        # A股: 其他6位数字
-        else:
+        
+        # 深证ETF: 159xxx
+        if symbol.startswith('159'):
+            # 跨境ETF - T+0
+            cross_border_etf_159 = [
+                '159941',  # 纳指ETF
+                '159920',  # 恒生ETF
+                '159954',  # 港股通50ETF (部分券商支持T+0)
+                '159934',  # 黄金ETF
+                '159937',  # 黄金ETF博时
+                '159812',  # 纳指科技ETF
+                '159509',  # 纳指100ETF
+                '159513',  # 纳斯达克ETF
+                '159632',  # 标普500ETF
+                '159655',  # 标普ETF
+                '159866',  # 日经ETF
+                '159506',  # 日经225ETF
+                '159507',  # 德国ETF
+                '159508',  # 法国ETF
+                '159605',  # 恒生科技ETF
+                '159740',  # 恒生科技30ETF
+                '159742',  # 恒生互联网ETF
+                '159892',  # 恒生医疗ETF
+                '159847',  # 中概互联网ETF
+                '159636',  # 越南ETF
+                '159615',  # 东南亚科技ETF
+                '159660',  # 亚太低碳ETF
+                '159696',  # 印度基金ETF
+            ]
+            if symbol in cross_border_etf_159:
+                return 'T+0'
+            # 货币ETF - T+0
+            if symbol.startswith('1599') and symbol in ['159001', '159003', '159005']:
+                return 'T+0'
+            # 其他深证ETF - T+1
             return 'T+1'
+        
+        # LOF: 16xxxx(深证) - T+1
+        if symbol.startswith('16'):
+            return 'T+1'
+        
+        # A股: 其他6位数字 - T+1
+        return 'T+1'
+    
     elif '.HK' in symbol or symbol.endswith('HK'):
-        # 港股
+        # 港股 - T+0
         return 'T+0'
     else:
-        # 美股等
+        # 美股等 - T+0
         return 'T+0'
+
 
 
 # 初始化模拟交易表
