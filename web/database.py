@@ -372,6 +372,22 @@ def migrate_database():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_activity_logs_created_at ON user_activity_logs(created_at)')
         print("迁移: 用户操作记录表已创建/检查完成")
         
+        # 检查 sim_trade_positions 表是否有新字段
+        cursor.execute("PRAGMA table_info(sim_trade_positions)")
+        sim_pos_columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'highest_price' not in sim_pos_columns:
+            print("迁移: 添加 highest_price 字段到 sim_trade_positions 表（移动止损用）")
+            cursor.execute("ALTER TABLE sim_trade_positions ADD COLUMN highest_price REAL")
+        
+        if 'sold_ratio' not in sim_pos_columns:
+            print("迁移: 添加 sold_ratio 字段到 sim_trade_positions 表（分批卖出记录）")
+            cursor.execute("ALTER TABLE sim_trade_positions ADD COLUMN sold_ratio REAL DEFAULT 0")
+        
+        if 'add_count' not in sim_pos_columns:
+            print("迁移: 添加 add_count 字段到 sim_trade_positions 表（加仓次数）")
+            cursor.execute("ALTER TABLE sim_trade_positions ADD COLUMN add_count INTEGER DEFAULT 0")
+        
         conn.commit()
         print("数据库迁移完成")
 

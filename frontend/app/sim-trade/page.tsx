@@ -106,8 +106,11 @@ export default function SimTradePage() {
   const [stats, setStats] = useState<SimStats | null>(null);
   const [totalAssets, setTotalAssets] = useState(0);
   const [positionValue, setPositionValue] = useState(0);
+  const [positionRatio, setPositionRatio] = useState(0);
+  const [maxDrawdown, setMaxDrawdown] = useState(0);
+  const [floatingProfit, setFloatingProfit] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<'positions' | 'records'>('positions');
+  const [activeTab, setActiveTab] = useState<'positions' | 'records' | 'stats'>('positions');
   const [refreshing, setRefreshing] = useState(false);
   const [autoTrading, setAutoTrading] = useState(false);
   const [processingTrade, setProcessingTrade] = useState(false);
@@ -270,6 +273,9 @@ export default function SimTradePage() {
         setStats(data.data.stats);
         setTotalAssets(data.data.total_assets || 0);
         setPositionValue(data.data.position_value || 0);
+        setPositionRatio(data.data.position_ratio || 0);
+        setMaxDrawdown(data.data.max_drawdown || 0);
+        setFloatingProfit(data.data.floating_profit || 0);
         setAutoTrading(data.data.account?.auto_trade_enabled === 1);
       }
     } catch (error) {
@@ -561,6 +567,34 @@ export default function SimTradePage() {
           </div>
         </div>
 
+        {/* 风险指标 */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+            <div className="text-xs text-slate-400 mb-1">仓位占比</div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full ${positionRatio > 70 ? 'bg-rose-500' : positionRatio > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                  style={{ width: `${Math.min(positionRatio, 100)}%` }}
+                />
+              </div>
+              <span className="text-sm font-medium text-white">{positionRatio.toFixed(1)}%</span>
+            </div>
+          </div>
+          <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+            <div className="text-xs text-slate-400 mb-1">最大回撤</div>
+            <div className={`text-lg font-bold ${maxDrawdown > 10 ? 'text-rose-400' : maxDrawdown > 5 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              -{maxDrawdown.toFixed(2)}%
+            </div>
+          </div>
+          <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+            <div className="text-xs text-slate-400 mb-1">浮动盈亏</div>
+            <div className={`text-lg font-bold ${floatingProfit >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {floatingProfit >= 0 ? '+' : ''}¥{formatMoney(floatingProfit)}
+            </div>
+          </div>
+        </div>
+
         {/* 自动交易控制 */}
         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
           <div className="flex items-center justify-between">
@@ -661,6 +695,16 @@ export default function SimTradePage() {
             }`}
           >
             交易记录 ({records.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'stats'
+                ? 'bg-indigo-500/20 text-indigo-400'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            详细统计
           </button>
         </div>
 
@@ -790,6 +834,108 @@ export default function SimTradePage() {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* 详细统计 */}
+        {activeTab === 'stats' && stats && (
+          <div className="space-y-4">
+            {/* 交易概览 */}
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+              <h3 className="text-sm font-medium text-white mb-4">交易概览</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-white">{stats.total_trades}</div>
+                  <div className="text-xs text-slate-400">总交易次数</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-rose-400">{stats.buy_count}</div>
+                  <div className="text-xs text-slate-400">买入次数</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-emerald-400">{stats.sell_count}</div>
+                  <div className="text-xs text-slate-400">卖出次数</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-indigo-400">{stats.win_rate.toFixed(1)}%</div>
+                  <div className="text-xs text-slate-400">胜率</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 盈亏分析 */}
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+              <h3 className="text-sm font-medium text-white mb-4">盈亏分析</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <div className={`text-2xl font-bold ${stats.total_profit >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    ¥{formatMoney(stats.total_profit)}
+                  </div>
+                  <div className="text-xs text-slate-400">累计盈亏</div>
+                </div>
+                <div className="text-center">
+                  <div className={`text-2xl font-bold ${stats.avg_profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {formatPercent(stats.avg_profit_pct)}
+                  </div>
+                  <div className="text-xs text-slate-400">平均收益率</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-rose-400">{formatPercent(stats.max_profit_pct)}</div>
+                  <div className="text-xs text-slate-400">最大单笔盈利</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-emerald-400">{formatPercent(stats.min_profit_pct)}</div>
+                  <div className="text-xs text-slate-400">最大单笔亏损</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 持仓分析 */}
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+              <h3 className="text-sm font-medium text-white mb-4">持仓分析</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-400">{stats.avg_holding_days.toFixed(1)}天</div>
+                  <div className="text-xs text-slate-400">平均持有天数</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-emerald-400">{stats.win_count}</div>
+                  <div className="text-xs text-slate-400">盈利次数</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-rose-400">{stats.loss_count}</div>
+                  <div className="text-xs text-slate-400">亏损次数</div>
+                </div>
+                <div className="text-center">
+                  <div className={`text-2xl font-bold ${maxDrawdown > 10 ? 'text-rose-400' : 'text-amber-400'}`}>
+                    -{maxDrawdown.toFixed(2)}%
+                  </div>
+                  <div className="text-xs text-slate-400">最大回撤</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 风控说明 */}
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+              <h3 className="text-sm font-medium text-white mb-3">风控规则</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="space-y-2">
+                  <div className="text-amber-400 font-medium">短线策略</div>
+                  <div className="text-slate-400">止损: -3% | 止盈: 3%/5%/8%</div>
+                  <div className="text-slate-400">移动止损: 2% | 最长持有: 5天</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-indigo-400 font-medium">波段策略</div>
+                  <div className="text-slate-400">止损: -5% | 止盈: 5%/10%/15%</div>
+                  <div className="text-slate-400">移动止损: 3% | 最长持有: 20天</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-blue-400 font-medium">中长线策略</div>
+                  <div className="text-slate-400">止损: -8% | 止盈: 10%/20%/30%</div>
+                  <div className="text-slate-400">移动止损: 5% | 最长持有: 60天</div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>
