@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -90,6 +90,12 @@ interface SimStats {
   avg_holding_days: number;
 }
 
+interface QuoteData {
+  symbol: string;
+  current_price: number;
+  change_percent: number;
+}
+
 export default function SimTradePage() {
   const router = useRouter();
   const [user, setUser] = useState<UserInfo | null>(null);
@@ -106,6 +112,12 @@ export default function SimTradePage() {
   const [autoTrading, setAutoTrading] = useState(false);
   const [processingTrade, setProcessingTrade] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<string>('');
+
+  // 实时行情数据（使用 ref 避免频繁重渲染）
+  const [realtimeQuotes, setRealtimeQuotes] = useState<Record<string, QuoteData>>({});
+  const quotesRef = useRef<Record<string, QuoteData>>({});
+  const positionsRef = useRef<SimPosition[]>([]);
+  const isFetchingRef = useRef(false);
 
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -169,6 +181,79 @@ export default function SimTradePage() {
     return (time >= 570 && time <= 690) || (time >= 780 && time <= 900);
   }, []);
 
+  // 同步 positions 到 ref
+  useEffect(() => {
+    positionsRef.current = positions;
+  }, [positions]);
+
+  // 获取实时行情（轻量级，只获取价格）
+  const fetchQuotesOnly = useCallback(async () => {
+    const token = getToken();
+    if (!token || positionsRef.current.length === 0 || isFetchingRef.current) return;
+
+    isFetchingRef.current = true;
+    try {
+      const symbols = positionsRef.current.map(p => p.symbol).join(',');
+      const response = await fetch(`${API_BASE}/api/quotes?symbols=${encodeURIComponent(symbols)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const newQuotes: Record<string, QuoteData> = {};
+        if (data.quotes) {
+          Object.entries(data.quotes).forEach(([symbol, quote]: [string, any]) => {
+            newQuotes[symbol.toUpperCase()] = {
+              symbol: symbol.toUpperCase(),
+              current_price: quote.current_price || 0,
+              change_percent: quote.change_percent || 0,
+            };
+          });
+        }
+        quotesRef.current = newQuotes;
+        // 每秒更新一次显示（批量更新，减少渲染）
+        setRealtimeQuotes({ ...newQuotes });
+        setLastUpdateTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      }
+    } catch (error) {
+      // 静默失败，不影响用户体验
+    } finally {
+      isFetchingRef.current = false;
+    }
+  }, [getToken]);
+
+  // 计算持仓盈亏（基于实时行情）
+  const getPositionWithRealtime = useCallback((position: SimPosition) => {
+    const quote = realtimeQuotes[position.symbol.toUpperCase()];
+    if (quote && quote.current_price > 0) {
+      const currentPrice = quote.current_price;
+      const profit = (currentPrice - position.cost_price) * position.quantity;
+      const profitPct = ((currentPrice / position.cost_price) - 1) * 100;
+      return {
+        ...position,
+        current_price: currentPrice,
+        profit: profit,
+        profit_pct: profitPct,
+      };
+    }
+    return position;
+  }, [realtimeQuotes]);
+
+  // 计算总资产（基于实时行情）
+  const calculateTotalAssets = useCallback(() => {
+    let posValue = 0;
+    positions.forEach(p => {
+      const quote = realtimeQuotes[p.symbol.toUpperCase()];
+      const price = quote?.current_price || p.current_price || p.cost_price;
+      posValue += p.quantity * price;
+    });
+    return {
+      positionValue: posValue,
+      totalAssets: (account?.current_capital || 0) + posValue,
+    };
+  }, [positions, realtimeQuotes, account]);
+
+  const { positionValue: realtimePositionValue, totalAssets: realtimeTotalAssets } = calculateTotalAssets();
+
   // 获取账户信息（不更新价格，快速）
   const fetchAccountInfo = useCallback(async () => {
     const token = getToken();
@@ -212,34 +297,7 @@ export default function SimTradePage() {
     }
   }, [getToken]);
 
-  // 更新持仓价格（静默更新，不显示loading）
-  const updatePricesSilent = useCallback(async () => {
-    const token = getToken();
-    if (!token || positions.length === 0) return;
-
-    try {
-      await fetch(`${API_BASE}/api/sim-trade/update-prices`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      // 只获取账户信息，不触发loading
-      const response = await fetch(`${API_BASE}/api/sim-trade/account`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        // 增量更新，只更新变化的数据
-        setPositions(data.data.positions || []);
-        setTotalAssets(data.data.total_assets || 0);
-        setPositionValue(data.data.position_value || 0);
-        setLastUpdateTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-      }
-    } catch (error) {
-      console.error("静默更新价格失败:", error);
-    }
-  }, [getToken, positions.length]);
-
-  // 更新持仓价格（手动刷新，显示loading）
+  // 手动刷新（更新数据库中的价格）
   const updatePrices = useCallback(async () => {
     const token = getToken();
     if (!token) return;
@@ -251,13 +309,13 @@ export default function SimTradePage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       await fetchAccountInfo();
-      setLastUpdateTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      await fetchQuotesOnly();
     } catch (error) {
       console.error("更新价格失败:", error);
     } finally {
       setRefreshing(false);
     }
-  }, [getToken, fetchAccountInfo]);
+  }, [getToken, fetchAccountInfo, fetchQuotesOnly]);
 
   // 切换自动交易
   const toggleAutoTrade = useCallback(async () => {
@@ -343,23 +401,32 @@ export default function SimTradePage() {
     fetchRecords();
   }, [fetchAccountInfo, fetchRecords]);
 
-  // 实时行情轮询（交易时间10秒，非交易时间60秒）
+  // 实时行情轮询（交易时间1秒，非交易时间30秒）
   useEffect(() => {
     if (positions.length === 0) return;
 
-    // 首次加载时更新价格
-    updatePricesSilent();
+    // 首次加载时获取行情
+    fetchQuotesOnly();
 
-    const interval = setInterval(() => {
-      const trading = isTradingTime();
-      // 交易时间内才自动刷新
-      if (trading) {
-        updatePricesSilent();
-      }
-    }, isTradingTime() ? 10000 : 60000); // 交易时间10秒，非交易时间60秒
+    const getInterval = () => isTradingTime() ? 1000 : 30000;
+    
+    let intervalId = setInterval(() => {
+      fetchQuotesOnly();
+    }, getInterval());
 
-    return () => clearInterval(interval);
-  }, [positions.length, updatePricesSilent, isTradingTime]);
+    // 每分钟检查一次是否需要调整刷新频率
+    const checkIntervalId = setInterval(() => {
+      clearInterval(intervalId);
+      intervalId = setInterval(() => {
+        fetchQuotesOnly();
+      }, getInterval());
+    }, 60000);
+
+    return () => {
+      clearInterval(intervalId);
+      clearInterval(checkIntervalId);
+    };
+  }, [positions.length, fetchQuotesOnly, isTradingTime]);
 
   // 格式化金额
   const formatMoney = (value: number) => {
@@ -440,10 +507,10 @@ export default function SimTradePage() {
               <span className="text-xs text-slate-400">总资产</span>
             </div>
             <div className="text-xl font-bold text-white">
-              ¥{formatMoney(totalAssets)}
+              ¥{formatMoney(realtimeTotalAssets || totalAssets)}
             </div>
-            <div className={`text-xs mt-1 ${(account?.total_profit || 0) >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {formatPercent(account?.total_profit_pct || 0)}
+            <div className={`text-xs mt-1 ${((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000)) >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {formatPercent((((realtimeTotalAssets || totalAssets) / (account?.initial_capital || 1000000)) - 1) * 100)}
             </div>
           </div>
 
@@ -468,7 +535,7 @@ export default function SimTradePage() {
               <span className="text-xs text-slate-400">持仓市值</span>
             </div>
             <div className="text-xl font-bold text-white">
-              ¥{formatMoney(positionValue)}
+              ¥{formatMoney(realtimePositionValue || positionValue)}
             </div>
             <div className="text-xs text-slate-500 mt-1">
               {positions.length} 只持仓
@@ -478,15 +545,15 @@ export default function SimTradePage() {
           {/* 累计盈亏 */}
           <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
             <div className="flex items-center gap-2 mb-2">
-              {(account?.total_profit || 0) >= 0 ? (
+              {((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000)) >= 0 ? (
                 <TrendingUp className="w-4 h-4 text-rose-400" />
               ) : (
                 <TrendingDown className="w-4 h-4 text-emerald-400" />
               )}
-              <span className="text-xs text-slate-400">累计盈亏</span>
+              <span className="text-xs text-slate-400">浮动盈亏</span>
             </div>
-            <div className={`text-xl font-bold ${(account?.total_profit || 0) >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {(account?.total_profit || 0) >= 0 ? '+' : ''}¥{formatMoney(account?.total_profit || 0)}
+            <div className={`text-xl font-bold ${((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000)) >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000)) >= 0 ? '+' : ''}¥{formatMoney((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000))}
             </div>
             <div className="text-xs text-slate-500 mt-1">
               胜率: {(account?.win_rate || 0).toFixed(1)}%
@@ -607,58 +674,63 @@ export default function SimTradePage() {
                 <p className="text-xs mt-1">开启自动交易后，系统将根据信号自动买入</p>
               </div>
             ) : (
-              positions.map((position) => (
-                <div
-                  key={position.symbol}
-                  className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <div className="font-medium text-white">{position.name}</div>
-                      <div className="text-xs text-slate-400">{position.symbol}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`text-lg font-bold ${position.profit >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        {position.profit >= 0 ? '+' : ''}¥{position.profit.toFixed(2)}
+              positions.map((position) => {
+                const realtimePosition = getPositionWithRealtime(position);
+                return (
+                  <div
+                    key={position.symbol}
+                    className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <div className="font-medium text-white">{position.name}</div>
+                        <div className="text-xs text-slate-400">{position.symbol}</div>
                       </div>
-                      <div className={`text-xs ${position.profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        {formatPercent(position.profit_pct)}
+                      <div className="text-right">
+                        <div className={`text-lg font-bold ${realtimePosition.profit >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {realtimePosition.profit >= 0 ? '+' : ''}¥{realtimePosition.profit.toFixed(2)}
+                        </div>
+                        <div className={`text-xs ${realtimePosition.profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {formatPercent(realtimePosition.profit_pct)}
+                        </div>
                       </div>
                     </div>
+                    <div className="grid grid-cols-4 gap-2 text-xs">
+                      <div>
+                        <div className="text-slate-400">持仓</div>
+                        <div className="text-white">{position.quantity}股</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400">成本</div>
+                        <div className="text-white">¥{position.cost_price.toFixed(3)}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400">现价</div>
+                        <div className={`font-medium ${realtimePosition.profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          ¥{realtimePosition.current_price.toFixed(3)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400">规则</div>
+                        <div className="text-white">{position.trade_rule}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-slate-700/50 flex items-center justify-between text-xs">
+                      <span className="text-slate-400">
+                        买入: {position.buy_date} | 可卖: {position.can_sell_date}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded ${
+                        position.holding_period === 'short' ? 'bg-amber-500/20 text-amber-400' :
+                        position.holding_period === 'long' ? 'bg-blue-500/20 text-blue-400' :
+                        'bg-indigo-500/20 text-indigo-400'
+                      }`}>
+                        {position.holding_period === 'short' ? '短线' :
+                         position.holding_period === 'long' ? '中长线' : '波段'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 text-xs">
-                    <div>
-                      <div className="text-slate-400">持仓</div>
-                      <div className="text-white">{position.quantity}股</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-400">成本</div>
-                      <div className="text-white">¥{position.cost_price.toFixed(3)}</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-400">现价</div>
-                      <div className="text-white">¥{(position.current_price || position.cost_price).toFixed(3)}</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-400">规则</div>
-                      <div className="text-white">{position.trade_rule}</div>
-                    </div>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-slate-700/50 flex items-center justify-between text-xs">
-                    <span className="text-slate-400">
-                      买入: {position.buy_date} | 可卖: {position.can_sell_date}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded ${
-                      position.holding_period === 'short' ? 'bg-amber-500/20 text-amber-400' :
-                      position.holding_period === 'long' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-indigo-500/20 text-indigo-400'
-                    }`}>
-                      {position.holding_period === 'short' ? '短线' :
-                       position.holding_period === 'long' ? '中长线' : '波段'}
-                    </span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}

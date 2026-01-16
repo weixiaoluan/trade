@@ -4665,18 +4665,18 @@ def get_market_session() -> str:
 def get_quote_cache_ttl() -> int:
     """
     根据市场时段返回合适的行情缓存时间（秒）
-    - 交易时段: 5秒（实时性要求高）
-    - 集合竞价: 10秒
-    - 午间休市: 60秒
+    - 交易时段: 1秒（实时性要求高）
+    - 集合竞价: 3秒
+    - 午间休市: 30秒
     - 盘后: 300秒
     - 非交易时间: 600秒
     """
     session = get_market_session()
     cache_ttl_map = {
-        'pre_market': 10,
-        'morning': 5,
-        'noon_break': 60,
-        'afternoon': 5,
+        'pre_market': 3,
+        'morning': 1,
+        'noon_break': 30,
+        'afternoon': 1,
         'after_hours': 300,
         'closed': 600
     }
