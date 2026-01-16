@@ -404,6 +404,67 @@ def migrate_database():
             print("迁移: 添加 add_count 字段到 sim_trade_positions 表（加仓次数）")
             cursor.execute("ALTER TABLE sim_trade_positions ADD COLUMN add_count INTEGER DEFAULT 0")
         
+        # ============================================
+        # 策略池相关表迁移
+        # ============================================
+        
+        # 创建策略配置表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS strategy_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                strategy_id TEXT NOT NULL,
+                enabled INTEGER DEFAULT 1,
+                allocated_capital REAL DEFAULT 100000,
+                params TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(username, strategy_id),
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_configs_username ON strategy_configs(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_configs_strategy_id ON strategy_configs(strategy_id)')
+        print("迁移: 策略配置表已创建/检查完成")
+        
+        # 创建策略表现统计表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS strategy_performance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                strategy_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                total_return REAL DEFAULT 0,
+                daily_return REAL DEFAULT 0,
+                win_count INTEGER DEFAULT 0,
+                loss_count INTEGER DEFAULT 0,
+                win_rate REAL DEFAULT 0,
+                max_drawdown REAL DEFAULT 0,
+                sharpe_ratio REAL DEFAULT 0,
+                trade_count INTEGER DEFAULT 0,
+                position_value REAL DEFAULT 0,
+                UNIQUE(username, strategy_id, date),
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_performance_username ON strategy_performance(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_performance_strategy_id ON strategy_performance(strategy_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_performance_date ON strategy_performance(date)')
+        print("迁移: 策略表现统计表已创建/检查完成")
+        
+        # 添加 strategy_id 字段到 sim_trade_positions 表
+        if 'strategy_id' not in sim_pos_columns:
+            print("迁移: 添加 strategy_id 字段到 sim_trade_positions 表")
+            cursor.execute("ALTER TABLE sim_trade_positions ADD COLUMN strategy_id TEXT")
+        
+        # 检查 sim_trade_records 表是否有 strategy_id 字段
+        cursor.execute("PRAGMA table_info(sim_trade_records)")
+        sim_rec_columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'strategy_id' not in sim_rec_columns:
+            print("迁移: 添加 strategy_id 字段到 sim_trade_records 表")
+            cursor.execute("ALTER TABLE sim_trade_records ADD COLUMN strategy_id TEXT")
+        
         conn.commit()
         print("数据库迁移完成")
 

@@ -1,0 +1,4 @@
+# file: C:\Users\Administrator\Desktop\AI\Ai-trade\web\strategies\base.py
+# hypothesis_version: 6.150.2
+
+[100, 'applicable_etfs', 'buy', 'hold', 'sell']

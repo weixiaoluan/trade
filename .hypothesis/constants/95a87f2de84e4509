@@ -1,0 +1,4 @@
+# file: C:\Users\Administrator\Desktop\AI\Ai-trade\web\strategies\overnight.py
+# hypothesis_version: 6.150.2
+
+[0.001, 0.002, 0.003, 0.01, 0.9, 3.0, 5.0, 8.5, 10000.0, 100, '09:30', '09:35', '14:50', '14:57', '159915', '510050', '510300', '510500', '512010', '512880', ':', 'Asia/Shanghai', 'applicable_etfs', 'avg_overnight_return', 'buy', 'buy_time_end', 'buy_time_start', 'close', 'cost_price', 'entry_date', 'has_position', 'max_holding_days', 'min_overnight_return', 'overnight', 'sell', 'sell_time_end', 'sell_time_start', 'skip_friday', 'symbol', '买入开始时间必须早于结束时间', '卖出开始时间必须早于结束时间', '宽基ETF', '行业ETF', '隔夜效应卖出, 开盘时段清仓', '隔夜效应策略', '高流动性ETF']

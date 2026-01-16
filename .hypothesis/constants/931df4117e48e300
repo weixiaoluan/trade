@@ -1,0 +1,4 @@
+# file: C:\Users\Administrator\Desktop\AI\Ai-trade\web\strategies\rsi_reversal.py
+# hypothesis_version: 6.150.2
+
+[0.0, 0.01, 0.03, 0.1, 1.0, 1.2, 8.5, 15.5, 50.0, 10000.0, 100, 200, '159901', '159915', '159919', '510050', '510300', '510500', 'RSI极限反转策略', 'applicable_etfs', 'buy', 'close', 'close_history', 'cost_price', 'ma200', 'ma5', 'ma_exit_period', 'ma_long_period', 'rsi2', 'rsi_oversold', 'rsi_period', 'rsi_reversal', 'stop_loss_pct', 'symbol', '宽基ETF', '高流动性ETF']

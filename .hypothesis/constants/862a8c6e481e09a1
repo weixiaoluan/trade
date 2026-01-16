@@ -1,0 +1,4 @@
+# file: C:\Users\Administrator\Desktop\AI\Ai-trade\web\strategies\registry.py
+# hypothesis_version: 6.150.2
+
+[10000.0, 'high', 'long', 'low', 'medium', 'short', 'swing']
