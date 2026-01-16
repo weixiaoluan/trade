@@ -1,7 +1,7 @@
 """
 ============================================
 定时任务调度器
-Price Alert Scheduler + AI Analysis Scheduler
+Price Alert Scheduler + AI Analysis Scheduler + Auto Trade Scheduler
 ============================================
 """
 
@@ -54,6 +54,30 @@ def is_trading_time() -> bool:
     
     if (morning_start <= current_time <= morning_end) or \
        (afternoon_start <= current_time <= afternoon_end):
+        return True
+    
+    return False
+
+
+def is_near_trading_time() -> bool:
+    """判断是否接近交易时间（提前5分钟开始准备）"""
+    now = datetime.now()
+    current_time = now.time()
+    
+    # 周末不交易
+    if now.weekday() >= 5:
+        return False
+    
+    # 上午交易时段前5分钟: 9:25 - 9:30
+    morning_prep_start = dt_time(9, 25)
+    morning_prep_end = dt_time(9, 30)
+    
+    # 下午交易时段前5分钟: 12:55 - 13:00
+    afternoon_prep_start = dt_time(12, 55)
+    afternoon_prep_end = dt_time(13, 0)
+    
+    if (morning_prep_start <= current_time <= morning_prep_end) or \
+       (afternoon_prep_start <= current_time <= afternoon_prep_end):
         return True
     
     return False
@@ -296,12 +320,240 @@ def check_watchlist_price_alerts():
         traceback.print_exc()
 
 
+# ============================================
+# 自动交易调度
+# ============================================
+
+def process_auto_trades():
+    """处理所有开启自动交易的用户（交易时间内每分钟执行）
+    
+    核心逻辑：
+    1. 获取所有开启自动交易的用户
+    2. 对每个用户：获取自选列表、实时行情、生成信号
+    3. 调用 SimTradeEngine 执行自动买卖
+    
+    注意：本功能仅供学习研究使用，不构成任何投资建议。
+    """
+    if not is_trading_time():
+        return
+    
+    try:
+        from web.database import (
+            db_get_all_auto_trade_users, 
+            db_get_user_watchlist,
+            db_get_auto_trade_user_count
+        )
+        from web.sim_trade import process_auto_trade
+        from tools.data_fetcher import get_batch_quotes
+        
+        # 获取开启自动交易的用户数量
+        user_count = db_get_auto_trade_user_count()
+        if user_count == 0:
+            return
+        
+        logger.info(f"[自动交易] 开始处理，共 {user_count} 个用户开启了自动交易")
+        
+        # 获取所有开启自动交易的用户
+        auto_trade_users = db_get_all_auto_trade_users()
+        
+        total_trades = 0
+        
+        for user_account in auto_trade_users:
+            username = user_account['username']
+            
+            try:
+                # 获取用户自选列表
+                watchlist = db_get_user_watchlist(username)
+                if not watchlist:
+                    continue
+                
+                symbols = [item['symbol'] for item in watchlist]
+                
+                # 批量获取实时行情
+                quotes_result = get_batch_quotes(symbols)
+                quotes = {}
+                if quotes_result.get('status') == 'success':
+                    for q in quotes_result.get('quotes', []):
+                        quotes[q['symbol'].upper()] = q
+                
+                if not quotes:
+                    logger.warning(f"[自动交易] {username} 获取行情失败，跳过")
+                    continue
+                
+                # 生成量化信号
+                signals = {}
+                for item in watchlist:
+                    symbol = item['symbol']
+                    try:
+                        signal = generate_quant_signal_for_auto_trade(
+                            symbol, item, quotes.get(symbol.upper(), {})
+                        )
+                        signals[symbol.upper()] = {
+                            'short': signal,
+                            'swing': signal,
+                            'long': signal
+                        }
+                    except Exception as e:
+                        logger.error(f"[自动交易] {username} - {symbol} 信号生成失败: {e}")
+                
+                # 执行自动交易
+                results = process_auto_trade(username, signals, quotes, watchlist)
+                
+                if results:
+                    total_trades += len(results)
+                    for result in results:
+                        trade_type = result.get('trade_type', '')
+                        symbol = result.get('symbol', '')
+                        name = result.get('name', symbol)
+                        quantity = result.get('quantity', 0)
+                        price = result.get('price', 0)
+                        reason = result.get('reason', '')
+                        
+                        if trade_type == 'buy':
+                            logger.info(f"[自动交易] {username} 买入 {name}({symbol}) {quantity}股 @ ¥{price:.3f} - {reason}")
+                        else:
+                            profit = result.get('profit', 0)
+                            profit_pct = result.get('profit_pct', 0)
+                            logger.info(f"[自动交易] {username} 卖出 {name}({symbol}) {quantity}股 @ ¥{price:.3f}, 盈亏: {profit:.2f}({profit_pct:.2f}%) - {reason}")
+                
+            except Exception as e:
+                logger.error(f"[自动交易] 处理用户 {username} 失败: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        if total_trades > 0:
+            logger.info(f"[自动交易] 本轮处理完成，共执行 {total_trades} 笔交易")
+    
+    except Exception as e:
+        logger.error(f"[自动交易] 调度任务执行失败: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def generate_quant_signal_for_auto_trade(symbol: str, watchlist_item: Dict, quote: Dict) -> Dict:
+    """
+    为自动交易生成量化信号（纯量化指标，不使用AI）
+    
+    核心逻辑：
+    1. 基于价格与支撑位/阻力位的关系
+    2. 基于涨跌幅和成交量
+    3. 高胜率策略：严格的入场条件
+    """
+    current_price = quote.get('current_price', 0)
+    if current_price <= 0:
+        return {'signal_type': 'hold', 'signal': 'hold', 'strength': 0, 'confidence': 0}
+    
+    # 获取支撑位和阻力位
+    holding_period = watchlist_item.get('holding_period', 'swing')
+    support_price = watchlist_item.get(f'{holding_period}_support') or watchlist_item.get('ai_buy_price', 0)
+    resistance_price = watchlist_item.get(f'{holding_period}_resistance') or watchlist_item.get('ai_sell_price', 0)
+    
+    # 获取涨跌幅
+    change_pct = quote.get('change_percent', 0)
+    
+    # 初始化信号
+    buy_score = 0
+    sell_score = 0
+    conditions = []
+    
+    # ========== 一票否决条件（高胜率核心）==========
+    # 大跌超过5%不买
+    if change_pct <= -5:
+        return {
+            'signal_type': 'hold', 'signal': 'hold', 
+            'strength': 0, 'confidence': 0,
+            'reason': '大跌超过5%，不追跌'
+        }
+    
+    # 大涨超过7%不买（追高风险）
+    if change_pct >= 7:
+        return {
+            'signal_type': 'hold', 'signal': 'hold',
+            'strength': 0, 'confidence': 0,
+            'reason': '大涨超过7%，不追高'
+        }
+    
+    # ========== 买入信号评分 ==========
+    if support_price and support_price > 0:
+        dist_to_support = ((current_price - support_price) / support_price) * 100
+        
+        # 非常接近支撑位（1%以内）
+        if 0 <= dist_to_support <= 1:
+            buy_score += 3
+            conditions.append(f'接近支撑位({dist_to_support:.1f}%)')
+        # 接近支撑位（1-2%）
+        elif 1 < dist_to_support <= 2:
+            buy_score += 2
+            conditions.append(f'较接近支撑位({dist_to_support:.1f}%)')
+        # 跌破支撑位（可能是假突破）
+        elif dist_to_support < 0 and dist_to_support >= -2:
+            buy_score += 1
+            conditions.append(f'跌破支撑位({abs(dist_to_support):.1f}%)')
+    
+    # ========== 卖出信号评分 ==========
+    if resistance_price and resistance_price > 0:
+        dist_to_resistance = ((resistance_price - current_price) / current_price) * 100
+        
+        # 非常接近阻力位（1%以内）
+        if 0 <= dist_to_resistance <= 1:
+            sell_score += 3
+            conditions.append(f'接近阻力位({dist_to_resistance:.1f}%)')
+        # 接近阻力位（1-2%）
+        elif 1 < dist_to_resistance <= 2:
+            sell_score += 2
+            conditions.append(f'较接近阻力位({dist_to_resistance:.1f}%)')
+        # 突破阻力位
+        elif dist_to_resistance < 0:
+            sell_score += 1
+            conditions.append(f'突破阻力位({abs(dist_to_resistance):.1f}%)')
+    
+    # ========== 涨跌幅信号 ==========
+    if -2 <= change_pct <= -0.5:
+        buy_score += 1
+        conditions.append(f'小幅回调({change_pct:.1f}%)')
+    elif 0.5 <= change_pct <= 2:
+        sell_score += 1
+        conditions.append(f'小幅上涨({change_pct:.1f}%)')
+    
+    # ========== 生成最终信号 ==========
+    if buy_score >= 3 and buy_score > sell_score:
+        confidence = min(95, 70 + buy_score * 5)
+        return {
+            'signal_type': 'buy',
+            'signal': 'buy',
+            'strength': min(5, buy_score),
+            'confidence': confidence,
+            'triggered_conditions': conditions
+        }
+    elif sell_score >= 3 and sell_score > buy_score:
+        confidence = min(95, 70 + sell_score * 5)
+        return {
+            'signal_type': 'sell',
+            'signal': 'sell',
+            'strength': min(5, sell_score),
+            'confidence': confidence,
+            'triggered_conditions': conditions
+        }
+    else:
+        return {
+            'signal_type': 'hold',
+            'signal': 'hold',
+            'strength': 0,
+            'confidence': 50,
+            'triggered_conditions': conditions
+        }
+
+
 def start_scheduler():
     """启动调度器"""
     logger.info("启动定时任务调度器...")
     
     # 每30秒检查一次自选列表AI建议价格（交易时间内）
     schedule.every(30).seconds.do(check_watchlist_price_alerts)
+    
+    # 每60秒执行一次自动交易（交易时间内）
+    # 自动交易会检查所有开启自动交易的用户，执行买卖操作
+    schedule.every(60).seconds.do(process_auto_trades)
     
     # 每天23:59清空研究列表（保留当天的）
     schedule.every().day.at("23:59").do(clear_ai_picks_daily)
@@ -315,7 +567,7 @@ def start_scheduler():
     scheduler_thread = threading.Thread(target=run_schedule, daemon=True)
     scheduler_thread.start()
     
-    logger.info("定时任务调度器已启动（包含自选列表实时监控）")
+    logger.info("定时任务调度器已启动（包含自选列表实时监控 + 自动交易）")
 
 
 def clear_ai_picks_daily():

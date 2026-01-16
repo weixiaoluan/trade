@@ -1793,6 +1793,42 @@ def get_trade_rule(symbol: str, type_: str = None) -> str:
 
 
 
+# ============================================
+# 自动交易相关查询
+# ============================================
+
+def db_get_all_auto_trade_users() -> List[Dict]:
+    """获取所有开启自动交易的用户账户
+    
+    用于后台调度器自动执行交易
+    返回开启了自动交易的用户列表及其账户信息
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT a.username, a.initial_capital, a.current_capital, 
+                   a.total_profit, a.total_profit_pct, a.win_count, 
+                   a.loss_count, a.win_rate, a.auto_trade_enabled,
+                   a.created_at, a.updated_at
+            FROM sim_trade_accounts a
+            JOIN users u ON a.username = u.username
+            WHERE a.auto_trade_enabled = 1 AND u.status = 'approved'
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_get_auto_trade_user_count() -> int:
+    """获取开启自动交易的用户数量"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(*) FROM sim_trade_accounts a
+            JOIN users u ON a.username = u.username
+            WHERE a.auto_trade_enabled = 1 AND u.status = 'approved'
+        ''')
+        return cursor.fetchone()[0]
+
+
 # 初始化模拟交易表
 try:
     init_sim_trade_tables()
