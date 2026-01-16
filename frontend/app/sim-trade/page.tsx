@@ -15,14 +15,18 @@ import {
   AlertCircle,
   Loader2,
   ArrowLeft,
-  Settings,
   RotateCcw,
   DollarSign,
-  Percent,
-  Calendar,
+  Activity,
+  Eye,
   Target,
+  Shield,
+  Zap,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Radio,
 } from "lucide-react";
-import { UserHeader } from "@/components/ui/UserHeader";
 import { AlertModal } from "@/components/ui/AlertModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { API_BASE } from "@/lib/config";
@@ -58,6 +62,7 @@ interface SimPosition {
   holding_period: string;
   trade_rule: string;
   can_sell_date: string;
+  highest_price?: number;
 }
 
 interface SimTradeRecord {
@@ -90,6 +95,44 @@ interface SimStats {
   avg_holding_days: number;
 }
 
+interface MonitorItem {
+  symbol: string;
+  name: string;
+  type: string;
+  holding_period: string;
+  current_price: number;
+  change_pct: number;
+  support: number;
+  resistance: number;
+  risk: number;
+  dist_to_support: number | null;
+  dist_to_resistance: number | null;
+  signal_status: string;
+  signal_reason: string;
+  has_position: boolean;
+  position: {
+    quantity: number;
+    cost_price: number;
+    profit_pct: number;
+    holding_days: number;
+    buy_date: string;
+  } | null;
+  starred: number;
+}
+
+interface TradeLog {
+  id: number;
+  type: string;
+  icon: string;
+  message: string;
+  symbol: string;
+  name: string;
+  signal_type: string;
+  profit: number;
+  profit_pct: number;
+  created_at: string;
+}
+
 interface QuoteData {
   symbol: string;
   current_price: number;
@@ -110,17 +153,29 @@ export default function SimTradePage() {
   const [maxDrawdown, setMaxDrawdown] = useState(0);
   const [floatingProfit, setFloatingProfit] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<'positions' | 'records' | 'stats'>('positions');
+  // 监控相关状态
+  const [monitorItems, setMonitorItems] = useState<MonitorItem[]>([]);
+  const [tradeLogs, setTradeLogs] = useState<TradeLog[]>([]);
+  const [monitorLoading, setMonitorLoading] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<'monitor' | 'positions' | 'records' | 'stats'>('monitor');
   const [refreshing, setRefreshing] = useState(false);
   const [autoTrading, setAutoTrading] = useState(false);
   const [processingTrade, setProcessingTrade] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<string>('');
 
-  // 实时行情数据（使用 ref 避免频繁重渲染）
+  // 实时行情
   const [realtimeQuotes, setRealtimeQuotes] = useState<Record<string, QuoteData>>({});
   const quotesRef = useRef<Record<string, QuoteData>>({});
   const positionsRef = useRef<SimPosition[]>([]);
   const isFetchingRef = useRef(false);
+
+  // 展开/收起状态
+  const [expandedSections, setExpandedSections] = useState({
+    account: true,
+    risk: true,
+    autoTrade: true,
+  });
 
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -175,25 +230,20 @@ export default function SimTradePage() {
     const now = new Date();
     const day = now.getDay();
     if (day === 0 || day === 6) return false;
-    
     const hours = now.getHours();
     const minutes = now.getMinutes();
     const time = hours * 60 + minutes;
-    
-    // 上午 9:30-11:30 (570-690), 下午 13:00-15:00 (780-900)
     return (time >= 570 && time <= 690) || (time >= 780 && time <= 900);
   }, []);
 
-  // 同步 positions 到 ref
   useEffect(() => {
     positionsRef.current = positions;
   }, [positions]);
 
-  // 获取实时行情（轻量级，只获取价格）
+  // 获取实时行情
   const fetchQuotesOnly = useCallback(async () => {
     const token = getToken();
     if (!token || positionsRef.current.length === 0 || isFetchingRef.current) return;
-
     isFetchingRef.current = true;
     try {
       const symbols = positionsRef.current.map(p => p.symbol).join(',');
@@ -213,38 +263,32 @@ export default function SimTradePage() {
           });
         }
         quotesRef.current = newQuotes;
-        // 每秒更新一次显示（批量更新，减少渲染）
         setRealtimeQuotes({ ...newQuotes });
         setLastUpdateTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       }
     } catch (error) {
-      // 静默失败，不影响用户体验
+      // 静默失败
     } finally {
       isFetchingRef.current = false;
     }
   }, [getToken]);
 
-  // 计算持仓盈亏（基于实时行情）
+  // 计算持仓盈亏
   const getPositionWithRealtime = useCallback((position: SimPosition) => {
     const quote = realtimeQuotes[position.symbol.toUpperCase()];
     if (quote && quote.current_price > 0) {
       const currentPrice = quote.current_price;
       const profit = (currentPrice - position.cost_price) * position.quantity;
       const profitPct = ((currentPrice / position.cost_price) - 1) * 100;
-      return {
-        ...position,
-        current_price: currentPrice,
-        profit: profit,
-        profit_pct: profitPct,
-      };
+      return { ...position, current_price: currentPrice, profit, profit_pct: profitPct };
     }
     return position;
   }, [realtimeQuotes]);
 
-  // 计算总资产（基于实时行情）
+  // 计算总资产
   const calculateTotalAssets = useCallback(() => {
     let posValue = 0;
-    positions.forEach(p => {
+    positions.forEach((p: SimPosition) => {
       const quote = realtimeQuotes[p.symbol.toUpperCase()];
       const price = quote?.current_price || p.current_price || p.cost_price;
       posValue += p.quantity * price;
@@ -257,11 +301,10 @@ export default function SimTradePage() {
 
   const { positionValue: realtimePositionValue, totalAssets: realtimeTotalAssets } = calculateTotalAssets();
 
-  // 获取账户信息（不更新价格，快速）
+  // 获取账户信息
   const fetchAccountInfo = useCallback(async () => {
     const token = getToken();
     if (!token) return;
-
     try {
       const response = await fetch(`${API_BASE}/api/sim-trade/account`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -269,7 +312,7 @@ export default function SimTradePage() {
       if (response.ok) {
         const data = await response.json();
         setAccount(data.data.account);
-        setPositions(data.data.positions || []);
+        setPositions(data.data.positions as SimPosition[] || []);
         setStats(data.data.stats);
         setTotalAssets(data.data.total_assets || 0);
         setPositionValue(data.data.position_value || 0);
@@ -289,7 +332,6 @@ export default function SimTradePage() {
   const fetchRecords = useCallback(async () => {
     const token = getToken();
     if (!token) return;
-
     try {
       const response = await fetch(`${API_BASE}/api/sim-trade/records?limit=100`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -303,38 +345,57 @@ export default function SimTradePage() {
     }
   }, [getToken]);
 
-  // 手动刷新（更新数据库中的价格）
+  // 获取监控数据
+  const fetchMonitorData = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    setMonitorLoading(true);
+    try {
+      const [monitorRes, logsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/sim-trade/monitor`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/api/sim-trade/logs?limit=30`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (monitorRes.ok) {
+        const data = await monitorRes.json();
+        setMonitorItems(data.monitor_items || []);
+      }
+      if (logsRes.ok) {
+        const data = await logsRes.json();
+        setTradeLogs(data.logs || []);
+      }
+    } catch (error) {
+      console.error("获取监控数据失败:", error);
+    } finally {
+      setMonitorLoading(false);
+    }
+  }, [getToken]);
+
+  // 手动刷新
   const updatePrices = useCallback(async () => {
     const token = getToken();
     if (!token) return;
-
     setRefreshing(true);
     try {
       await fetch(`${API_BASE}/api/sim-trade/update-prices`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      await fetchAccountInfo();
-      await fetchQuotesOnly();
+      await Promise.all([fetchAccountInfo(), fetchQuotesOnly(), fetchMonitorData()]);
     } catch (error) {
       console.error("更新价格失败:", error);
     } finally {
       setRefreshing(false);
     }
-  }, [getToken, fetchAccountInfo, fetchQuotesOnly]);
+  }, [getToken, fetchAccountInfo, fetchQuotesOnly, fetchMonitorData]);
 
   // 切换自动交易
   const toggleAutoTrade = useCallback(async () => {
     const token = getToken();
     if (!token) return;
-
     try {
       const response = await fetch(`${API_BASE}/api/sim-trade/auto-trade/toggle`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: !autoTrading }),
       });
       if (response.ok) {
@@ -350,7 +411,6 @@ export default function SimTradePage() {
   const processAutoTrade = useCallback(async () => {
     const token = getToken();
     if (!token) return;
-
     setProcessingTrade(true);
     try {
       const response = await fetch(`${API_BASE}/api/sim-trade/process`, {
@@ -364,15 +424,14 @@ export default function SimTradePage() {
         } else {
           showAlertModal("无交易信号", "当前没有符合条件的交易信号", "info");
         }
-        await fetchAccountInfo();
-        await fetchRecords();
+        await Promise.all([fetchAccountInfo(), fetchRecords(), fetchMonitorData()]);
       }
     } catch (error) {
       showAlertModal("处理失败", "请稍后重试", "error");
     } finally {
       setProcessingTrade(false);
     }
-  }, [getToken, showAlertModal, fetchAccountInfo, fetchRecords]);
+  }, [getToken, showAlertModal, fetchAccountInfo, fetchRecords, fetchMonitorData]);
 
   // 重置账户
   const handleResetAccount = useCallback(() => {
@@ -382,7 +441,6 @@ export default function SimTradePage() {
       async () => {
         const token = getToken();
         if (!token) return;
-
         try {
           const response = await fetch(`${API_BASE}/api/sim-trade/reset`, {
             method: "POST",
@@ -390,8 +448,7 @@ export default function SimTradePage() {
           });
           if (response.ok) {
             showAlertModal("重置成功", "模拟账户已重置", "success");
-            await fetchAccountInfo();
-            await fetchRecords();
+            await Promise.all([fetchAccountInfo(), fetchRecords(), fetchMonitorData()]);
           }
         } catch (error) {
           showAlertModal("重置失败", "请稍后重试", "error");
@@ -399,53 +456,71 @@ export default function SimTradePage() {
       },
       "warning"
     );
-  }, [getToken, showConfirmModal, showAlertModal, fetchAccountInfo, fetchRecords]);
+  }, [getToken, showConfirmModal, showAlertModal, fetchAccountInfo, fetchRecords, fetchMonitorData]);
 
   // 初始化加载
   useEffect(() => {
     fetchAccountInfo();
     fetchRecords();
-  }, [fetchAccountInfo, fetchRecords]);
+    fetchMonitorData();
+  }, [fetchAccountInfo, fetchRecords, fetchMonitorData]);
 
-  // 实时行情轮询（交易时间1秒，非交易时间30秒）
+  // 实时行情轮询
   useEffect(() => {
     if (positions.length === 0) return;
-
-    // 首次加载时获取行情
     fetchQuotesOnly();
-
-    const getInterval = () => isTradingTime() ? 1000 : 30000;
-    
-    let intervalId = setInterval(() => {
-      fetchQuotesOnly();
-    }, getInterval());
-
-    // 每分钟检查一次是否需要调整刷新频率
+    const getInterval = () => isTradingTime() ? 3000 : 30000;
+    let intervalId = setInterval(() => { fetchQuotesOnly(); }, getInterval());
     const checkIntervalId = setInterval(() => {
       clearInterval(intervalId);
-      intervalId = setInterval(() => {
-        fetchQuotesOnly();
-      }, getInterval());
+      intervalId = setInterval(() => { fetchQuotesOnly(); }, getInterval());
     }, 60000);
-
-    return () => {
-      clearInterval(intervalId);
-      clearInterval(checkIntervalId);
-    };
+    return () => { clearInterval(intervalId); clearInterval(checkIntervalId); };
   }, [positions.length, fetchQuotesOnly, isTradingTime]);
 
-  // 格式化金额
+  // 监控数据轮询
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (activeTab === 'monitor') {
+        fetchMonitorData();
+      }
+    }, isTradingTime() ? 10000 : 60000);
+    return () => clearInterval(interval);
+  }, [activeTab, fetchMonitorData, isTradingTime]);
+
   const formatMoney = (value: number) => {
-    if (value >= 10000) {
-      return `${(value / 10000).toFixed(2)}万`;
-    }
+    if (Math.abs(value) >= 10000) return `${(value / 10000).toFixed(2)}万`;
     return value.toFixed(2);
   };
 
-  // 格式化百分比
   const formatPercent = (value: number) => {
     const sign = value >= 0 ? '+' : '';
     return `${sign}${value.toFixed(2)}%`;
+  };
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections((prev: typeof expandedSections) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  // 获取信号状态样式
+  const getSignalStyle = (status: string) => {
+    switch (status) {
+      case 'near_support': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
+      case 'below_support': return 'bg-rose-500/20 text-rose-400 border-rose-500/40';
+      case 'near_resistance': return 'bg-amber-500/20 text-amber-400 border-amber-500/40';
+      case 'above_resistance': return 'bg-blue-500/20 text-blue-400 border-blue-500/40';
+      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/40';
+    }
+  };
+
+  const getSignalText = (status: string) => {
+    switch (status) {
+      case 'near_support': return '接近支撑';
+      case 'below_support': return '跌破支撑';
+      case 'near_resistance': return '接近阻力';
+      case 'above_resistance': return '突破阻力';
+      default: return '观望';
+    }
   };
 
   if (loading) {
@@ -462,269 +537,291 @@ export default function SimTradePage() {
       <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-slate-700/50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors"
-            >
+            <button onClick={() => router.push('/dashboard')} className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors">
               <ArrowLeft className="w-5 h-5 text-slate-400" />
             </button>
             <div>
-              <h1 className="text-lg font-bold text-white">模拟交易</h1>
-              {lastUpdateTime && (
-                <p className="text-[10px] text-slate-500">更新: {lastUpdateTime}</p>
-              )}
+              <h1 className="text-lg font-bold text-white flex items-center gap-2">
+                <Activity className="w-5 h-5 text-indigo-400" />
+                模拟交易系统
+              </h1>
+              <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                {lastUpdateTime && <span>更新: {lastUpdateTime}</span>}
+                {isTradingTime() ? (
+                  <span className="flex items-center gap-1 text-emerald-400"><Radio className="w-3 h-3 animate-pulse" />交易中</span>
+                ) : (
+                  <span className="text-slate-500">休市</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={updatePrices}
-              disabled={refreshing}
-              className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors"
-            >
+            <button onClick={updatePrices} disabled={refreshing} className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors">
               <RefreshCw className={`w-5 h-5 text-slate-400 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
-            <button
-              onClick={handleResetAccount}
-              className="p-2 rounded-lg bg-slate-800/50 hover:bg-rose-500/20 transition-colors"
-            >
+            <button onClick={handleResetAccount} className="p-2 rounded-lg bg-slate-800/50 hover:bg-rose-500/20 transition-colors">
               <RotateCcw className="w-5 h-5 text-slate-400 hover:text-rose-400" />
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 py-4 space-y-4">
         {/* 免责声明 */}
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-amber-300/80">
-              本功能仅供学习研究使用，不构成任何投资建议。模拟交易结果不代表真实交易表现。
-            </p>
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <p className="text-xs text-amber-300/80">本功能仅供学习研究使用，不构成任何投资建议。模拟交易结果不代表真实交易表现。</p>
           </div>
         </div>
 
-        {/* 账户概览 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* 总资产 */}
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-2 mb-2">
-              <Wallet className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs text-slate-400">总资产</span>
-            </div>
-            <div className="text-xl font-bold text-white">
-              ¥{formatMoney(realtimeTotalAssets || totalAssets)}
-            </div>
-            <div className={`text-xs mt-1 ${((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000)) >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {formatPercent((((realtimeTotalAssets || totalAssets) / (account?.initial_capital || 1000000)) - 1) * 100)}
-            </div>
-          </div>
-
-          {/* 可用资金 */}
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs text-slate-400">可用资金</span>
-            </div>
-            <div className="text-xl font-bold text-white">
-              ¥{formatMoney(account?.current_capital || 0)}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              初始: ¥{formatMoney(account?.initial_capital || 1000000)}
-            </div>
-          </div>
-
-          {/* 持仓市值 */}
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-2 mb-2">
-              <BarChart3 className="w-4 h-4 text-blue-400" />
-              <span className="text-xs text-slate-400">持仓市值</span>
-            </div>
-            <div className="text-xl font-bold text-white">
-              ¥{formatMoney(realtimePositionValue || positionValue)}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              {positions.length} 只持仓
-            </div>
-          </div>
-
-          {/* 累计盈亏 */}
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-2 mb-2">
-              {((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000)) >= 0 ? (
-                <TrendingUp className="w-4 h-4 text-rose-400" />
-              ) : (
-                <TrendingDown className="w-4 h-4 text-emerald-400" />
-              )}
-              <span className="text-xs text-slate-400">浮动盈亏</span>
-            </div>
-            <div className={`text-xl font-bold ${((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000)) >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000)) >= 0 ? '+' : ''}¥{formatMoney((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000))}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              胜率: {(account?.win_rate || 0).toFixed(1)}%
-            </div>
-          </div>
-        </div>
-
-        {/* 风险指标 */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-            <div className="text-xs text-slate-400 mb-1">仓位占比</div>
+        {/* 账户概览卡片 */}
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+          <button onClick={() => toggleSection('account')} className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
             <div className="flex items-center gap-2">
-              <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full rounded-full ${positionRatio > 70 ? 'bg-rose-500' : positionRatio > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                  style={{ width: `${Math.min(positionRatio, 100)}%` }}
-                />
+              <Wallet className="w-4 h-4 text-indigo-400" />
+              <span className="text-sm font-medium text-white">账户概览</span>
+            </div>
+            {expandedSections.account ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          </button>
+          {expandedSections.account && (
+            <div className="px-4 pb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="text-xs text-slate-400 mb-1">总资产</div>
+                  <div className="text-lg font-bold text-white">¥{formatMoney(realtimeTotalAssets || totalAssets)}</div>
+                  <div className={`text-xs ${((realtimeTotalAssets || totalAssets) - (account?.initial_capital || 1000000)) >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {formatPercent((((realtimeTotalAssets || totalAssets) / (account?.initial_capital || 1000000)) - 1) * 100)}
+                  </div>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="text-xs text-slate-400 mb-1">可用资金</div>
+                  <div className="text-lg font-bold text-white">¥{formatMoney(account?.current_capital || 0)}</div>
+                  <div className="text-xs text-slate-500">初始: ¥{formatMoney(account?.initial_capital || 1000000)}</div>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="text-xs text-slate-400 mb-1">持仓市值</div>
+                  <div className="text-lg font-bold text-white">¥{formatMoney(realtimePositionValue || positionValue)}</div>
+                  <div className="text-xs text-slate-500">{positions.length} 只持仓</div>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="text-xs text-slate-400 mb-1">浮动盈亏</div>
+                  <div className={`text-lg font-bold ${floatingProfit >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {floatingProfit >= 0 ? '+' : ''}¥{formatMoney(floatingProfit)}
+                  </div>
+                  <div className="text-xs text-slate-500">胜率: {(account?.win_rate || 0).toFixed(1)}%</div>
+                </div>
               </div>
-              <span className="text-sm font-medium text-white">{positionRatio.toFixed(1)}%</span>
             </div>
-          </div>
-          <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-            <div className="text-xs text-slate-400 mb-1">最大回撤</div>
-            <div className={`text-lg font-bold ${maxDrawdown > 10 ? 'text-rose-400' : maxDrawdown > 5 ? 'text-amber-400' : 'text-emerald-400'}`}>
-              -{maxDrawdown.toFixed(2)}%
+          )}
+        </div>
+
+        {/* 风险指标卡片 */}
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+          <button onClick={() => toggleSection('risk')} className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-amber-400" />
+              <span className="text-sm font-medium text-white">风险指标</span>
             </div>
-          </div>
-          <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-            <div className="text-xs text-slate-400 mb-1">浮动盈亏</div>
-            <div className={`text-lg font-bold ${floatingProfit >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {floatingProfit >= 0 ? '+' : ''}¥{formatMoney(floatingProfit)}
+            {expandedSections.risk ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          </button>
+          {expandedSections.risk && (
+            <div className="px-4 pb-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="text-xs text-slate-400 mb-2">仓位占比</div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${positionRatio > 70 ? 'bg-rose-500' : positionRatio > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(positionRatio, 100)}%` }} />
+                    </div>
+                    <span className="text-sm font-medium text-white">{positionRatio.toFixed(1)}%</span>
+                  </div>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="text-xs text-slate-400 mb-2">最大回撤</div>
+                  <div className={`text-lg font-bold ${maxDrawdown > 10 ? 'text-rose-400' : maxDrawdown > 5 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    -{maxDrawdown.toFixed(2)}%
+                  </div>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="text-xs text-slate-400 mb-2">交易统计</div>
+                  <div className="text-sm text-white">
+                    <span className="text-emerald-400">{account?.win_count || 0}胜</span>
+                    <span className="mx-1">/</span>
+                    <span className="text-rose-400">{account?.loss_count || 0}负</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* 自动交易控制 */}
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${autoTrading ? 'bg-emerald-500/20' : 'bg-slate-700/50'}`}>
-                {autoTrading ? (
-                  <Play className="w-5 h-5 text-emerald-400" />
-                ) : (
-                  <Pause className="w-5 h-5 text-slate-400" />
-                )}
-              </div>
-              <div>
-                <div className="text-sm font-medium text-white">自动交易</div>
-                <div className="text-xs text-slate-400">
-                  {autoTrading ? '已开启，将根据信号自动买卖' : '已关闭'}
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+          <button onClick={() => toggleSection('autoTrade')} className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-yellow-400" />
+              <span className="text-sm font-medium text-white">自动交易</span>
+              <span className={`px-2 py-0.5 rounded text-xs ${autoTrading ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-400'}`}>
+                {autoTrading ? '已开启' : '已关闭'}
+              </span>
+            </div>
+            {expandedSections.autoTrade ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          </button>
+          {expandedSections.autoTrade && (
+            <div className="px-4 pb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${autoTrading ? 'bg-emerald-500/20' : 'bg-slate-700/50'}`}>
+                    {autoTrading ? <Play className="w-5 h-5 text-emerald-400" /> : <Pause className="w-5 h-5 text-slate-400" />}
+                  </div>
+                  <div>
+                    <div className="text-sm text-white">{autoTrading ? '监控中，将根据信号自动买卖' : '已暂停自动交易'}</div>
+                    <div className="text-xs text-slate-400">基于ATR动态风控 + 金字塔式分仓策略</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={processAutoTrade} disabled={processingTrade} className="px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 text-sm hover:bg-indigo-500/30 transition-colors disabled:opacity-50">
+                    {processingTrade ? <Loader2 className="w-4 h-4 animate-spin" /> : '立即执行'}
+                  </button>
+                  <button onClick={toggleAutoTrade} className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${autoTrading ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'}`}>
+                    {autoTrading ? '关闭' : '开启'}
+                  </button>
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={processAutoTrade}
-                disabled={processingTrade}
-                className="px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 text-sm hover:bg-indigo-500/30 transition-colors disabled:opacity-50"
-              >
-                {processingTrade ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  '立即执行'
-                )}
-              </button>
-              <button
-                onClick={toggleAutoTrade}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                  autoTrading
-                    ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30'
-                    : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
-                }`}
-              >
-                {autoTrading ? '关闭' : '开启'}
-              </button>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* 交易统计 */}
-        {stats && (
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-            <h3 className="text-sm font-medium text-white mb-3">交易统计</h3>
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-4 text-center">
-              <div>
-                <div className="text-lg font-bold text-white">{stats.total_trades}</div>
-                <div className="text-xs text-slate-400">总交易</div>
-              </div>
-              <div>
-                <div className="text-lg font-bold text-emerald-400">{stats.win_count}</div>
-                <div className="text-xs text-slate-400">盈利</div>
-              </div>
-              <div>
-                <div className="text-lg font-bold text-rose-400">{stats.loss_count}</div>
-                <div className="text-xs text-slate-400">亏损</div>
-              </div>
-              <div>
-                <div className="text-lg font-bold text-indigo-400">{stats.win_rate.toFixed(1)}%</div>
-                <div className="text-xs text-slate-400">胜率</div>
-              </div>
-              <div>
-                <div className={`text-lg font-bold ${stats.avg_profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                  {formatPercent(stats.avg_profit_pct)}
+        {/* Tab 切换 */}
+        <div className="flex gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
+          {[
+            { key: 'monitor', label: '实时监控', icon: Eye, count: monitorItems.length },
+            { key: 'positions', label: '持仓', icon: Target, count: positions.length },
+            { key: 'records', label: '交易记录', icon: History, count: records.length },
+            { key: 'stats', label: '统计', icon: BarChart3 },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === tab.key ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              <span className="hidden sm:inline">{tab.label}</span>
+              {tab.count !== undefined && <span className="text-xs opacity-60">({tab.count})</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* 实时监控面板 */}
+        {activeTab === 'monitor' && (
+          <div className="space-y-4">
+            {/* 监控列表 */}
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-indigo-400" />
+                  <span className="text-sm font-medium text-white">监控列表</span>
+                  <span className="text-xs text-slate-400">({monitorItems.length}个标的)</span>
                 </div>
-                <div className="text-xs text-slate-400">平均收益</div>
+                {monitorLoading && <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />}
               </div>
-              <div>
-                <div className="text-lg font-bold text-blue-400">{stats.avg_holding_days.toFixed(1)}天</div>
-                <div className="text-xs text-slate-400">平均持有</div>
+              <div className="divide-y divide-slate-700/50 max-h-[400px] overflow-y-auto">
+                {monitorItems.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400">
+                    <Eye className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>暂无监控标的</p>
+                    <p className="text-xs mt-1">请先在自选列表中添加标的</p>
+                  </div>
+                ) : (
+                  monitorItems.map(item => (
+                    <div key={item.symbol} className={`px-4 py-3 hover:bg-slate-700/30 transition-colors ${item.has_position ? 'bg-indigo-500/5' : ''}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {item.has_position && <div className="w-1 h-8 bg-indigo-500 rounded-full" />}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-white">{item.name}</span>
+                              <span className="text-xs text-slate-400">{item.symbol}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getSignalStyle(item.signal_status)}`}>
+                                {getSignalText(item.signal_status)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                              <span>支撑: ¥{item.support?.toFixed(3) || '-'}</span>
+                              <span>阻力: ¥{item.resistance?.toFixed(3) || '-'}</span>
+                              {item.dist_to_support !== null && (
+                                <span className={item.dist_to_support <= 1.5 ? 'text-emerald-400' : ''}>
+                                  距支撑: {item.dist_to_support.toFixed(1)}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-white">¥{item.current_price?.toFixed(3) || '-'}</div>
+                          <div className={`text-sm ${item.change_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                            {item.change_pct >= 0 ? '+' : ''}{item.change_pct?.toFixed(2)}%
+                          </div>
+                          {item.position && (
+                            <div className={`text-xs mt-1 ${item.position.profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              持仓盈亏: {item.position.profit_pct >= 0 ? '+' : ''}{item.position.profit_pct.toFixed(2)}%
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* 交易日志 */}
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-700/50 flex items-center gap-2">
+                <History className="w-4 h-4 text-amber-400" />
+                <span className="text-sm font-medium text-white">交易日志</span>
+              </div>
+              <div className="divide-y divide-slate-700/50 max-h-[300px] overflow-y-auto">
+                {tradeLogs.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400">
+                    <History className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">暂无交易记录</p>
+                  </div>
+                ) : (
+                  tradeLogs.map(log => (
+                    <div key={log.id} className="px-4 py-2 hover:bg-slate-700/30 transition-colors">
+                      <div className="flex items-start gap-2">
+                        <span className="text-lg">{log.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-white">{log.message}</div>
+                          <div className="text-xs text-slate-400 mt-0.5">{log.created_at}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* Tab 切换 */}
-        <div className="flex gap-2 border-b border-slate-700/50 pb-2">
-          <button
-            onClick={() => setActiveTab('positions')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'positions'
-                ? 'bg-indigo-500/20 text-indigo-400'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            持仓 ({positions.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('records')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'records'
-                ? 'bg-indigo-500/20 text-indigo-400'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            交易记录 ({records.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('stats')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'stats'
-                ? 'bg-indigo-500/20 text-indigo-400'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            详细统计
-          </button>
-        </div>
-
         {/* 持仓列表 */}
         {activeTab === 'positions' && (
           <div className="space-y-3">
             {positions.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
-                <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center text-slate-400">
+                <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>暂无持仓</p>
                 <p className="text-xs mt-1">开启自动交易后，系统将根据信号自动买入</p>
               </div>
             ) : (
-              positions.map((position) => {
+              positions.map(position => {
                 const realtimePosition = getPositionWithRealtime(position);
                 return (
-                  <div
-                    key={position.symbol}
-                    className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"
-                  >
+                  <div key={position.symbol} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <div className="font-medium text-white">{position.name}</div>
@@ -740,36 +837,15 @@ export default function SimTradePage() {
                       </div>
                     </div>
                     <div className="grid grid-cols-4 gap-2 text-xs">
-                      <div>
-                        <div className="text-slate-400">持仓</div>
-                        <div className="text-white">{position.quantity}股</div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400">成本</div>
-                        <div className="text-white">¥{position.cost_price.toFixed(3)}</div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400">现价</div>
-                        <div className={`font-medium ${realtimePosition.profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                          ¥{realtimePosition.current_price.toFixed(3)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400">规则</div>
-                        <div className="text-white">{position.trade_rule}</div>
-                      </div>
+                      <div><div className="text-slate-400">持仓</div><div className="text-white">{position.quantity}股</div></div>
+                      <div><div className="text-slate-400">成本</div><div className="text-white">¥{position.cost_price.toFixed(3)}</div></div>
+                      <div><div className="text-slate-400">现价</div><div className={`font-medium ${realtimePosition.profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>¥{realtimePosition.current_price.toFixed(3)}</div></div>
+                      <div><div className="text-slate-400">规则</div><div className="text-white">{position.trade_rule}</div></div>
                     </div>
                     <div className="mt-2 pt-2 border-t border-slate-700/50 flex items-center justify-between text-xs">
-                      <span className="text-slate-400">
-                        买入: {position.buy_date} | 可卖: {position.can_sell_date}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded ${
-                        position.holding_period === 'short' ? 'bg-amber-500/20 text-amber-400' :
-                        position.holding_period === 'long' ? 'bg-blue-500/20 text-blue-400' :
-                        'bg-indigo-500/20 text-indigo-400'
-                      }`}>
-                        {position.holding_period === 'short' ? '短线' :
-                         position.holding_period === 'long' ? '中长线' : '波段'}
+                      <span className="text-slate-400">买入: {position.buy_date} | 可卖: {position.can_sell_date}</span>
+                      <span className={`px-2 py-0.5 rounded ${position.holding_period === 'short' ? 'bg-amber-500/20 text-amber-400' : position.holding_period === 'long' ? 'bg-blue-500/20 text-blue-400' : 'bg-indigo-500/20 text-indigo-400'}`}>
+                        {position.holding_period === 'short' ? '短线' : position.holding_period === 'long' ? '中长线' : '波段'}
                       </span>
                     </div>
                   </div>
@@ -783,54 +859,36 @@ export default function SimTradePage() {
         {activeTab === 'records' && (
           <div className="space-y-3">
             {records.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
+              <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center text-slate-400">
                 <History className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>暂无交易记录</p>
               </div>
             ) : (
-              records.map((record) => (
-                <div
-                  key={record.id}
-                  className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"
-                >
+              records.map(record => (
+                <div key={record.id} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        record.trade_type === 'buy'
-                          ? 'bg-rose-500/20 text-rose-400'
-                          : 'bg-emerald-500/20 text-emerald-400'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${record.trade_type === 'buy' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
                         {record.trade_type === 'buy' ? '买入' : '卖出'}
                       </span>
                       <span className="font-medium text-white">{record.name}</span>
                       <span className="text-xs text-slate-400">{record.symbol}</span>
                     </div>
-                    <div className="text-xs text-slate-400">{record.trade_date}</div>
+                    <div className="text-xs text-slate-400">{record.created_at}</div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <div className="text-slate-400">数量</div>
-                      <div className="text-white">{record.quantity}股</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-400">价格</div>
-                      <div className="text-white">¥{record.price.toFixed(3)}</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-400">金额</div>
-                      <div className="text-white">¥{formatMoney(record.amount)}</div>
-                    </div>
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div><div className="text-slate-400">数量</div><div className="text-white">{record.quantity}股</div></div>
+                    <div><div className="text-slate-400">价格</div><div className="text-white">¥{record.price.toFixed(3)}</div></div>
+                    <div><div className="text-slate-400">金额</div><div className="text-white">¥{(record.quantity * record.price).toFixed(2)}</div></div>
+                    {record.trade_type === 'sell' && (
+                      <div>
+                        <div className="text-slate-400">盈亏</div>
+                        <div className={record.profit >= 0 ? 'text-rose-400' : 'text-emerald-400'}>
+                          {record.profit >= 0 ? '+' : ''}¥{record.profit.toFixed(2)} ({formatPercent(record.profit_pct)})
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {record.trade_type === 'sell' && record.profit !== null && (
-                    <div className="mt-2 pt-2 border-t border-slate-700/50 flex items-center justify-between text-xs">
-                      <span className="text-slate-400">
-                        持有 {record.holding_days || 0} 天
-                      </span>
-                      <span className={`font-medium ${record.profit >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        {record.profit >= 0 ? '+' : ''}¥{record.profit.toFixed(2)} ({formatPercent(record.profit_pct)})
-                      </span>
-                    </div>
-                  )}
                 </div>
               ))
             )}
@@ -839,101 +897,45 @@ export default function SimTradePage() {
 
         {/* 详细统计 */}
         {activeTab === 'stats' && stats && (
-          <div className="space-y-4">
-            {/* 交易概览 */}
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-              <h3 className="text-sm font-medium text-white mb-4">交易概览</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-white">{stats.total_trades}</div>
-                  <div className="text-xs text-slate-400">总交易次数</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-rose-400">{stats.buy_count}</div>
-                  <div className="text-xs text-slate-400">买入次数</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-emerald-400">{stats.sell_count}</div>
-                  <div className="text-xs text-slate-400">卖出次数</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-indigo-400">{stats.win_rate.toFixed(1)}%</div>
-                  <div className="text-xs text-slate-400">胜率</div>
-                </div>
+          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+            <h3 className="text-sm font-medium text-white mb-4 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-indigo-400" />
+              交易统计
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-white">{stats.total_trades}</div>
+                <div className="text-xs text-slate-400">总交易次数</div>
               </div>
-            </div>
-
-            {/* 盈亏分析 */}
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-              <h3 className="text-sm font-medium text-white mb-4">盈亏分析</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${stats.total_profit >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                    ¥{formatMoney(stats.total_profit)}
-                  </div>
-                  <div className="text-xs text-slate-400">累计盈亏</div>
-                </div>
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${stats.avg_profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                    {formatPercent(stats.avg_profit_pct)}
-                  </div>
-                  <div className="text-xs text-slate-400">平均收益率</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-rose-400">{formatPercent(stats.max_profit_pct)}</div>
-                  <div className="text-xs text-slate-400">最大单笔盈利</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-emerald-400">{formatPercent(stats.min_profit_pct)}</div>
-                  <div className="text-xs text-slate-400">最大单笔亏损</div>
-                </div>
+              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-indigo-400">{stats.win_rate.toFixed(1)}%</div>
+                <div className="text-xs text-slate-400">胜率</div>
               </div>
-            </div>
-
-            {/* 持仓分析 */}
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-              <h3 className="text-sm font-medium text-white mb-4">持仓分析</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-400">{stats.avg_holding_days.toFixed(1)}天</div>
-                  <div className="text-xs text-slate-400">平均持有天数</div>
+              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                <div className={`text-2xl font-bold ${stats.avg_profit_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  {formatPercent(stats.avg_profit_pct)}
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-emerald-400">{stats.win_count}</div>
-                  <div className="text-xs text-slate-400">盈利次数</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-rose-400">{stats.loss_count}</div>
-                  <div className="text-xs text-slate-400">亏损次数</div>
-                </div>
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${maxDrawdown > 10 ? 'text-rose-400' : 'text-amber-400'}`}>
-                    -{maxDrawdown.toFixed(2)}%
-                  </div>
-                  <div className="text-xs text-slate-400">最大回撤</div>
-                </div>
+                <div className="text-xs text-slate-400">平均收益</div>
               </div>
-            </div>
-
-            {/* 风控说明 */}
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-              <h3 className="text-sm font-medium text-white mb-3">风控规则</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                <div className="space-y-2">
-                  <div className="text-amber-400 font-medium">短线策略</div>
-                  <div className="text-slate-400">止损: -3% | 止盈: 3%/5%/8%</div>
-                  <div className="text-slate-400">移动止损: 2% | 最长持有: 5天</div>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-indigo-400 font-medium">波段策略</div>
-                  <div className="text-slate-400">止损: -5% | 止盈: 5%/10%/15%</div>
-                  <div className="text-slate-400">移动止损: 3% | 最长持有: 20天</div>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-blue-400 font-medium">中长线策略</div>
-                  <div className="text-slate-400">止损: -8% | 止盈: 10%/20%/30%</div>
-                  <div className="text-slate-400">移动止损: 5% | 最长持有: 60天</div>
-                </div>
+              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-blue-400">{stats.avg_holding_days.toFixed(1)}天</div>
+                <div className="text-xs text-slate-400">平均持有</div>
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-emerald-400">{stats.win_count}</div>
+                <div className="text-xs text-slate-400">盈利次数</div>
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-rose-400">{stats.loss_count}</div>
+                <div className="text-xs text-slate-400">亏损次数</div>
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-rose-400">{formatPercent(stats.max_profit_pct)}</div>
+                <div className="text-xs text-slate-400">最大盈利</div>
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-emerald-400">{formatPercent(stats.min_profit_pct)}</div>
+                <div className="text-xs text-slate-400">最大亏损</div>
               </div>
             </div>
           </div>
@@ -941,24 +943,8 @@ export default function SimTradePage() {
       </main>
 
       {/* 弹窗 */}
-      <AlertModal
-        isOpen={showAlert}
-        onClose={() => setShowAlert(false)}
-        title={alertConfig.title}
-        message={alertConfig.message}
-        type={alertConfig.type}
-      />
-      <ConfirmModal
-        isOpen={showConfirm}
-        onClose={() => setShowConfirm(false)}
-        onConfirm={() => {
-          confirmConfig.onConfirm();
-          setShowConfirm(false);
-        }}
-        title={confirmConfig.title}
-        message={confirmConfig.message}
-        type={confirmConfig.type}
-      />
+      <AlertModal isOpen={showAlert} onClose={() => setShowAlert(false)} title={alertConfig.title} message={alertConfig.message} type={alertConfig.type} />
+      <ConfirmModal isOpen={showConfirm} onClose={() => setShowConfirm(false)} onConfirm={() => { confirmConfig.onConfirm(); setShowConfirm(false); }} title={confirmConfig.title} message={confirmConfig.message} type={confirmConfig.type} />
     </div>
   );
 }

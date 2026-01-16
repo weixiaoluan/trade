@@ -6426,6 +6426,321 @@ def batch_update_all_period_prices(symbols: list, username: str):
 
 
 # ============================================
+# 模拟交易监控 API
+# ============================================
+
+@app.get("/api/sim-trade/monitor")
+async def get_sim_trade_monitor(authorization: str = Header(None)):
+    """获取模拟交易监控数据
+    
+    返回自选列表中所有标的的监控状态，包括：
+    - 实时行情
+    - 信号状态
+    - 距离支撑位/阻力位的距离
+    - 持仓状态
+    
+    注意：本功能仅供学习研究使用，不构成任何投资建议。
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    
+    # 获取自选列表
+    watchlist = get_user_watchlist(username)
+    if not watchlist:
+        return {"status": "success", "monitor_items": [], "message": "自选列表为空"}
+    
+    # 获取持仓
+    from web.database import db_get_sim_positions
+    positions = db_get_sim_positions(username)
+    position_map = {p['symbol'].upper(): p for p in positions}
+    
+    # 获取实时行情
+    symbols = [item['symbol'] for item in watchlist]
+    from tools.data_fetcher import get_batch_quotes
+    quotes_result = get_batch_quotes(symbols)
+    quotes = {}
+    if quotes_result.get('status') == 'success':
+        for q in quotes_result.get('quotes', []):
+            quotes[q['symbol'].upper()] = q
+    
+    # 构建监控数据
+    monitor_items = []
+    for item in watchlist:
+        symbol = item['symbol'].upper()
+        quote = quotes.get(symbol, {})
+        position = position_map.get(symbol)
+        holding_period = item.get('holding_period', 'swing')
+        
+        current_price = quote.get('current_price', 0)
+        change_pct = quote.get('change_percent', 0)
+        
+        # 获取支撑位/阻力位
+        support = item.get(f'{holding_period}_support') or item.get('ai_buy_price', 0)
+        resistance = item.get(f'{holding_period}_resistance') or item.get('ai_sell_price', 0)
+        risk = item.get(f'{holding_period}_risk', 0)
+        
+        # 计算距离
+        dist_to_support = ((current_price - support) / support * 100) if support > 0 and current_price > 0 else None
+        dist_to_resistance = ((resistance - current_price) / current_price * 100) if resistance > 0 and current_price > 0 else None
+        
+        # 判断信号状态
+        signal_status = 'hold'
+        signal_reason = ''
+        
+        if current_price > 0 and support > 0:
+            if dist_to_support is not None and dist_to_support <= 1.5:
+                signal_status = 'near_support'
+                signal_reason = f'接近支撑位({dist_to_support:.1f}%)'
+            elif dist_to_support is not None and dist_to_support < 0:
+                signal_status = 'below_support'
+                signal_reason = f'跌破支撑位({abs(dist_to_support):.1f}%)'
+        
+        if current_price > 0 and resistance > 0:
+            if dist_to_resistance is not None and dist_to_resistance <= 1.5:
+                signal_status = 'near_resistance'
+                signal_reason = f'接近阻力位({dist_to_resistance:.1f}%)'
+            elif dist_to_resistance is not None and dist_to_resistance < 0:
+                signal_status = 'above_resistance'
+                signal_reason = f'突破阻力位({abs(dist_to_resistance):.1f}%)'
+        
+        # 持仓盈亏
+        position_info = None
+        if position:
+            cost_price = position['cost_price']
+            profit_pct = ((current_price / cost_price) - 1) * 100 if cost_price > 0 and current_price > 0 else 0
+            position_info = {
+                'quantity': position['quantity'],
+                'cost_price': cost_price,
+                'profit_pct': round(profit_pct, 2),
+                'holding_days': position.get('holding_days', 0),
+                'buy_date': position.get('buy_date', ''),
+            }
+        
+        monitor_items.append({
+            'symbol': symbol,
+            'name': item.get('name', symbol),
+            'type': item.get('type', 'stock'),
+            'holding_period': holding_period,
+            'current_price': current_price,
+            'change_pct': round(change_pct, 2),
+            'support': support,
+            'resistance': resistance,
+            'risk': risk,
+            'dist_to_support': round(dist_to_support, 2) if dist_to_support is not None else None,
+            'dist_to_resistance': round(dist_to_resistance, 2) if dist_to_resistance is not None else None,
+            'signal_status': signal_status,
+            'signal_reason': signal_reason,
+            'has_position': position is not None,
+            'position': position_info,
+            'starred': item.get('starred', 0),
+        })
+    
+    # 按信号状态排序：有持仓 > 接近支撑位 > 接近阻力位 > 其他
+    def sort_key(item):
+        priority = {
+            'below_support': 0,
+            'near_support': 1,
+            'above_resistance': 2,
+            'near_resistance': 3,
+            'hold': 4,
+        }
+        has_position = 0 if item['has_position'] else 1
+        return (has_position, priority.get(item['signal_status'], 5))
+    
+    monitor_items.sort(key=sort_key)
+    
+    return {
+        "status": "success",
+        "monitor_items": monitor_items,
+        "total_count": len(monitor_items),
+        "position_count": len(positions),
+        "timestamp": get_beijing_now().isoformat(),
+        "disclaimer": "本功能仅供学习研究使用，不构成任何投资建议。"
+    }
+
+
+@app.get("/api/sim-trade/logs")
+async def get_sim_trade_logs(
+    limit: int = 50,
+    authorization: str = Header(None)
+):
+    """获取模拟交易日志
+    
+    返回最近的交易操作日志，包括：
+    - 买入/卖出记录
+    - 信号触发记录
+    - 风控触发记录
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    
+    # 获取交易记录
+    from web.database import db_get_sim_trade_records
+    records = db_get_sim_trade_records(username, limit=limit)
+    
+    # 格式化为日志格式
+    logs = []
+    for record in records:
+        trade_type = record.get('trade_type', '')
+        symbol = record.get('symbol', '')
+        name = record.get('name', symbol)
+        quantity = record.get('quantity', 0)
+        price = record.get('price', 0)
+        profit = record.get('profit', 0)
+        profit_pct = record.get('profit_pct', 0)
+        signal_type = record.get('signal_type', '')
+        created_at = record.get('created_at', '')
+        
+        if trade_type == 'buy':
+            log_type = 'buy'
+            message = f"买入 {name}({symbol}) {quantity}股 @ ¥{price:.3f}"
+            icon = '🟢'
+        else:
+            log_type = 'sell'
+            profit_sign = '+' if profit >= 0 else ''
+            message = f"卖出 {name}({symbol}) {quantity}股 @ ¥{price:.3f}, 盈亏: {profit_sign}¥{profit:.2f} ({profit_sign}{profit_pct:.2f}%)"
+            icon = '🔴' if profit < 0 else '🟢'
+        
+        logs.append({
+            'id': record.get('id'),
+            'type': log_type,
+            'icon': icon,
+            'message': message,
+            'symbol': symbol,
+            'name': name,
+            'signal_type': signal_type,
+            'profit': profit,
+            'profit_pct': profit_pct,
+            'created_at': created_at,
+        })
+    
+    return {
+        "status": "success",
+        "logs": logs,
+        "total": len(logs),
+        "timestamp": get_beijing_now().isoformat()
+    }
+
+
+@app.get("/api/sim-trade/signals")
+async def get_sim_trade_signals(authorization: str = Header(None)):
+    """获取当前交易信号
+    
+    扫描自选列表，返回当前符合交易条件的标的
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    
+    # 获取自选列表
+    watchlist = get_user_watchlist(username)
+    if not watchlist:
+        return {"status": "success", "signals": [], "message": "自选列表为空"}
+    
+    # 获取持仓
+    from web.database import db_get_sim_positions
+    positions = db_get_sim_positions(username)
+    position_symbols = set(p['symbol'].upper() for p in positions)
+    
+    # 获取实时行情
+    symbols = [item['symbol'] for item in watchlist]
+    from tools.data_fetcher import get_batch_quotes
+    quotes_result = get_batch_quotes(symbols)
+    quotes = {}
+    if quotes_result.get('status') == 'success':
+        for q in quotes_result.get('quotes', []):
+            quotes[q['symbol'].upper()] = q
+    
+    # 分析信号
+    buy_signals = []
+    sell_signals = []
+    watch_signals = []
+    
+    for item in watchlist:
+        symbol = item['symbol'].upper()
+        quote = quotes.get(symbol, {})
+        holding_period = item.get('holding_period', 'swing')
+        
+        current_price = quote.get('current_price', 0)
+        if current_price <= 0:
+            continue
+        
+        change_pct = quote.get('change_percent', 0)
+        support = item.get(f'{holding_period}_support') or item.get('ai_buy_price', 0)
+        resistance = item.get(f'{holding_period}_resistance') or item.get('ai_sell_price', 0)
+        
+        signal_info = {
+            'symbol': symbol,
+            'name': item.get('name', symbol),
+            'current_price': current_price,
+            'change_pct': round(change_pct, 2),
+            'support': support,
+            'resistance': resistance,
+            'holding_period': holding_period,
+            'has_position': symbol in position_symbols,
+        }
+        
+        # 判断信号
+        if support > 0:
+            dist_to_support = (current_price - support) / support * 100
+            signal_info['dist_to_support'] = round(dist_to_support, 2)
+            
+            # 买入信号：接近支撑位且无持仓
+            if dist_to_support <= 1.5 and symbol not in position_symbols:
+                signal_info['signal_type'] = 'buy'
+                signal_info['reason'] = f'接近支撑位({dist_to_support:.1f}%)'
+                buy_signals.append(signal_info)
+                continue
+        
+        if resistance > 0:
+            dist_to_resistance = (resistance - current_price) / current_price * 100
+            signal_info['dist_to_resistance'] = round(dist_to_resistance, 2)
+            
+            # 卖出信号：接近阻力位且有持仓
+            if dist_to_resistance <= 1.5 and symbol in position_symbols:
+                signal_info['signal_type'] = 'sell'
+                signal_info['reason'] = f'接近阻力位({dist_to_resistance:.1f}%)'
+                sell_signals.append(signal_info)
+                continue
+        
+        # 观望信号
+        signal_info['signal_type'] = 'watch'
+        watch_signals.append(signal_info)
+    
+    return {
+        "status": "success",
+        "buy_signals": buy_signals,
+        "sell_signals": sell_signals,
+        "watch_count": len(watch_signals),
+        "timestamp": get_beijing_now().isoformat(),
+        "disclaimer": "以上信号仅供参考，不构成任何投资建议。"
+    }
+
+
+# ============================================
 # 启动服务
 # ============================================
 
