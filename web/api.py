@@ -6881,59 +6881,48 @@ async def calculate_watchlist_prices(
     if not symbols:
         return {"status": "success", "message": "没有需要计算的标的"}
     
-    if len(symbols) > 30:
-        # 超过30个标的，后台异步处理
-        background_tasks.add_task(batch_calculate_prices_task, symbols, username)
-        return {
-            "status": "success",
-            "message": f"已开始后台计算 {len(symbols)} 个标的的价位",
-            "async": True
-        }
-    
-    # 同步计算
-    results = await calculate_prices_for_symbols(symbols, username)
-    
+    # 全部使用后台异步处理，避免阻塞前端
+    background_tasks.add_task(batch_calculate_prices_task, symbols, username)
     return {
         "status": "success",
-        "results": results,
-        "count": len(results),
-        "timestamp": get_beijing_now().isoformat()
+        "message": f"已开始后台计算 {len(symbols)} 个标的的价位，请稍后刷新查看",
+        "async": True,
+        "count": len(symbols)
     }
 
 
 async def calculate_prices_for_symbols(symbols: list, username: str) -> dict:
-    """计算指定标的的价位数据"""
+    """计算指定标的的价位数据（并行处理）"""
     import time
     from web.database import db_update_watchlist_ai_prices
+    from concurrent.futures import ThreadPoolExecutor
     
     results = {}
     
-    for symbol in symbols:
+    async def calculate_single_symbol(symbol: str) -> tuple:
+        """计算单个标的的价位"""
         try:
             start_time = time.time()
             
             # 获取行情数据（使用较短周期以加快速度）
-            stock_data = await asyncio.to_thread(get_stock_data, symbol, "6mo")
+            stock_data = await asyncio.to_thread(get_stock_data, symbol, "3mo")
             stock_data_dict = json.loads(stock_data)
             
             if stock_data_dict.get("status") != "success":
-                results[symbol] = {"error": "获取行情数据失败"}
-                continue
+                return symbol, {"error": "获取行情数据失败"}
             
             # 计算技术指标
             indicators_json = await asyncio.to_thread(calculate_all_indicators, stock_data)
             indicators_dict = json.loads(indicators_json)
             
             if indicators_dict.get("status") != "success":
-                results[symbol] = {"error": "计算技术指标失败"}
-                continue
+                return symbol, {"error": "计算技术指标失败"}
             
             indicators = indicators_dict.get("indicators", indicators_dict)
             current_price = indicators.get("latest_price", 0)
             
             if current_price <= 0:
-                results[symbol] = {"error": "无法获取当前价格"}
-                continue
+                return symbol, {"error": "无法获取当前价格"}
             
             # 获取ATR值
             atr_data = indicators.get("atr", {})
@@ -6986,7 +6975,7 @@ async def calculate_prices_for_symbols(symbols: list, username: str) -> dict:
                 multi_period_prices=multi_period_prices
             )
             
-            results[symbol] = {
+            return symbol, {
                 'current_price': round(current_price, 4),
                 'atr': round(atr, 4),
                 'atr_pct': round(atr / current_price * 100, 2),
@@ -6995,8 +6984,25 @@ async def calculate_prices_for_symbols(symbols: list, username: str) -> dict:
             }
             
         except Exception as e:
-            results[symbol] = {"error": str(e)}
+            return symbol, {"error": str(e)}
     
+    # 并行计算所有标的（限制并发数为5，避免过载）
+    semaphore = asyncio.Semaphore(5)
+    
+    async def limited_calculate(symbol):
+        async with semaphore:
+            return await calculate_single_symbol(symbol)
+    
+    tasks = [limited_calculate(symbol) for symbol in symbols]
+    completed = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    for result in completed:
+        if isinstance(result, Exception):
+            continue
+        symbol, data = result
+        results[symbol] = data
+    
+    print(f"[价位计算] 完成 {len(results)}/{len(symbols)} 个标的")
     return results
 
 

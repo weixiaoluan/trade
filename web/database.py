@@ -1541,6 +1541,29 @@ def db_get_sim_position(username: str, symbol: str) -> Optional[Dict]:
         return None
 
 
+def get_next_n_trading_day(start_date, n: int) -> str:
+    """
+    获取从start_date开始的第N个交易日
+    T+0: n=0, T+1: n=1, T+2: n=2
+    只计算交易日（周一到周五），跳过周末
+    """
+    from datetime import timedelta
+    
+    if n == 0:
+        return start_date.strftime('%Y-%m-%d')
+    
+    current = start_date
+    trading_days_counted = 0
+    
+    while trading_days_counted < n:
+        current = current + timedelta(days=1)
+        # 周一到周五是交易日 (weekday: 0=周一, 4=周五)
+        if current.weekday() < 5:
+            trading_days_counted += 1
+    
+    return current.strftime('%Y-%m-%d')
+
+
 def db_add_sim_position(username: str, symbol: str, name: str, type_: str,
                         quantity: int, cost_price: float, buy_signal: str = None,
                         holding_period: str = 'swing', trade_rule: str = 'T+1') -> bool:
@@ -1550,15 +1573,15 @@ def db_add_sim_position(username: str, symbol: str, name: str, type_: str,
     now = datetime.now(beijing_tz)
     buy_date = now.strftime('%Y-%m-%d')
     
-    # 根据交易规则计算可卖出日期
+    # 根据交易规则计算可卖出日期（只算交易日）
     if trade_rule == 'T+0':
-        can_sell_date = buy_date
+        can_sell_date = get_next_n_trading_day(now, 0)
     elif trade_rule == 'T+1':
-        can_sell_date = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+        can_sell_date = get_next_n_trading_day(now, 1)
     elif trade_rule == 'T+2':
-        can_sell_date = (now + timedelta(days=2)).strftime('%Y-%m-%d')
+        can_sell_date = get_next_n_trading_day(now, 2)
     else:
-        can_sell_date = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+        can_sell_date = get_next_n_trading_day(now, 1)
     
     with get_db() as conn:
         cursor = conn.cursor()
