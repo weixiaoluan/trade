@@ -45,3 +45,10 @@ docker-compose*.yml
 *.bak
 reports
 temp_*
+
+# 数据库文件（重要：防止部署覆盖服务器数据）
+web/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

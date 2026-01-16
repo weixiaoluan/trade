@@ -19,10 +19,10 @@ COPY requirements.txt .
 # 安装 Python 依赖（使用 --no-cache-dir 减少镜像大小）
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制项目代码（排除 .dockerignore 中的文件）
+# 复制项目代码（排除 .dockerignore 中的文件，包括数据库）
 COPY . .
 
-# 创建必要目录
+# 创建必要目录（数据库目录通过 volume 挂载，不在镜像中创建数据）
 RUN mkdir -p /app/logs /app/web/data
 
 # 暴露端口
