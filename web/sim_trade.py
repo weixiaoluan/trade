@@ -1,24 +1,31 @@
 """
 ============================================
-模拟交易引擎 v4.0 - 高胜率版本
-Simulated Trading Engine - High Win Rate
+模拟交易引擎 v5.0 - 动态风控版本
+Simulated Trading Engine - Dynamic Risk Control
 ============================================
 
 专业级模拟交易系统，目标95%+胜率
 
-核心策略：
-- 极高门槛入场 - 只在完美条件下交易
-- 严格风控 - 小止损(1.5-3%)、快止盈(2-5%)
-- 保守仓位 - 单只最大15%，总仓位最大60%
-- 多重确认 - 信号强度>=4，置信度>=80%
-- 不追高 - 只在支撑位附近买入
+v5.0 核心优化：
+1. ATR 动态风控 - 根据市场波动率自适应调整止损止盈
+   - 止损位：Price - (n × ATR)，市场安静时缩小止损，市场狂躁时扩大止损
+   - 支撑位判断：使用 ≤ 0.5 × ATR 替代固定百分比
+   
+2. 金字塔式分仓策略 - 分批建仓，降低成本，提高胜率
+   - 信号触发（Score 75+）：先买入 5% 仓位（底仓）
+   - 价格回撤但未破位（Score 90+）：再买入 10% 仓位（拉低均价）
+   - 价格确认上涨（突破）：最后买入剩余仓位
+   
+3. 移动止盈 (Trailing Stop) - 让利润奔跑，锁定收益
+   - 激活阈值：利润达到 3×ATR 时触发移动止盈
+   - 回撤卖出：从最高点回撤 0.5×ATR 时全部卖出
+   - 效果：能在单边暴涨行情中吃到 20% 甚至 50% 的利润
 
 风控机制：
-- 固定止损：短线-1.5%，波段-2%，中长线-3%
-- 移动止损：从高点回撤1-2%
-- 分级止盈：2%/3%/5%（短线），3%/5%/8%（波段）
-- 时间止损：持有超时且未盈利则平仓
+- 动态止损：基于ATR计算，短线1.5倍ATR，波段2倍ATR，中长线2.5倍ATR
+- 移动止盈：利润达到3倍ATR后激活，从高点回撤0.5倍ATR时止盈
 - 利润回吐保护：曾盈利2%以上，回到成本价附近止损
+- 时间止损：持有超时且未盈利则平仓
 
 注意：本模块仅供学习研究使用，不构成任何投资建议。
 模拟交易结果不代表真实交易表现。
@@ -42,57 +49,84 @@ from web.database import (
     get_trade_rule, db_get_user_watchlist
 )
 
+# 导入动态风控模块
+from web.dynamic_risk_control import (
+    DynamicRiskManager, PyramidPositionManager, DynamicSignalScorer,
+    ATRConfig, PyramidConfig, TrailingStopConfig,
+    PositionPhase, ExitReason,
+    calculate_dynamic_stop_loss, check_trailing_stop, calculate_pyramid_position
+)
+
 
 # ============================================
 # 常量配置
 # ============================================
 
-# 仓位管理配置 - v4.0 高胜率版本
-# 核心理念：保守仓位，分散风险
+# 仓位管理配置 - v5.0 动态风控版本
+# 核心理念：金字塔式分仓，动态调整
 POSITION_CONFIG = {
-    'max_single_position': 0.15,      # 单只标的最大仓位 15%（降低）
-    'max_total_position': 0.60,       # 最大总仓位 60%（降低）
+    'max_single_position': 0.20,      # 单只标的最大仓位 20%（金字塔式分仓后提高）
+    'max_total_position': 0.60,       # 最大总仓位 60%
     'min_position_size': 0.03,        # 最小仓位 3%
-    'default_position_size': 0.08,    # 默认仓位 8%（降低）
-    'pyramid_ratio': 0.3,             # 金字塔加仓比例（降低，每次加仓为上次的30%）
+    'default_position_size': 0.05,    # 默认初始仓位 5%（底仓）
+    'pyramid_ratio': 0.5,             # 金字塔加仓比例
+    # 金字塔式分仓配置
+    'initial_position': 0.05,         # 初始建仓 5%（底仓）
+    'pullback_add': 0.10,             # 回调加仓 10%
+    'breakout_add': 0.05,             # 突破加仓 5%
 }
 
-# 风控配置（按持有周期）- v4.0 高胜率版本
-# 核心理念：小止损、快止盈、严格风控
+# 风控配置（按持有周期）- v5.0 动态风控版本
+# 核心理念：ATR动态止损止盈
 RISK_CONFIG = {
     'short': {
-        'stop_loss': -0.015,          # 止损 -1.5%（更严格）
-        'take_profit_1': 0.02,        # 第一止盈 2%
-        'take_profit_2': 0.03,        # 第二止盈 3%
-        'take_profit_3': 0.05,        # 第三止盈 5%
-        'trailing_stop': 0.01,        # 移动止损回撤 1%
-        'max_holding_days': 3,        # 最大持有天数（缩短）
-    },
-    'swing': {
-        'stop_loss': -0.02,           # 止损 -2%（更严格）
+        'stop_loss_atr': 1.5,         # 止损 1.5倍ATR
+        'trailing_activation_atr': 3.0,  # 移动止盈激活 3倍ATR
+        'trailing_stop_atr': 0.5,     # 移动止损回撤 0.5倍ATR
+        'max_holding_days': 5,        # 最大持有天数
+        # 备用固定百分比（ATR数据缺失时使用）
+        'stop_loss': -0.02,           # 止损 -2%
         'take_profit_1': 0.03,        # 第一止盈 3%
         'take_profit_2': 0.05,        # 第二止盈 5%
         'take_profit_3': 0.08,        # 第三止盈 8%
-        'trailing_stop': 0.015,       # 移动止损回撤 1.5%
-        'max_holding_days': 7,        # 最大持有天数（缩短）
+        'trailing_stop': 0.01,        # 移动止损回撤 1%
     },
-    'long': {
-        'stop_loss': -0.03,           # 止损 -3%（更严格）
+    'swing': {
+        'stop_loss_atr': 2.0,         # 止损 2倍ATR
+        'trailing_activation_atr': 3.0,  # 移动止盈激活 3倍ATR
+        'trailing_stop_atr': 0.5,     # 移动止损回撤 0.5倍ATR
+        'max_holding_days': 10,       # 最大持有天数
+        # 备用固定百分比
+        'stop_loss': -0.03,           # 止损 -3%
         'take_profit_1': 0.05,        # 第一止盈 5%
         'take_profit_2': 0.08,        # 第二止盈 8%
         'take_profit_3': 0.12,        # 第三止盈 12%
+        'trailing_stop': 0.015,       # 移动止损回撤 1.5%
+    },
+    'long': {
+        'stop_loss_atr': 2.5,         # 止损 2.5倍ATR
+        'trailing_activation_atr': 3.0,  # 移动止盈激活 3倍ATR
+        'trailing_stop_atr': 1.0,     # 移动止损回撤 1倍ATR
+        'max_holding_days': 20,       # 最大持有天数
+        # 备用固定百分比
+        'stop_loss': -0.05,           # 止损 -5%
+        'take_profit_1': 0.08,        # 第一止盈 8%
+        'take_profit_2': 0.12,        # 第二止盈 12%
+        'take_profit_3': 0.20,        # 第三止盈 20%
         'trailing_stop': 0.02,        # 移动止损回撤 2%
-        'max_holding_days': 15,       # 最大持有天数（缩短）
     }
 }
 
-# 信号强度要求 - v4.0 高胜率版本
-# 核心理念：极高门槛入场
+# 信号强度要求 - v5.0 动态风控版本
+# 核心理念：金字塔式分仓，降低入场门槛
 SIGNAL_CONFIG = {
-    'min_buy_strength': 4,            # 最小买入信号强度（提高）
-    'min_sell_strength': 3,           # 最小卖出信号强度（提高）
-    'min_confidence': 80,             # 最小置信度（大幅提高）
+    'min_buy_strength': 3,            # 最小买入信号强度（降低，因为分仓）
+    'min_sell_strength': 3,           # 最小卖出信号强度
+    'min_confidence': 75,             # 最小置信度（降低，因为分仓）
     'strong_signal_strength': 5,      # 强信号强度
+    # 金字塔式分仓评分要求
+    'initial_min_score': 75,          # 初始建仓最低评分
+    'pullback_add_min_score': 90,     # 回调加仓最低评分
 }
 
 
@@ -225,25 +259,35 @@ class PositionCalculator:
 
 
 # ============================================
-# 风控管理器 - v4.0 高胜率版本
+# 风控管理器 - v5.0 动态风控版本
 # ============================================
 
 class RiskManager:
-    """风控管理器 - 止损止盈、移动止损（高胜率版本）
+    """风控管理器 - ATR动态止损止盈、移动止盈（v5.0动态风控版本）
     
     核心理念：
-    1. 小止损 - 快速止损，控制单笔亏损
-    2. 快止盈 - 落袋为安，不贪心
-    3. 移动止损 - 保护利润
+    1. ATR动态止损 - 根据市场波动率自适应调整止损位
+    2. 移动止盈 - 让利润奔跑，从最高点回撤时止盈
+    3. 利润回吐保护 - 曾盈利后回到成本价附近止损
     """
+    
+    def __init__(self):
+        self.dynamic_manager = DynamicRiskManager()
     
     @staticmethod
     def check_stop_loss(
         position: Dict,
         current_price: float,
-        holding_period: str = 'swing'
+        holding_period: str = 'swing',
+        atr_value: float = None
     ) -> Tuple[bool, str, float]:
-        """检查是否触发止损（高胜率版本）
+        """检查是否触发止损（v5.0 ATR动态版本）
+        
+        Args:
+            position: 持仓信息
+            current_price: 当前价格
+            holding_period: 持有周期
+            atr_value: ATR值（可选，用于动态止损）
         
         Returns:
             (是否止损, 原因, 建议卖出比例)
@@ -252,18 +296,36 @@ class RiskManager:
         profit_pct = (current_price / cost_price - 1)
         config = RISK_CONFIG.get(holding_period, RISK_CONFIG['swing'])
         
-        # 固定止损 - 更严格
-        if profit_pct <= config['stop_loss']:
-            return True, f"🚨 触发止损(亏损{profit_pct*100:.1f}%)", 1.0
+        # 优先使用ATR动态止损
+        if atr_value and atr_value > 0:
+            atr_multiplier = config.get('stop_loss_atr', 2.0)
+            dynamic_stop_loss = cost_price - (atr_multiplier * atr_value)
+            
+            if current_price <= dynamic_stop_loss:
+                return True, f"🚨 ATR动态止损(亏损{profit_pct*100:.1f}%，止损位{dynamic_stop_loss:.3f})", 1.0
+        else:
+            # 备用：固定百分比止损
+            if profit_pct <= config['stop_loss']:
+                return True, f"🚨 触发止损(亏损{profit_pct*100:.1f}%)", 1.0
         
-        # 移动止损（只有盈利过才触发）- 更敏感
+        # 移动止损（只有盈利过才触发）
         highest_price = position.get('highest_price', cost_price)
         if highest_price > cost_price:
-            from_high_pct = (current_price / highest_price - 1)
-            if from_high_pct <= -config['trailing_stop']:
-                return True, f"🚨 移动止损(从高点回撤{abs(from_high_pct)*100:.1f}%)", 1.0
+            # 优先使用ATR动态移动止损
+            if atr_value and atr_value > 0:
+                trailing_atr = config.get('trailing_stop_atr', 0.5)
+                trailing_stop_price = highest_price - (trailing_atr * atr_value)
+                
+                if current_price <= trailing_stop_price:
+                    from_high_pct = (current_price / highest_price - 1) * 100
+                    return True, f"🚨 ATR移动止损(从高点回撤{abs(from_high_pct):.1f}%)", 1.0
+            else:
+                # 备用：固定百分比移动止损
+                from_high_pct = (current_price / highest_price - 1)
+                if from_high_pct <= -config['trailing_stop']:
+                    return True, f"🚨 移动止损(从高点回撤{abs(from_high_pct)*100:.1f}%)", 1.0
             
-            # 额外保护：如果曾经盈利超过2%，现在回到成本价附近，也止损
+            # 利润回吐保护：曾经盈利超过2%，现在回到成本价附近
             max_profit_pct = (highest_price / cost_price - 1) * 100
             if max_profit_pct >= 2 and profit_pct * 100 <= 0.5:
                 return True, f"🚨 利润回吐保护(曾盈利{max_profit_pct:.1f}%，现{profit_pct*100:.1f}%)", 1.0
@@ -275,18 +337,43 @@ class RiskManager:
         position: Dict,
         current_price: float,
         holding_period: str = 'swing',
-        signal_type: str = None
+        signal_type: str = None,
+        atr_value: float = None
     ) -> Tuple[bool, str, float]:
-        """检查是否触发止盈（高胜率版本 - 分级止盈）
+        """检查是否触发止盈（v5.0 移动止盈版本）
+        
+        核心改进：移动止盈，让利润奔跑
+        - 激活阈值：利润达到 3×ATR 时触发移动止盈
+        - 回撤卖出：从最高点回撤 0.5×ATR 时全部卖出
         
         Returns:
             (是否止盈, 原因, 建议卖出比例)
         """
         cost_price = position['cost_price']
         profit_pct = (current_price / cost_price - 1)
+        highest_price = position.get('highest_price', cost_price)
+        sold_ratio = position.get('sold_ratio', 0)
         config = RISK_CONFIG.get(holding_period, RISK_CONFIG['swing'])
-        sold_ratio = position.get('sold_ratio', 0)  # 已卖出比例
         
+        # 优先使用ATR动态移动止盈
+        if atr_value and atr_value > 0:
+            activation_atr = config.get('trailing_activation_atr', 3.0)
+            trailing_atr = config.get('trailing_stop_atr', 0.5)
+            
+            # 计算激活阈值（利润达到 n 倍 ATR）
+            activation_profit = (activation_atr * atr_value) / cost_price
+            
+            # 检查是否激活移动止盈
+            max_profit_pct = (highest_price / cost_price - 1)
+            if max_profit_pct >= activation_profit:
+                # 移动止盈已激活，检查是否触发
+                trailing_stop_price = highest_price - (trailing_atr * atr_value)
+                
+                if current_price <= trailing_stop_price:
+                    from_high_pct = (current_price / highest_price - 1) * 100
+                    return True, f"🎯 移动止盈触发(最高盈利{max_profit_pct*100:.1f}%，回撤{abs(from_high_pct):.1f}%)", 1.0
+        
+        # 备用：固定百分比分级止盈
         # 第三止盈（卖出剩余全部）
         if profit_pct >= config['take_profit_3'] and sold_ratio < 0.7:
             return True, f"🎯 第三止盈(盈利{profit_pct*100:.1f}%)", 1.0
@@ -295,7 +382,7 @@ class RiskManager:
         if profit_pct >= config['take_profit_2'] and sold_ratio < 0.5:
             return True, f"✅ 第二止盈(盈利{profit_pct*100:.1f}%)", 0.5
         
-        # 第一止盈（卖出30%）- 更积极
+        # 第一止盈（卖出30%）
         if profit_pct >= config['take_profit_1'] and sold_ratio < 0.3:
             return True, f"✅ 第一止盈(盈利{profit_pct*100:.1f}%)", 0.3
         
@@ -350,18 +437,20 @@ class RiskManager:
 
 
 # ============================================
-# 信号分析器 - v4.0 高胜率版本
+# 信号分析器 - v5.0 动态风控版本
 # ============================================
 
 class SignalAnalyzer:
-    """信号分析器 - 判断买卖时机（高胜率版本）
+    """信号分析器 - 判断买卖时机（v5.0 动态风控版本）
     
     核心理念：
-    1. 极高门槛入场 - 只在完美条件下交易
-    2. 多重确认机制 - 信号强度、置信度、价格位置都要满足
-    3. 不追高 - 价格必须在支撑位附近
-    4. 快速止盈止损 - 小止损、快止盈
+    1. ATR动态评分 - 使用ATR标准化距离判断
+    2. 金字塔式分仓 - 分批建仓，降低入场门槛
+    3. 动态止损止盈 - 根据市场波动率调整
     """
+    
+    def __init__(self):
+        self.scorer = DynamicSignalScorer()
     
     @staticmethod
     def should_buy(
@@ -370,9 +459,12 @@ class SignalAnalyzer:
         account: Dict = None,
         current_price: float = None,
         support_price: float = None,
-        resistance_price: float = None
+        resistance_price: float = None,
+        atr_value: float = None
     ) -> Tuple[bool, str, int]:
-        """判断是否应该买入（高胜率版本）
+        """判断是否应该买入（v5.0 动态风控版本）
+        
+        使用ATR动态判断距离支撑位/阻力位的远近
         
         Returns:
             (是否买入, 原因, 建议仓位等级1-3)
@@ -381,63 +473,98 @@ class SignalAnalyzer:
         strength = signal.get('strength', 0)
         confidence = signal.get('confidence', 50)
         
-        # 基本条件检查 - 极严格
+        # 基本条件检查
         if signal_type != 'buy':
             return False, "非买入信号", 0
         
-        # 信号强度必须>=4（高胜率要求）
+        # 信号强度检查（金字塔式分仓降低门槛）
         if strength < SIGNAL_CONFIG['min_buy_strength']:
             return False, f"信号强度不足({strength}<{SIGNAL_CONFIG['min_buy_strength']})", 0
         
-        # 置信度必须>=80%（高胜率要求）
+        # 置信度检查
         if confidence < SIGNAL_CONFIG['min_confidence']:
             return False, f"置信度不足({confidence}<{SIGNAL_CONFIG['min_confidence']})", 0
         
-        # 价格位置检查（不追高）- 更严格
-        if current_price and resistance_price and resistance_price > 0:
-            above_resistance_pct = (current_price / resistance_price - 1) * 100
-            if above_resistance_pct > 0:  # 高于阻力位就不买
-                return False, f"价格高于阻力位({above_resistance_pct:.1f}%)，不追高", 0
-        
-        # 必须接近支撑位才买入
-        position_level = 0  # 默认不买
-        if current_price and support_price and support_price > 0:
-            above_support_pct = (current_price / support_price - 1) * 100
-            if above_support_pct <= 1.5:  # 接近支撑位1.5%以内
-                position_level = 2  # 中等仓位
-            elif above_support_pct <= 3:  # 支撑位上方3%以内
-                position_level = 1  # 轻仓
+        # 使用ATR动态判断价格位置
+        if atr_value and atr_value > 0:
+            # ATR动态判断距离阻力位
+            if current_price and resistance_price and resistance_price > 0:
+                dist_to_resistance = (resistance_price - current_price) / atr_value
+                if dist_to_resistance < 1.0:  # 距离阻力位不足1倍ATR
+                    return False, f"太接近阻力位({dist_to_resistance:.1f}倍ATR)，不追高", 0
+            
+            # ATR动态判断距离支撑位
+            position_level = 0
+            if current_price and support_price and support_price > 0:
+                dist_to_support = (current_price - support_price) / atr_value
+                if dist_to_support <= 0.5:  # 非常接近支撑位（0.5倍ATR内）
+                    position_level = 3  # 重仓
+                elif dist_to_support <= 1.0:  # 接近支撑位（1倍ATR内）
+                    position_level = 2  # 中等仓位
+                elif dist_to_support <= 2.0:  # 较接近支撑位（2倍ATR内）
+                    position_level = 1  # 轻仓
+                else:
+                    return False, f"价格远离支撑位({dist_to_support:.1f}倍ATR)，等待回调", 0
             else:
-                return False, f"价格远离支撑位({above_support_pct:.1f}%)，等待回调", 0
+                # 没有支撑位数据，使用信号强度判断
+                if strength >= 5 and confidence >= 90:
+                    position_level = 1
+                else:
+                    return False, "缺少支撑位数据，无法确认买点", 0
         else:
-            # 没有支撑位数据，使用信号强度判断
-            if strength >= 5 and confidence >= 90:
-                position_level = 1  # 极强信号才轻仓买入
+            # 备用：固定百分比判断
+            if current_price and resistance_price and resistance_price > 0:
+                above_resistance_pct = (current_price / resistance_price - 1) * 100
+                if above_resistance_pct > 0:
+                    return False, f"价格高于阻力位({above_resistance_pct:.1f}%)，不追高", 0
+            
+            position_level = 0
+            if current_price and support_price and support_price > 0:
+                above_support_pct = (current_price / support_price - 1) * 100
+                if above_support_pct <= 1.5:
+                    position_level = 2
+                elif above_support_pct <= 3:
+                    position_level = 1
+                else:
+                    return False, f"价格远离支撑位({above_support_pct:.1f}%)，等待回调", 0
             else:
-                return False, "缺少支撑位数据，无法确认买点", 0
+                if strength >= 5 and confidence >= 90:
+                    position_level = 1
+                else:
+                    return False, "缺少支撑位数据，无法确认买点", 0
         
         # 强信号加仓
         if strength >= SIGNAL_CONFIG['strong_signal_strength'] and confidence >= 90:
             position_level = min(3, position_level + 1)
         
-        # 已有持仓检查 - 更严格
+        # 已有持仓检查
         if position:
             profit_pct = position.get('profit_pct', 0)
-            if profit_pct < -1:  # 亏损超过1%不加仓
-                return False, f"持仓亏损中({profit_pct:.1f}%)，不宜加仓", 0
-            if profit_pct < 3:  # 盈利不足3%不加仓
-                return False, f"盈利不足3%({profit_pct:.1f}%)，暂不加仓", 0
+            add_count = position.get('add_count', 0)
+            
+            # 金字塔式加仓逻辑
+            if add_count == 0:
+                # 第一次加仓：回调未破位
+                if profit_pct < -1:  # 亏损超过1%不加仓
+                    return False, f"持仓亏损中({profit_pct:.1f}%)，不宜加仓", 0
+                if profit_pct >= 0:  # 盈利中不加仓（等待回调）
+                    return False, f"持仓盈利中({profit_pct:.1f}%)，等待回调加仓", 0
+            elif add_count >= 2:
+                return False, "已完成金字塔式建仓，不再加仓", 0
         
-        return True, f"高胜率买入信号(强度{strength},置信度{confidence}%)", position_level
+        return True, f"动态买入信号(强度{strength},置信度{confidence}%)", position_level
     
     @staticmethod
     def should_sell(
         signal: Dict,
         position: Dict,
         current_price: float,
-        holding_period: str = 'swing'
+        holding_period: str = 'swing',
+        atr_value: float = None
     ) -> Tuple[bool, str, float]:
-        """判断是否应该卖出（高胜率版本）
+        """判断是否应该卖出（v5.0 动态风控版本）
+        
+        使用ATR动态止损止盈和移动止盈
         
         Returns:
             (是否卖出, 原因, 卖出比例)
@@ -448,9 +575,9 @@ class SignalAnalyzer:
         cost_price = position['cost_price']
         profit_pct = (current_price / cost_price - 1) * 100
         
-        # 1. 止损检查 - 最高优先级
+        # 1. 动态止损检查 - 最高优先级
         stop_loss, reason, ratio = RiskManager.check_stop_loss(
-            position, current_price, holding_period
+            position, current_price, holding_period, atr_value
         )
         if stop_loss:
             return True, reason, ratio
@@ -466,24 +593,24 @@ class SignalAnalyzer:
         signal_type = signal.get('signal_type', signal.get('signal', ''))
         strength = signal.get('strength', 0)
         
-        # 3. 止盈检查
+        # 3. 移动止盈检查（ATR动态）
         take_profit, reason, ratio = RiskManager.check_take_profit(
-            position, current_price, holding_period, signal_type
+            position, current_price, holding_period, signal_type, atr_value
         )
         if take_profit:
             return True, reason, ratio
         
-        # 4. 信号卖出 - 更敏感
+        # 4. 信号卖出
         if signal_type == 'sell':
             if strength >= SIGNAL_CONFIG['strong_signal_strength']:
                 return True, f"强卖出信号(强度{strength})", 1.0
             if strength >= SIGNAL_CONFIG['min_sell_strength']:
-                if profit_pct > 0.5:  # 有微利就卖
+                if profit_pct > 0.5:
                     return True, f"卖出信号+盈利({profit_pct:.1f}%)", 0.5
-                if profit_pct < -0.5:  # 微亏也卖
+                if profit_pct < -0.5:
                     return True, f"卖出信号+亏损({profit_pct:.1f}%)", 1.0
         
-        # 5. 盈利保护 - 更积极
+        # 5. 盈利保护
         config = RISK_CONFIG.get(holding_period, RISK_CONFIG['swing'])
         if profit_pct >= config['take_profit_2'] * 100:
             return True, f"盈利保护({profit_pct:.1f}%)", 0.5
@@ -492,16 +619,16 @@ class SignalAnalyzer:
 
 
 # ============================================
-# 模拟交易引擎
+# 模拟交易引擎 - v5.0 动态风控版本
 # ============================================
 
 class SimTradeEngine:
-    """模拟交易引擎 v2.0
+    """模拟交易引擎 v5.0 - 动态风控版本
     
     核心功能：
-    1. 智能仓位管理
-    2. 动态风控
-    3. 多策略支持
+    1. ATR动态风控
+    2. 金字塔式分仓
+    3. 移动止盈
     4. 完整统计
     """
     
@@ -511,6 +638,8 @@ class SimTradeEngine:
         self.position_calc = PositionCalculator()
         self.risk_manager = RiskManager()
         self.signal_analyzer = SignalAnalyzer()
+        self.pyramid_manager = PyramidPositionManager()
+        self.dynamic_risk = DynamicRiskManager()
     
     def _ensure_account(self) -> Dict:
         """确保账户存在"""
@@ -537,7 +666,7 @@ class SimTradeEngine:
         floating_profit = sum(p.get('profit', 0) for p in positions)
         
         # 计算最大回撤
-        max_drawdown = self.risk_manager.calculate_max_drawdown(records)
+        max_drawdown = RiskManager.calculate_max_drawdown(records)
         
         # 计算仓位占比
         position_ratio = position_value / total_assets * 100 if total_assets > 0 else 0

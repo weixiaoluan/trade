@@ -856,68 +856,103 @@ class TradingSignalGenerator:
         resistance_levels: List[float],
         atr: float,
         signal_type: SignalType,
-        signal_strength: int = 3
+        signal_strength: int = 3,
+        holding_period: str = 'swing'
     ) -> Tuple[RiskManagement, PositionStrategy]:
         """
-        计算风险管理参数和仓位策略
+        计算风险管理参数和仓位策略 (v5.0 ATR动态版本)
+        
+        核心改进：
+        1. ATR动态止损：止损位 = Price - (n × ATR)
+        2. ATR动态止盈：移动止盈，让利润奔跑
+        3. 金字塔式分仓建议
         """
         if current_price <= 0:
             return self._default_risk_management(current_price)
         
-        # 计算止损位
+        # ATR倍数配置（按持有周期）
+        atr_config = {
+            'short': {'stop_loss_atr': 1.5, 'trailing_activation_atr': 3.0},
+            'swing': {'stop_loss_atr': 2.0, 'trailing_activation_atr': 3.0},
+            'long': {'stop_loss_atr': 2.5, 'trailing_activation_atr': 3.0},
+        }
+        config = atr_config.get(holding_period, atr_config['swing'])
+        
+        # 计算ATR动态止损位
         if signal_type == SignalType.BUY:
+            # 基于ATR计算止损
+            atr_stop_loss = current_price - (config['stop_loss_atr'] * atr)
+            
+            # 如果有支撑位，取支撑位下方一定距离
             if support_levels and len(support_levels) > 0:
-                nearest_support = max([s for s in support_levels if s < current_price], default=current_price * 0.95)
-                stop_loss = nearest_support - atr * 1.5
-            else:
-                stop_loss = current_price - atr * 2
+                nearest_support = max([s for s in support_levels if s < current_price], default=0)
+                if nearest_support > 0:
+                    support_stop_loss = nearest_support - (0.5 * atr)
+                    # 取较高的止损位（更保守）
+                    atr_stop_loss = max(atr_stop_loss, support_stop_loss)
+            
+            # 限制最大止损（不超过8%）
             max_stop_loss = current_price * 0.92
-            stop_loss = max(stop_loss, max_stop_loss)
+            stop_loss = max(atr_stop_loss, max_stop_loss)
             
         elif signal_type == SignalType.SELL:
+            atr_stop_loss = current_price + (config['stop_loss_atr'] * atr)
+            
             if resistance_levels and len(resistance_levels) > 0:
-                nearest_resistance = min([r for r in resistance_levels if r > current_price], default=current_price * 1.05)
-                stop_loss = nearest_resistance + atr * 1.5
-            else:
-                stop_loss = current_price + atr * 2
+                nearest_resistance = min([r for r in resistance_levels if r > current_price], default=0)
+                if nearest_resistance > 0:
+                    resistance_stop_loss = nearest_resistance + (0.5 * atr)
+                    atr_stop_loss = min(atr_stop_loss, resistance_stop_loss)
+            
             min_stop_loss = current_price * 1.08
-            stop_loss = min(stop_loss, min_stop_loss)
+            stop_loss = min(atr_stop_loss, min_stop_loss)
         else:
             stop_loss = current_price * 0.95
         
         stop_loss_pct = abs(current_price - stop_loss) / current_price * 100
         risk_per_share = abs(current_price - stop_loss)
         
-        # 计算止盈目标
+        # 计算ATR动态止盈目标（移动止盈）
+        # 激活阈值：利润达到 3×ATR
+        # 止盈目标基于风险收益比
         if signal_type == SignalType.BUY:
-            take_profit_1 = current_price + risk_per_share * 2
-            take_profit_2 = current_price + risk_per_share * 3
-            take_profit_3 = current_price + risk_per_share * 5
+            # 移动止盈激活价位
+            trailing_activation = current_price + (config['trailing_activation_atr'] * atr)
+            take_profit_1 = current_price + risk_per_share * 2  # 1:2 风险收益比
+            take_profit_2 = current_price + risk_per_share * 3  # 1:3 风险收益比
+            take_profit_3 = trailing_activation  # 移动止盈激活点
         elif signal_type == SignalType.SELL:
+            trailing_activation = current_price - (config['trailing_activation_atr'] * atr)
             take_profit_1 = current_price - risk_per_share * 2
             take_profit_2 = current_price - risk_per_share * 3
-            take_profit_3 = current_price - risk_per_share * 5
+            take_profit_3 = trailing_activation
         else:
             take_profit_1 = current_price * 1.05
             take_profit_2 = current_price * 1.08
             take_profit_3 = current_price * 1.12
 
-        # 根据信号强度计算建议仓位
+        # 金字塔式分仓建议
+        # 初始建仓5%，回调加仓10%，突破加仓5%
         if signal_strength >= 4:
-            base_position = 25
+            base_position = 5  # 初始底仓5%
+            max_position = 20  # 最大仓位20%
         elif signal_strength >= 3:
-            base_position = 20
+            base_position = 5
+            max_position = 15
         elif signal_strength >= 2:
-            base_position = 15
+            base_position = 3
+            max_position = 10
         else:
-            base_position = 10
+            base_position = 3
+            max_position = 8
         
+        # 根据止损幅度调整仓位
         if stop_loss_pct > 5:
             base_position = base_position * 0.8
-        elif stop_loss_pct < 3:
+        elif stop_loss_pct < 2:
             base_position = base_position * 1.2
         
-        suggested_position_pct = min(30, max(5, round(base_position, 1)))
+        suggested_position_pct = min(max_position, max(3, round(base_position, 1)))
         
         risk_mgmt = RiskManagement(
             stop_loss=round(stop_loss, 4),
@@ -926,54 +961,56 @@ class TradingSignalGenerator:
             take_profit_2=round(take_profit_2, 4),
             take_profit_3=round(take_profit_3, 4),
             suggested_position_pct=suggested_position_pct,
-            risk_reward_ratio="1:2 / 1:3 / 1:5"
+            risk_reward_ratio="1:2 / 1:3 / 移动止盈"
         )
         
-        position_strategy = self._generate_position_strategy(
+        position_strategy = self._generate_position_strategy_v5(
             signal_type, signal_strength, suggested_position_pct, 
-            stop_loss, take_profit_1, current_price
+            stop_loss, take_profit_1, current_price, atr
         )
         
         return risk_mgmt, position_strategy
 
     
-    def _generate_position_strategy(
+    def _generate_position_strategy_v5(
         self, 
         signal_type: SignalType, 
         strength: int,
         position_pct: float,
         stop_loss: float,
         take_profit: float,
-        current_price: float
+        current_price: float,
+        atr: float
     ) -> PositionStrategy:
-        """生成仓位策略建议"""
-        position_cheng = round(position_pct / 10, 1)
-        first_entry_cheng = round(position_cheng / 3, 1)
-        add_cheng = round(position_cheng * 2 / 3, 1)
+        """生成仓位策略建议 (v5.0 金字塔式分仓版本)"""
+        # 金字塔式分仓：初始5%，回调加仓10%，突破加仓5%
+        initial_pct = 5
+        pullback_add_pct = 10
+        breakout_add_pct = 5
         
         if signal_type == SignalType.BUY:
             if strength >= 4:
-                empty = f"多指标共振看多，可考虑分批建仓，首次{first_entry_cheng}成"
-                first = f"建议首次建仓{first_entry_cheng}成，设好止损后观察"
-                add = f"站稳支撑位且放量突破可加仓至{add_cheng}成"
-                reduce = f"跌破止损位{stop_loss:.3f}减仓至{first_entry_cheng/2:.1f}成"
+                empty = f"🎯 金字塔式建仓：首次{initial_pct}%底仓，回调未破位加仓{pullback_add_pct}%，突破确认加仓{breakout_add_pct}%"
+                first = f"建议首次建仓{initial_pct}%（底仓），ATR止损位{stop_loss:.3f}"
+                add = f"价格回调但未跌破支撑位时，可加仓{pullback_add_pct}%拉低均价；突破阻力位确认后加仓{breakout_add_pct}%"
+                reduce = f"跌破ATR止损位{stop_loss:.3f}减仓或清仓"
             elif strength >= 2:
-                empty = f"偏多信号，可小仓位试探，建议{first_entry_cheng}成以内"
-                first = f"建议轻仓试探{first_entry_cheng}成，严格止损"
-                add = f"确认突破阻力位后可加仓至{position_cheng}成"
+                empty = f"偏多信号，建议轻仓试探{initial_pct}%"
+                first = f"建议轻仓{initial_pct}%，严格ATR止损"
+                add = f"确认突破后可加仓至{initial_pct + pullback_add_pct}%"
                 reduce = f"跌破止损位{stop_loss:.3f}建议清仓"
             else:
                 empty = "弱多信号，建议观望等待更多确认"
-                first = f"如需建仓建议不超过{first_entry_cheng}成"
+                first = f"如需建仓建议不超过{initial_pct}%"
                 add = "不建议加仓，等待信号增强"
                 reduce = f"跌破{stop_loss:.3f}立即止损"
-            full_exit = f"跌破止损位{stop_loss:.3f}或出现明确卖出信号时清仓"
+            full_exit = f"跌破ATR止损位{stop_loss:.3f}或移动止盈触发时清仓"
         elif signal_type == SignalType.SELL:
             if strength >= 4:
                 empty = "多指标共振看空，保持空仓观望"
                 first = "不建议此时建仓，等待企稳信号"
                 add = "不建议加仓，空头趋势明显"
-                reduce = f"持仓者建议减仓至{first_entry_cheng}成以内"
+                reduce = f"持仓者建议减仓至{initial_pct}%以内"
             elif strength >= 2:
                 empty = "偏空信号，保持谨慎观望"
                 first = "不建议建仓，等待止跌信号"
@@ -998,6 +1035,21 @@ class TradingSignalGenerator:
             add_position=add,
             reduce_position=reduce,
             full_exit=full_exit
+        )
+    
+    def _generate_position_strategy(
+        self, 
+        signal_type: SignalType, 
+        strength: int,
+        position_pct: float,
+        stop_loss: float,
+        take_profit: float,
+        current_price: float
+    ) -> PositionStrategy:
+        """生成仓位策略建议（兼容旧版本）"""
+        return self._generate_position_strategy_v5(
+            signal_type, strength, position_pct, stop_loss, take_profit, current_price, 0
+        )
         )
     
     def _default_risk_management(self, price: float) -> Tuple[RiskManagement, PositionStrategy]:
