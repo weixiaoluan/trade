@@ -5750,7 +5750,12 @@ async def process_sim_auto_trade(
     background_tasks: BackgroundTasks,
     authorization: str = Header(None)
 ):
-    """处理自动交易（根据信号自动买卖）
+    """处理自动交易（根据量化指标自动买卖）
+    
+    核心逻辑：
+    1. 获取实时行情数据
+    2. 基于量化指标生成交易信号（纯量化，不使用AI）
+    3. 根据高胜率策略执行买卖
     
     注意：本功能仅供学习研究使用，不构成任何投资建议。
     模拟交易结果不代表真实交易表现。
@@ -5781,31 +5786,163 @@ async def process_sim_auto_trade(
         for q in quotes_result.get('quotes', []):
             quotes[q['symbol'].upper()] = q
     
-    # 获取实时信号
-    from quant.trading_signals import TradingSignalGenerator
+    # 使用纯量化指标生成信号（不使用AI，零token消耗）
     signals = {}
     for item in watchlist:
         symbol = item['symbol']
         try:
-            generator = TradingSignalGenerator(symbol)
-            # 获取各周期信号
+            # 直接使用量化信号生成器
+            signal = generate_quant_signal_fast(symbol, item, quotes.get(symbol.upper(), {}))
             signals[symbol.upper()] = {
-                'short': generator.generate_signal('short'),
-                'swing': generator.generate_signal('swing'),
-                'long': generator.generate_signal('long')
+                'short': signal,
+                'swing': signal,
+                'long': signal
             }
         except Exception as e:
             print(f"[SimTrade] 获取 {symbol} 信号失败: {e}")
     
     # 处理自动交易
     from web.sim_trade import process_auto_trade
-    results = process_auto_trade(username, signals, quotes)
+    results = process_auto_trade(username, signals, quotes, watchlist)
     
     return {
         "status": "success",
         "message": f"处理完成，执行了 {len(results)} 笔交易",
         "trades": results,
+        "signal_source": "quant_indicators",  # 标记信号来源是量化指标
         "disclaimer": "本功能仅供学习研究使用，不构成任何投资建议。"
+    }
+
+
+def generate_quant_signal_fast(symbol: str, watchlist_item: Dict, quote: Dict) -> Dict:
+    """
+    快速生成量化交易信号（纯量化指标，不使用AI）
+    
+    核心逻辑：
+    1. 基于价格与支撑位/阻力位的关系
+    2. 基于涨跌幅和成交量
+    3. 基于自选列表中保存的技术指标数据
+    
+    这是一个轻量级的信号生成器，用于自动交易
+    """
+    current_price = quote.get('current_price', 0)
+    if current_price <= 0:
+        return {'signal_type': 'hold', 'signal': 'hold', 'strength': 0, 'confidence': 0}
+    
+    # 获取支撑位和阻力位
+    holding_period = watchlist_item.get('holding_period', 'swing')
+    support_price = watchlist_item.get(f'{holding_period}_support') or watchlist_item.get('ai_buy_price', 0)
+    resistance_price = watchlist_item.get(f'{holding_period}_resistance') or watchlist_item.get('ai_sell_price', 0)
+    
+    # 获取涨跌幅
+    change_pct = quote.get('change_percent', 0)
+    
+    # 初始化信号
+    buy_score = 0
+    sell_score = 0
+    conditions = []
+    
+    # ========== 价格位置分析 ==========
+    # 1. 支撑位分析
+    if support_price and support_price > 0:
+        pct_from_support = (current_price / support_price - 1) * 100
+        if pct_from_support <= 1.5:
+            # 接近支撑位，买入信号
+            buy_score += 3
+            conditions.append(f"接近支撑位({pct_from_support:.1f}%)")
+        elif pct_from_support <= 3:
+            buy_score += 2
+            conditions.append(f"支撑位上方({pct_from_support:.1f}%)")
+        elif pct_from_support > 8:
+            # 远离支撑位，不买
+            sell_score += 1
+            conditions.append(f"远离支撑位({pct_from_support:.1f}%)")
+    
+    # 2. 阻力位分析
+    if resistance_price and resistance_price > 0:
+        pct_to_resistance = (resistance_price / current_price - 1) * 100
+        if pct_to_resistance <= 2:
+            # 接近阻力位，卖出信号
+            sell_score += 2
+            conditions.append(f"接近阻力位({pct_to_resistance:.1f}%)")
+        elif pct_to_resistance >= 8:
+            # 远离阻力位，有上涨空间
+            buy_score += 1
+            conditions.append(f"远离阻力位({pct_to_resistance:.1f}%)")
+    
+    # ========== 涨跌幅分析 ==========
+    if change_pct <= -3:
+        # 大跌，可能是买入机会（如果在支撑位附近）
+        if support_price and current_price <= support_price * 1.02:
+            buy_score += 2
+            conditions.append(f"大跌至支撑位(跌{change_pct:.1f}%)")
+        else:
+            sell_score += 1
+            conditions.append(f"大跌(跌{change_pct:.1f}%)")
+    elif change_pct >= 5:
+        # 大涨，可能需要止盈
+        sell_score += 2
+        conditions.append(f"大涨(涨{change_pct:.1f}%)")
+    elif change_pct >= 3:
+        # 涨幅较大，观察
+        sell_score += 1
+        conditions.append(f"涨幅较大(涨{change_pct:.1f}%)")
+    
+    # ========== 量化评分参考 ==========
+    quant_score = watchlist_item.get('quant_score', 50)
+    if quant_score >= 70:
+        buy_score += 2
+        conditions.append(f"量化评分优秀({quant_score})")
+    elif quant_score >= 60:
+        buy_score += 1
+        conditions.append(f"量化评分良好({quant_score})")
+    elif quant_score <= 35:
+        sell_score += 2
+        conditions.append(f"量化评分较低({quant_score})")
+    elif quant_score <= 45:
+        sell_score += 1
+        conditions.append(f"量化评分偏低({quant_score})")
+    
+    # ========== 生成最终信号 ==========
+    score_diff = buy_score - sell_score
+    
+    if score_diff >= 4:
+        signal_type = 'buy'
+        strength = 5
+        confidence = 90
+    elif score_diff >= 3:
+        signal_type = 'buy'
+        strength = 4
+        confidence = 85
+    elif score_diff >= 2:
+        signal_type = 'buy'
+        strength = 3
+        confidence = 75
+    elif score_diff <= -4:
+        signal_type = 'sell'
+        strength = 5
+        confidence = 90
+    elif score_diff <= -3:
+        signal_type = 'sell'
+        strength = 4
+        confidence = 85
+    elif score_diff <= -2:
+        signal_type = 'sell'
+        strength = 3
+        confidence = 75
+    else:
+        signal_type = 'hold'
+        strength = 0
+        confidence = 50
+    
+    return {
+        'signal_type': signal_type,
+        'signal': signal_type,
+        'strength': strength,
+        'confidence': confidence,
+        'triggered_conditions': conditions,
+        'buy_score': buy_score,
+        'sell_score': sell_score
     }
 
 
