@@ -2094,6 +2094,15 @@ export default function DashboardPage() {
 
           {user && (
             <div className="flex items-center gap-2">
+              {/* 模拟交易按钮 */}
+              <button
+                onClick={() => router.push('/sim-trade')}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-xs sm:text-sm hover:from-emerald-500/30 hover:to-teal-500/30 transition-all"
+                title="模拟交易"
+              >
+                <TrendingUp className="w-4 h-4" />
+                <span className="hidden sm:inline">模拟交易</span>
+              </button>
               {/* 研究列表按钮 - 无权限时隐藏 */}
               {!aiPicksPermissionDenied && (
                 <button

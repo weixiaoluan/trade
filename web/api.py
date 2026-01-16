@@ -5517,6 +5517,382 @@ async def get_wechat_config():
 
 
 # ============================================
+# 模拟交易 API
+# ============================================
+
+class SimTradeRequest(BaseModel):
+    """模拟交易请求"""
+    symbol: str
+    name: str = None
+    type: str = None
+    price: float
+    quantity: int
+    holding_period: str = 'swing'
+
+
+class SimTradeToggleRequest(BaseModel):
+    """自动交易开关请求"""
+    enabled: bool
+
+
+@app.get("/api/sim-trade/account")
+async def get_sim_trade_account(authorization: str = Header(None)):
+    """获取模拟交易账户信息"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.sim_trade import SimTradeEngine
+    engine = SimTradeEngine(user['username'])
+    account_info = engine.get_account_info()
+    
+    return {
+        "status": "success",
+        "data": account_info
+    }
+
+
+@app.post("/api/sim-trade/buy")
+async def sim_trade_buy(
+    request: SimTradeRequest,
+    authorization: str = Header(None)
+):
+    """模拟买入
+    
+    注意：本功能仅供学习研究使用，不构成任何投资建议。
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.sim_trade import SimTradeEngine
+    engine = SimTradeEngine(user['username'])
+    
+    result = engine.execute_buy(
+        symbol=request.symbol.upper(),
+        name=request.name or request.symbol,
+        type_=request.type or 'stock',
+        price=request.price,
+        quantity=request.quantity,
+        holding_period=request.holding_period
+    )
+    
+    if result['success']:
+        # 记录操作
+        from web.database import db_add_user_activity
+        db_add_user_activity(
+            user['username'], 
+            'sim_trade_buy', 
+            f"模拟买入: {request.symbol} {request.quantity}股 @ {request.price}"
+        )
+        return {"status": "success", "data": result}
+    else:
+        raise HTTPException(status_code=400, detail=result['message'])
+
+
+@app.post("/api/sim-trade/sell")
+async def sim_trade_sell(
+    request: SimTradeRequest,
+    authorization: str = Header(None)
+):
+    """模拟卖出
+    
+    注意：本功能仅供学习研究使用，不构成任何投资建议。
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.sim_trade import SimTradeEngine
+    engine = SimTradeEngine(user['username'])
+    
+    result = engine.execute_sell(
+        symbol=request.symbol.upper(),
+        price=request.price,
+        quantity=request.quantity if request.quantity > 0 else None
+    )
+    
+    if result['success']:
+        # 记录操作
+        from web.database import db_add_user_activity
+        db_add_user_activity(
+            user['username'], 
+            'sim_trade_sell', 
+            f"模拟卖出: {request.symbol} {result.get('quantity', request.quantity)}股 @ {request.price}, 盈亏: {result.get('profit', 0):.2f}"
+        )
+        return {"status": "success", "data": result}
+    else:
+        raise HTTPException(status_code=400, detail=result['message'])
+
+
+@app.get("/api/sim-trade/positions")
+async def get_sim_trade_positions(authorization: str = Header(None)):
+    """获取模拟持仓"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_get_sim_positions
+    positions = db_get_sim_positions(user['username'])
+    
+    return {
+        "status": "success",
+        "positions": positions
+    }
+
+
+@app.get("/api/sim-trade/records")
+async def get_sim_trade_records(
+    symbol: str = None,
+    limit: int = 100,
+    authorization: str = Header(None)
+):
+    """获取模拟交易记录"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_get_sim_trade_records
+    records = db_get_sim_trade_records(user['username'], symbol, limit)
+    
+    return {
+        "status": "success",
+        "records": records
+    }
+
+
+@app.get("/api/sim-trade/stats")
+async def get_sim_trade_stats(authorization: str = Header(None)):
+    """获取模拟交易统计"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_get_sim_trade_stats
+    stats = db_get_sim_trade_stats(user['username'])
+    
+    return {
+        "status": "success",
+        "stats": stats
+    }
+
+
+@app.post("/api/sim-trade/auto-trade/toggle")
+async def toggle_auto_trade(
+    request: SimTradeToggleRequest,
+    authorization: str = Header(None)
+):
+    """开启/关闭自动交易"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_update_sim_account
+    success = db_update_sim_account(
+        user['username'], 
+        auto_trade_enabled=1 if request.enabled else 0
+    )
+    
+    if success:
+        # 记录操作
+        from web.database import db_add_user_activity
+        db_add_user_activity(
+            user['username'], 
+            'sim_trade_auto_toggle', 
+            f"自动交易: {'开启' if request.enabled else '关闭'}"
+        )
+        return {
+            "status": "success", 
+            "message": f"自动交易已{'开启' if request.enabled else '关闭'}",
+            "auto_trade_enabled": request.enabled
+        }
+    else:
+        raise HTTPException(status_code=500, detail="操作失败")
+
+
+@app.post("/api/sim-trade/process")
+async def process_sim_auto_trade(
+    background_tasks: BackgroundTasks,
+    authorization: str = Header(None)
+):
+    """处理自动交易（根据信号自动买卖）
+    
+    注意：本功能仅供学习研究使用，不构成任何投资建议。
+    模拟交易结果不代表真实交易表现。
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    
+    # 获取自选列表
+    watchlist = get_user_watchlist(username)
+    if not watchlist:
+        return {"status": "success", "message": "自选列表为空", "trades": []}
+    
+    symbols = [item['symbol'] for item in watchlist]
+    
+    # 获取实时行情
+    from tools.data_fetcher import get_batch_quotes
+    quotes_result = get_batch_quotes(symbols)
+    quotes = {}
+    if quotes_result.get('status') == 'success':
+        for q in quotes_result.get('quotes', []):
+            quotes[q['symbol'].upper()] = q
+    
+    # 获取实时信号
+    from quant.trading_signals import TradingSignalGenerator
+    signals = {}
+    for item in watchlist:
+        symbol = item['symbol']
+        try:
+            generator = TradingSignalGenerator(symbol)
+            # 获取各周期信号
+            signals[symbol.upper()] = {
+                'short': generator.generate_signal('short'),
+                'swing': generator.generate_signal('swing'),
+                'long': generator.generate_signal('long')
+            }
+        except Exception as e:
+            print(f"[SimTrade] 获取 {symbol} 信号失败: {e}")
+    
+    # 处理自动交易
+    from web.sim_trade import process_auto_trade
+    results = process_auto_trade(username, signals, quotes)
+    
+    return {
+        "status": "success",
+        "message": f"处理完成，执行了 {len(results)} 笔交易",
+        "trades": results,
+        "disclaimer": "本功能仅供学习研究使用，不构成任何投资建议。"
+    }
+
+
+@app.post("/api/sim-trade/update-prices")
+async def update_sim_positions_prices(authorization: str = Header(None)):
+    """更新持仓的当前价格"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_get_sim_positions
+    from web.sim_trade import SimTradeEngine
+    
+    positions = db_get_sim_positions(user['username'])
+    if not positions:
+        return {"status": "success", "message": "没有持仓"}
+    
+    symbols = [p['symbol'] for p in positions]
+    
+    # 获取实时行情
+    from tools.data_fetcher import get_batch_quotes
+    quotes_result = get_batch_quotes(symbols)
+    quotes = {}
+    if quotes_result.get('status') == 'success':
+        for q in quotes_result.get('quotes', []):
+            quotes[q['symbol'].upper()] = q
+    
+    # 更新价格
+    engine = SimTradeEngine(user['username'])
+    engine.update_positions_price(quotes)
+    
+    return {
+        "status": "success",
+        "message": f"已更新 {len(positions)} 个持仓的价格"
+    }
+
+
+@app.post("/api/sim-trade/reset")
+async def reset_sim_account(authorization: str = Header(None)):
+    """重置模拟账户（清空持仓和交易记录，恢复初始资金）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    
+    from web.database import get_db
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # 删除持仓
+        cursor.execute('DELETE FROM sim_trade_positions WHERE username = ?', (username,))
+        # 删除交易记录
+        cursor.execute('DELETE FROM sim_trade_records WHERE username = ?', (username,))
+        # 重置账户
+        cursor.execute('''
+            UPDATE sim_trade_accounts 
+            SET current_capital = initial_capital,
+                total_profit = 0,
+                total_profit_pct = 0,
+                win_count = 0,
+                loss_count = 0,
+                win_rate = 0
+            WHERE username = ?
+        ''', (username,))
+        conn.commit()
+    
+    # 记录操作
+    from web.database import db_add_user_activity
+    db_add_user_activity(username, 'sim_trade_reset', '重置模拟账户')
+    
+    return {
+        "status": "success",
+        "message": "模拟账户已重置"
+    }
+
+
+# ============================================
 # 启动服务
 # ============================================
 

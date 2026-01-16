@@ -1336,6 +1336,398 @@ def db_get_user_activities(username: str, limit: int = 50) -> List[Dict]:
 
 
 # ============================================
+# 模拟交易系统
+# ============================================
+
+def init_sim_trade_tables():
+    """初始化模拟交易相关表"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # 模拟交易账户表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sim_trade_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                initial_capital REAL DEFAULT 1000000,
+                current_capital REAL DEFAULT 1000000,
+                total_profit REAL DEFAULT 0,
+                total_profit_pct REAL DEFAULT 0,
+                win_count INTEGER DEFAULT 0,
+                loss_count INTEGER DEFAULT 0,
+                win_rate REAL DEFAULT 0,
+                auto_trade_enabled INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        
+        # 模拟持仓表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sim_trade_positions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                name TEXT,
+                type TEXT,
+                quantity INTEGER NOT NULL,
+                cost_price REAL NOT NULL,
+                current_price REAL,
+                profit REAL DEFAULT 0,
+                profit_pct REAL DEFAULT 0,
+                buy_date TEXT NOT NULL,
+                buy_signal TEXT,
+                holding_period TEXT DEFAULT 'swing',
+                trade_rule TEXT DEFAULT 'T+1',
+                can_sell_date TEXT,
+                UNIQUE(username, symbol),
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        
+        # 模拟交易记录表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sim_trade_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                name TEXT,
+                trade_type TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                price REAL NOT NULL,
+                amount REAL NOT NULL,
+                signal_type TEXT,
+                signal_strength INTEGER,
+                signal_conditions TEXT,
+                profit REAL,
+                profit_pct REAL,
+                holding_days INTEGER,
+                trade_date TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
+        
+        # 创建索引
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_sim_positions_username ON sim_trade_positions(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_sim_records_username ON sim_trade_records(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_sim_records_symbol ON sim_trade_records(username, symbol)')
+        
+        conn.commit()
+        print("模拟交易表初始化完成")
+
+
+def db_get_sim_account(username: str) -> Optional[Dict]:
+    """获取用户模拟交易账户"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM sim_trade_accounts WHERE username = ?', (username,))
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+
+
+def db_create_sim_account(username: str, initial_capital: float = 1000000) -> Dict:
+    """创建模拟交易账户"""
+    from datetime import timezone, timedelta
+    beijing_tz = timezone(timedelta(hours=8))
+    now = datetime.now(beijing_tz).isoformat()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO sim_trade_accounts 
+                (username, initial_capital, current_capital, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (username, initial_capital, initial_capital, now, now))
+            return {
+                'username': username,
+                'initial_capital': initial_capital,
+                'current_capital': initial_capital,
+                'total_profit': 0,
+                'total_profit_pct': 0,
+                'win_count': 0,
+                'loss_count': 0,
+                'win_rate': 0,
+                'auto_trade_enabled': 0,
+                'created_at': now,
+                'updated_at': now
+            }
+        except sqlite3.IntegrityError:
+            # 已存在，返回现有账户
+            return db_get_sim_account(username)
+
+
+def db_update_sim_account(username: str, **kwargs) -> bool:
+    """更新模拟交易账户"""
+    from datetime import timezone, timedelta
+    beijing_tz = timezone(timedelta(hours=8))
+    kwargs['updated_at'] = datetime.now(beijing_tz).isoformat()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        updates = []
+        values = []
+        for key, value in kwargs.items():
+            updates.append(f"{key} = ?")
+            values.append(value)
+        
+        values.append(username)
+        cursor.execute(f'''
+            UPDATE sim_trade_accounts SET {", ".join(updates)}
+            WHERE username = ?
+        ''', values)
+        return cursor.rowcount > 0
+
+
+def db_get_sim_positions(username: str) -> List[Dict]:
+    """获取用户模拟持仓"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM sim_trade_positions 
+            WHERE username = ? 
+            ORDER BY buy_date DESC
+        ''', (username,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_get_sim_position(username: str, symbol: str) -> Optional[Dict]:
+    """获取某个标的的持仓"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM sim_trade_positions 
+            WHERE username = ? AND UPPER(symbol) = UPPER(?)
+        ''', (username, symbol))
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+
+
+def db_add_sim_position(username: str, symbol: str, name: str, type_: str,
+                        quantity: int, cost_price: float, buy_signal: str = None,
+                        holding_period: str = 'swing', trade_rule: str = 'T+1') -> bool:
+    """添加模拟持仓"""
+    from datetime import timezone, timedelta
+    beijing_tz = timezone(timedelta(hours=8))
+    now = datetime.now(beijing_tz)
+    buy_date = now.strftime('%Y-%m-%d')
+    
+    # 根据交易规则计算可卖出日期
+    if trade_rule == 'T+0':
+        can_sell_date = buy_date
+    elif trade_rule == 'T+1':
+        can_sell_date = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+    elif trade_rule == 'T+2':
+        can_sell_date = (now + timedelta(days=2)).strftime('%Y-%m-%d')
+    else:
+        can_sell_date = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO sim_trade_positions 
+                (username, symbol, name, type, quantity, cost_price, current_price,
+                 buy_date, buy_signal, holding_period, trade_rule, can_sell_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (username, symbol.upper(), name, type_, quantity, cost_price, cost_price,
+                  buy_date, buy_signal, holding_period, trade_rule, can_sell_date))
+            return True
+        except sqlite3.IntegrityError:
+            # 已有持仓，更新（加仓）
+            cursor.execute('''
+                UPDATE sim_trade_positions 
+                SET quantity = quantity + ?,
+                    cost_price = (cost_price * quantity + ? * ?) / (quantity + ?),
+                    buy_signal = ?
+                WHERE username = ? AND UPPER(symbol) = UPPER(?)
+            ''', (quantity, cost_price, quantity, quantity, buy_signal, username, symbol))
+            return cursor.rowcount > 0
+
+
+def db_update_sim_position(username: str, symbol: str, **kwargs) -> bool:
+    """更新模拟持仓"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        updates = []
+        values = []
+        for key, value in kwargs.items():
+            updates.append(f"{key} = ?")
+            values.append(value)
+        
+        values.extend([username, symbol])
+        cursor.execute(f'''
+            UPDATE sim_trade_positions SET {", ".join(updates)}
+            WHERE username = ? AND UPPER(symbol) = UPPER(?)
+        ''', values)
+        return cursor.rowcount > 0
+
+
+def db_remove_sim_position(username: str, symbol: str) -> bool:
+    """删除模拟持仓"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM sim_trade_positions 
+            WHERE username = ? AND UPPER(symbol) = UPPER(?)
+        ''', (username, symbol))
+        return cursor.rowcount > 0
+
+
+def db_add_sim_trade_record(username: str, symbol: str, name: str, trade_type: str,
+                            quantity: int, price: float, signal_type: str = None,
+                            signal_strength: int = None, signal_conditions: str = None,
+                            profit: float = None, profit_pct: float = None,
+                            holding_days: int = None) -> int:
+    """添加模拟交易记录"""
+    from datetime import timezone, timedelta
+    beijing_tz = timezone(timedelta(hours=8))
+    now = datetime.now(beijing_tz)
+    trade_date = now.strftime('%Y-%m-%d')
+    created_at = now.isoformat()
+    amount = quantity * price
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO sim_trade_records 
+            (username, symbol, name, trade_type, quantity, price, amount,
+             signal_type, signal_strength, signal_conditions,
+             profit, profit_pct, holding_days, trade_date, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (username, symbol.upper(), name, trade_type, quantity, price, amount,
+              signal_type, signal_strength, signal_conditions,
+              profit, profit_pct, holding_days, trade_date, created_at))
+        return cursor.lastrowid
+
+
+def db_get_sim_trade_records(username: str, symbol: str = None, limit: int = 100) -> List[Dict]:
+    """获取模拟交易记录"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if symbol:
+            cursor.execute('''
+                SELECT * FROM sim_trade_records 
+                WHERE username = ? AND UPPER(symbol) = UPPER(?)
+                ORDER BY created_at DESC LIMIT ?
+            ''', (username, symbol, limit))
+        else:
+            cursor.execute('''
+                SELECT * FROM sim_trade_records 
+                WHERE username = ?
+                ORDER BY created_at DESC LIMIT ?
+            ''', (username, limit))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_get_sim_trade_stats(username: str) -> Dict:
+    """获取模拟交易统计"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # 总交易次数
+        cursor.execute('''
+            SELECT COUNT(*) as total_trades,
+                   SUM(CASE WHEN trade_type = 'buy' THEN 1 ELSE 0 END) as buy_count,
+                   SUM(CASE WHEN trade_type = 'sell' THEN 1 ELSE 0 END) as sell_count
+            FROM sim_trade_records WHERE username = ?
+        ''', (username,))
+        row = cursor.fetchone()
+        total_trades = row['total_trades'] or 0
+        buy_count = row['buy_count'] or 0
+        sell_count = row['sell_count'] or 0
+        
+        # 盈亏统计（只统计卖出记录）
+        cursor.execute('''
+            SELECT SUM(profit) as total_profit,
+                   SUM(CASE WHEN profit > 0 THEN 1 ELSE 0 END) as win_count,
+                   SUM(CASE WHEN profit <= 0 THEN 1 ELSE 0 END) as loss_count,
+                   AVG(profit_pct) as avg_profit_pct,
+                   MAX(profit_pct) as max_profit_pct,
+                   MIN(profit_pct) as min_profit_pct,
+                   AVG(holding_days) as avg_holding_days
+            FROM sim_trade_records 
+            WHERE username = ? AND trade_type = 'sell' AND profit IS NOT NULL
+        ''', (username,))
+        row = cursor.fetchone()
+        
+        total_profit = row['total_profit'] or 0
+        win_count = row['win_count'] or 0
+        loss_count = row['loss_count'] or 0
+        avg_profit_pct = row['avg_profit_pct'] or 0
+        max_profit_pct = row['max_profit_pct'] or 0
+        min_profit_pct = row['min_profit_pct'] or 0
+        avg_holding_days = row['avg_holding_days'] or 0
+        
+        win_rate = (win_count / (win_count + loss_count) * 100) if (win_count + loss_count) > 0 else 0
+        
+        return {
+            'total_trades': total_trades,
+            'buy_count': buy_count,
+            'sell_count': sell_count,
+            'total_profit': round(total_profit, 2),
+            'win_count': win_count,
+            'loss_count': loss_count,
+            'win_rate': round(win_rate, 2),
+            'avg_profit_pct': round(avg_profit_pct, 2),
+            'max_profit_pct': round(max_profit_pct, 2),
+            'min_profit_pct': round(min_profit_pct, 2),
+            'avg_holding_days': round(avg_holding_days, 1)
+        }
+
+
+def get_trade_rule(symbol: str, type_: str = None) -> str:
+    """根据标的类型获取交易规则
+    
+    A股交易规则：
+    - 股票: T+1 (当天买入，次日才能卖出)
+    - ETF: T+0 (当天买入，当天可卖出) - 部分ETF如货币ETF
+    - 场内基金LOF: T+1
+    - 可转债: T+0
+    - 港股通: T+0
+    - 美股: T+0 (但有T+2结算)
+    """
+    symbol = symbol.upper()
+    
+    # 根据代码判断类型
+    if symbol.isdigit() and len(symbol) == 6:
+        # 中国市场
+        # ETF: 51xxxx/52xxxx/56xxxx/58xxxx(上证), 159xxx(深证)
+        if symbol.startswith(('510', '511', '512', '513', '515', '516', '517', '518', '520', '560', '561', '562', '563', '588')) or symbol.startswith('159'):
+            # 大部分ETF是T+1，但货币ETF等是T+0
+            # 简化处理：场内ETF统一T+1
+            return 'T+1'
+        # 可转债: 11xxxx(上证), 12xxxx(深证)
+        elif symbol.startswith('11') or symbol.startswith('12'):
+            return 'T+0'
+        # LOF: 16xxxx(深证)
+        elif symbol.startswith('16'):
+            return 'T+1'
+        # A股: 其他6位数字
+        else:
+            return 'T+1'
+    elif '.HK' in symbol or symbol.endswith('HK'):
+        # 港股
+        return 'T+0'
+    else:
+        # 美股等
+        return 'T+0'
+
+
+# 初始化模拟交易表
+try:
+    init_sim_trade_tables()
+except Exception as e:
+    print(f"初始化模拟交易表失败: {e}")
+
+
+# ============================================
 # 数据迁移 - 从 JSON 迁移到数据库
 # ============================================
 
