@@ -5642,7 +5642,7 @@ async def sim_trade_sell(
 
 @app.get("/api/sim-trade/positions")
 async def get_sim_trade_positions(authorization: str = Header(None)):
-    """获取模拟持仓"""
+    """获取模拟持仓（含实时浮动盈亏）"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -5654,6 +5654,41 @@ async def get_sim_trade_positions(authorization: str = Header(None)):
     
     from web.database import db_get_sim_positions
     positions = db_get_sim_positions(user['username'])
+    
+    if not positions:
+        return {"status": "success", "positions": []}
+    
+    # 获取实时行情计算浮动盈亏
+    symbols = [p['symbol'] for p in positions]
+    from tools.data_fetcher import get_batch_quotes
+    quotes_result = get_batch_quotes(symbols)
+    quotes = {}
+    if quotes_result.get('status') == 'success':
+        for q in quotes_result.get('quotes', []):
+            quotes[q['symbol'].upper()] = q
+    
+    # 计算浮动盈亏
+    for pos in positions:
+        symbol = pos['symbol'].upper()
+        quote = quotes.get(symbol, {})
+        current_price = quote.get('current_price', pos.get('current_price', 0))
+        cost_price = pos.get('cost_price', 0)
+        quantity = pos.get('quantity', 0)
+        
+        # 更新当前价格
+        pos['current_price'] = current_price
+        pos['change_percent'] = quote.get('change_percent', 0)
+        
+        # 计算浮动盈亏
+        if cost_price > 0 and current_price > 0:
+            pos['profit_amount'] = round((current_price - cost_price) * quantity, 2)
+            pos['profit_percent'] = round((current_price / cost_price - 1) * 100, 2)
+        else:
+            pos['profit_amount'] = 0
+            pos['profit_percent'] = 0
+        
+        # 计算市值
+        pos['market_value'] = round(current_price * quantity, 2)
     
     return {
         "status": "success",
@@ -6099,6 +6134,82 @@ async def reset_sim_account(authorization: str = Header(None)):
     return {
         "status": "success",
         "message": "模拟账户已重置"
+    }
+
+
+class UpdateCapitalRequest(BaseModel):
+    """修改资金请求"""
+    initial_capital: float
+
+
+@app.post("/api/sim-trade/update-capital")
+async def update_sim_trade_capital(
+    request: UpdateCapitalRequest,
+    authorization: str = Header(None)
+):
+    """修改模拟账户初始资金
+    
+    允许用户自定义初始资金金额，同时更新可用资金。
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    new_capital = request.initial_capital
+    
+    if new_capital <= 0:
+        raise HTTPException(status_code=400, detail="初始资金必须大于0")
+    
+    if new_capital > 100000000:  # 最大1亿
+        raise HTTPException(status_code=400, detail="初始资金不能超过1亿")
+    
+    from web.database import get_db, db_get_sim_account, db_get_sim_positions
+    
+    # 获取当前账户信息
+    account = db_get_sim_account(username)
+    if not account:
+        raise HTTPException(status_code=404, detail="账户不存在")
+    
+    # 计算持仓市值
+    positions = db_get_sim_positions(username)
+    position_value = sum(
+        p['quantity'] * (p['current_price'] or p['cost_price'])
+        for p in positions
+    )
+    
+    # 计算新的可用资金 = 新初始资金 - 持仓市值
+    new_current_capital = new_capital - position_value
+    if new_current_capital < 0:
+        raise HTTPException(status_code=400, detail=f"初始资金不能小于当前持仓市值(¥{position_value:.2f})")
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE sim_trade_accounts 
+            SET initial_capital = ?,
+                current_capital = ?
+            WHERE username = ?
+        ''', (new_capital, new_current_capital, username))
+        conn.commit()
+    
+    # 记录操作
+    from web.database import db_add_user_activity
+    db_add_user_activity(username, 'update_capital', f'修改初始资金为 ¥{new_capital:.2f}')
+    
+    return {
+        "status": "success",
+        "message": f"初始资金已修改为 ¥{new_capital:.2f}",
+        "data": {
+            "initial_capital": new_capital,
+            "current_capital": new_current_capital,
+            "position_value": position_value
+        }
     }
 
 
@@ -6636,6 +6747,64 @@ async def get_sim_trade_logs(
         "status": "success",
         "logs": logs,
         "total": len(logs),
+        "timestamp": get_beijing_now().isoformat()
+    }
+
+
+@app.get("/api/sim-trade/monitor-logs")
+async def get_sim_trade_monitor_logs(
+    limit: int = 100,
+    log_type: str = None,
+    authorization: str = Header(None)
+):
+    """获取自动交易监控日志
+    
+    返回自动交易系统的监控活动日志，包括：
+    - scan: 扫描监控记录
+    - signal: 信号触发记录
+    - trade: 交易执行记录
+    - risk: 风控触发记录
+    - error: 错误记录
+    - info: 信息记录
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_get_monitor_logs
+    logs = db_get_monitor_logs(user['username'], limit, log_type)
+    
+    # 格式化日志
+    formatted_logs = []
+    icon_map = {
+        'scan': '🔍',
+        'signal': '📊',
+        'trade': '💰',
+        'risk': '⚠️',
+        'error': '❌',
+        'info': 'ℹ️'
+    }
+    
+    for log in logs:
+        formatted_logs.append({
+            'id': log.get('id'),
+            'type': log.get('log_type'),
+            'icon': icon_map.get(log.get('log_type'), '📝'),
+            'symbol': log.get('symbol'),
+            'message': log.get('message'),
+            'details': log.get('details'),
+            'created_at': log.get('created_at'),
+        })
+    
+    return {
+        "status": "success",
+        "logs": formatted_logs,
+        "total": len(formatted_logs),
         "timestamp": get_beijing_now().isoformat()
     }
 

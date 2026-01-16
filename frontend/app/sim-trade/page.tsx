@@ -26,6 +26,8 @@ import {
   ChevronDown,
   ChevronUp,
   Radio,
+  Edit3,
+  X,
 } from "lucide-react";
 import { AlertModal } from "@/components/ui/AlertModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -187,6 +189,10 @@ export default function SimTradePage() {
     risk: true,
     autoTrade: true,
   });
+
+  // 编辑初始资金
+  const [showEditCapital, setShowEditCapital] = useState(false);
+  const [editCapitalValue, setEditCapitalValue] = useState('');
 
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -407,6 +413,39 @@ export default function SimTradePage() {
     }
   }, [getToken, fetchAccountInfo, fetchQuotesOnly, fetchMonitorData]);
 
+  // 修改初始资金
+  const updateCapital = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    
+    const newCapital = parseFloat(editCapitalValue);
+    if (isNaN(newCapital) || newCapital <= 0) {
+      showAlertModal("输入错误", "请输入有效的金额", "error");
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE}/api/sim-trade/update-capital`, {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ initial_capital: newCapital }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setShowEditCapital(false);
+        showAlertModal("修改成功", `初始资金已修改为 ¥${newCapital.toLocaleString()}`, "success");
+        fetchAccountInfo();
+      } else {
+        showAlertModal("修改失败", data.detail || "请稍后重试", "error");
+      }
+    } catch (error) {
+      showAlertModal("操作失败", "请稍后重试", "error");
+    }
+  }, [getToken, editCapitalValue, showAlertModal, fetchAccountInfo]);
+
   // 切换自动交易
   const toggleAutoTrade = useCallback(async () => {
     const token = getToken();
@@ -622,7 +661,16 @@ export default function SimTradePage() {
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <div className="text-xs text-slate-400 mb-1">可用资金</div>
                   <div className="text-lg font-bold text-white">¥{formatMoney(account?.current_capital || 0)}</div>
-                  <div className="text-xs text-slate-500">初始: ¥{formatMoney(account?.initial_capital || 1000000)}</div>
+                  <button 
+                    onClick={() => {
+                      setEditCapitalValue(String(account?.initial_capital || 1000000));
+                      setShowEditCapital(true);
+                    }}
+                    className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                  >
+                    初始: ¥{formatMoney(account?.initial_capital || 1000000)}
+                    <Edit3 className="w-3 h-3" />
+                  </button>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <div className="text-xs text-slate-400 mb-1">持仓市值</div>
@@ -1022,6 +1070,61 @@ export default function SimTradePage() {
       {/* 弹窗 */}
       <AlertModal isOpen={showAlert} onClose={() => setShowAlert(false)} title={alertConfig.title} message={alertConfig.message} type={alertConfig.type} />
       <ConfirmModal isOpen={showConfirm} onClose={() => setShowConfirm(false)} onConfirm={() => { confirmConfig.onConfirm(); setShowConfirm(false); }} title={confirmConfig.title} message={confirmConfig.message} type={confirmConfig.type} />
+      
+      {/* 编辑初始资金弹窗 */}
+      <AnimatePresence>
+        {showEditCapital && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowEditCapital(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-800 rounded-xl border border-slate-700 p-6 w-full max-w-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-white">修改初始资金</h3>
+                <button onClick={() => setShowEditCapital(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm text-slate-400 mb-2">初始资金金额 (元)</label>
+                <input
+                  type="number"
+                  value={editCapitalValue}
+                  onChange={(e) => setEditCapitalValue(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
+                  placeholder="请输入金额"
+                  min="1"
+                  max="100000000"
+                />
+                <p className="text-xs text-slate-500 mt-2">修改后可用资金将自动调整</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowEditCapital(false)}
+                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={updateCapital}
+                  className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
+                >
+                  确认修改
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
