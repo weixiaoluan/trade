@@ -1,17 +1,28 @@
 """
 ============================================
-模拟交易引擎 v2.0
-Simulated Trading Engine
+模拟交易引擎 v4.0 - 高胜率版本
+Simulated Trading Engine - High Win Rate
 ============================================
 
-专业级模拟交易系统，支持：
-- 智能仓位管理（金字塔加仓、分批建仓）
-- 动态风控（移动止损、分级止盈、最大回撤控制）
-- 多策略交易（趋势跟踪、均值回归、突破策略）
-- 完整的交易统计和风险指标
+专业级模拟交易系统，目标95%+胜率
+
+核心策略：
+- 极高门槛入场 - 只在完美条件下交易
+- 严格风控 - 小止损(1.5-3%)、快止盈(2-5%)
+- 保守仓位 - 单只最大15%，总仓位最大60%
+- 多重确认 - 信号强度>=4，置信度>=80%
+- 不追高 - 只在支撑位附近买入
+
+风控机制：
+- 固定止损：短线-1.5%，波段-2%，中长线-3%
+- 移动止损：从高点回撤1-2%
+- 分级止盈：2%/3%/5%（短线），3%/5%/8%（波段）
+- 时间止损：持有超时且未盈利则平仓
+- 利润回吐保护：曾盈利2%以上，回到成本价附近止损
 
 注意：本模块仅供学习研究使用，不构成任何投资建议。
 模拟交易结果不代表真实交易表现。
+高胜率策略意味着极低交易频率，可能错过很多机会。
 """
 
 import json
@@ -36,49 +47,52 @@ from web.database import (
 # 常量配置
 # ============================================
 
-# 仓位管理配置
+# 仓位管理配置 - v4.0 高胜率版本
+# 核心理念：保守仓位，分散风险
 POSITION_CONFIG = {
-    'max_single_position': 0.25,      # 单只标的最大仓位 25%
-    'max_total_position': 0.80,       # 最大总仓位 80%
-    'min_position_size': 0.05,        # 最小仓位 5%
-    'default_position_size': 0.10,    # 默认仓位 10%
-    'pyramid_ratio': 0.5,             # 金字塔加仓比例（每次加仓为上次的50%）
+    'max_single_position': 0.15,      # 单只标的最大仓位 15%（降低）
+    'max_total_position': 0.60,       # 最大总仓位 60%（降低）
+    'min_position_size': 0.03,        # 最小仓位 3%
+    'default_position_size': 0.08,    # 默认仓位 8%（降低）
+    'pyramid_ratio': 0.3,             # 金字塔加仓比例（降低，每次加仓为上次的30%）
 }
 
-# 风控配置（按持有周期）
+# 风控配置（按持有周期）- v4.0 高胜率版本
+# 核心理念：小止损、快止盈、严格风控
 RISK_CONFIG = {
     'short': {
-        'stop_loss': -0.03,           # 止损 -3%
+        'stop_loss': -0.015,          # 止损 -1.5%（更严格）
+        'take_profit_1': 0.02,        # 第一止盈 2%
+        'take_profit_2': 0.03,        # 第二止盈 3%
+        'take_profit_3': 0.05,        # 第三止盈 5%
+        'trailing_stop': 0.01,        # 移动止损回撤 1%
+        'max_holding_days': 3,        # 最大持有天数（缩短）
+    },
+    'swing': {
+        'stop_loss': -0.02,           # 止损 -2%（更严格）
         'take_profit_1': 0.03,        # 第一止盈 3%
         'take_profit_2': 0.05,        # 第二止盈 5%
         'take_profit_3': 0.08,        # 第三止盈 8%
-        'trailing_stop': 0.02,        # 移动止损回撤 2%
-        'max_holding_days': 5,        # 最大持有天数
-    },
-    'swing': {
-        'stop_loss': -0.05,           # 止损 -5%
-        'take_profit_1': 0.05,        # 第一止盈 5%
-        'take_profit_2': 0.10,        # 第二止盈 10%
-        'take_profit_3': 0.15,        # 第三止盈 15%
-        'trailing_stop': 0.03,        # 移动止损回撤 3%
-        'max_holding_days': 20,       # 最大持有天数
+        'trailing_stop': 0.015,       # 移动止损回撤 1.5%
+        'max_holding_days': 7,        # 最大持有天数（缩短）
     },
     'long': {
-        'stop_loss': -0.08,           # 止损 -8%
-        'take_profit_1': 0.10,        # 第一止盈 10%
-        'take_profit_2': 0.20,        # 第二止盈 20%
-        'take_profit_3': 0.30,        # 第三止盈 30%
-        'trailing_stop': 0.05,        # 移动止损回撤 5%
-        'max_holding_days': 60,       # 最大持有天数
+        'stop_loss': -0.03,           # 止损 -3%（更严格）
+        'take_profit_1': 0.05,        # 第一止盈 5%
+        'take_profit_2': 0.08,        # 第二止盈 8%
+        'take_profit_3': 0.12,        # 第三止盈 12%
+        'trailing_stop': 0.02,        # 移动止损回撤 2%
+        'max_holding_days': 15,       # 最大持有天数（缩短）
     }
 }
 
-# 信号强度要求
+# 信号强度要求 - v4.0 高胜率版本
+# 核心理念：极高门槛入场
 SIGNAL_CONFIG = {
-    'min_buy_strength': 3,            # 最小买入信号强度
-    'min_sell_strength': 2,           # 最小卖出信号强度
-    'min_confidence': 55,             # 最小置信度
-    'strong_signal_strength': 4,      # 强信号强度
+    'min_buy_strength': 4,            # 最小买入信号强度（提高）
+    'min_sell_strength': 3,           # 最小卖出信号强度（提高）
+    'min_confidence': 80,             # 最小置信度（大幅提高）
+    'strong_signal_strength': 5,      # 强信号强度
 }
 
 
@@ -211,11 +225,17 @@ class PositionCalculator:
 
 
 # ============================================
-# 风控管理器
+# 风控管理器 - v4.0 高胜率版本
 # ============================================
 
 class RiskManager:
-    """风控管理器 - 止损止盈、移动止损"""
+    """风控管理器 - 止损止盈、移动止损（高胜率版本）
+    
+    核心理念：
+    1. 小止损 - 快速止损，控制单笔亏损
+    2. 快止盈 - 落袋为安，不贪心
+    3. 移动止损 - 保护利润
+    """
     
     @staticmethod
     def check_stop_loss(
@@ -223,7 +243,7 @@ class RiskManager:
         current_price: float,
         holding_period: str = 'swing'
     ) -> Tuple[bool, str, float]:
-        """检查是否触发止损
+        """检查是否触发止损（高胜率版本）
         
         Returns:
             (是否止损, 原因, 建议卖出比例)
@@ -232,16 +252,21 @@ class RiskManager:
         profit_pct = (current_price / cost_price - 1)
         config = RISK_CONFIG.get(holding_period, RISK_CONFIG['swing'])
         
-        # 固定止损
+        # 固定止损 - 更严格
         if profit_pct <= config['stop_loss']:
-            return True, f"触发止损(亏损{profit_pct*100:.1f}%)", 1.0
+            return True, f"🚨 触发止损(亏损{profit_pct*100:.1f}%)", 1.0
         
-        # 移动止损（只有盈利过才触发）
+        # 移动止损（只有盈利过才触发）- 更敏感
         highest_price = position.get('highest_price', cost_price)
         if highest_price > cost_price:
             from_high_pct = (current_price / highest_price - 1)
             if from_high_pct <= -config['trailing_stop']:
-                return True, f"移动止损(从高点回撤{abs(from_high_pct)*100:.1f}%)", 1.0
+                return True, f"🚨 移动止损(从高点回撤{abs(from_high_pct)*100:.1f}%)", 1.0
+            
+            # 额外保护：如果曾经盈利超过2%，现在回到成本价附近，也止损
+            max_profit_pct = (highest_price / cost_price - 1) * 100
+            if max_profit_pct >= 2 and profit_pct * 100 <= 0.5:
+                return True, f"🚨 利润回吐保护(曾盈利{max_profit_pct:.1f}%，现{profit_pct*100:.1f}%)", 1.0
         
         return False, "", 0
     
@@ -252,7 +277,7 @@ class RiskManager:
         holding_period: str = 'swing',
         signal_type: str = None
     ) -> Tuple[bool, str, float]:
-        """检查是否触发止盈（分级止盈）
+        """检查是否触发止盈（高胜率版本 - 分级止盈）
         
         Returns:
             (是否止盈, 原因, 建议卖出比例)
@@ -264,19 +289,20 @@ class RiskManager:
         
         # 第三止盈（卖出剩余全部）
         if profit_pct >= config['take_profit_3'] and sold_ratio < 0.7:
-            return True, f"第三止盈(盈利{profit_pct*100:.1f}%)", 1.0
+            return True, f"🎯 第三止盈(盈利{profit_pct*100:.1f}%)", 1.0
         
         # 第二止盈（卖出50%）
         if profit_pct >= config['take_profit_2'] and sold_ratio < 0.5:
-            # 有卖出信号时执行
-            if signal_type == 'sell':
-                return True, f"第二止盈+卖出信号(盈利{profit_pct*100:.1f}%)", 0.5
+            return True, f"✅ 第二止盈(盈利{profit_pct*100:.1f}%)", 0.5
         
-        # 第一止盈（卖出30%）
+        # 第一止盈（卖出30%）- 更积极
         if profit_pct >= config['take_profit_1'] and sold_ratio < 0.3:
-            # 有卖出信号时执行
-            if signal_type == 'sell':
-                return True, f"第一止盈+卖出信号(盈利{profit_pct*100:.1f}%)", 0.3
+            return True, f"✅ 第一止盈(盈利{profit_pct*100:.1f}%)", 0.3
+        
+        # 有卖出信号时，降低止盈门槛
+        if signal_type == 'sell':
+            if profit_pct >= config['take_profit_1'] * 0.7 and sold_ratio < 0.5:
+                return True, f"✅ 卖出信号+盈利({profit_pct*100:.1f}%)", 0.5
         
         return False, "", 0
     
@@ -324,11 +350,18 @@ class RiskManager:
 
 
 # ============================================
-# 信号分析器
+# 信号分析器 - v4.0 高胜率版本
 # ============================================
 
 class SignalAnalyzer:
-    """信号分析器 - 判断买卖时机"""
+    """信号分析器 - 判断买卖时机（高胜率版本）
+    
+    核心理念：
+    1. 极高门槛入场 - 只在完美条件下交易
+    2. 多重确认机制 - 信号强度、置信度、价格位置都要满足
+    3. 不追高 - 价格必须在支撑位附近
+    4. 快速止盈止损 - 小止损、快止盈
+    """
     
     @staticmethod
     def should_buy(
@@ -339,7 +372,7 @@ class SignalAnalyzer:
         support_price: float = None,
         resistance_price: float = None
     ) -> Tuple[bool, str, int]:
-        """判断是否应该买入
+        """判断是否应该买入（高胜率版本）
         
         Returns:
             (是否买入, 原因, 建议仓位等级1-3)
@@ -348,40 +381,54 @@ class SignalAnalyzer:
         strength = signal.get('strength', 0)
         confidence = signal.get('confidence', 50)
         
-        # 基本条件检查
+        # 基本条件检查 - 极严格
         if signal_type != 'buy':
             return False, "非买入信号", 0
         
+        # 信号强度必须>=4（高胜率要求）
         if strength < SIGNAL_CONFIG['min_buy_strength']:
             return False, f"信号强度不足({strength}<{SIGNAL_CONFIG['min_buy_strength']})", 0
         
+        # 置信度必须>=80%（高胜率要求）
         if confidence < SIGNAL_CONFIG['min_confidence']:
             return False, f"置信度不足({confidence}<{SIGNAL_CONFIG['min_confidence']})", 0
         
-        # 价格位置检查（不追高）
+        # 价格位置检查（不追高）- 更严格
         if current_price and resistance_price and resistance_price > 0:
-            if current_price > resistance_price * 1.02:  # 高于阻力位2%
-                return False, "价格过高，不追高", 0
+            above_resistance_pct = (current_price / resistance_price - 1) * 100
+            if above_resistance_pct > 0:  # 高于阻力位就不买
+                return False, f"价格高于阻力位({above_resistance_pct:.1f}%)，不追高", 0
         
-        # 支撑位附近加分
-        position_level = 1  # 默认轻仓
+        # 必须接近支撑位才买入
+        position_level = 0  # 默认不买
         if current_price and support_price and support_price > 0:
-            if current_price <= support_price * 1.01:  # 接近支撑位
+            above_support_pct = (current_price / support_price - 1) * 100
+            if above_support_pct <= 1.5:  # 接近支撑位1.5%以内
                 position_level = 2  # 中等仓位
+            elif above_support_pct <= 3:  # 支撑位上方3%以内
+                position_level = 1  # 轻仓
+            else:
+                return False, f"价格远离支撑位({above_support_pct:.1f}%)，等待回调", 0
+        else:
+            # 没有支撑位数据，使用信号强度判断
+            if strength >= 5 and confidence >= 90:
+                position_level = 1  # 极强信号才轻仓买入
+            else:
+                return False, "缺少支撑位数据，无法确认买点", 0
         
         # 强信号加仓
-        if strength >= SIGNAL_CONFIG['strong_signal_strength']:
+        if strength >= SIGNAL_CONFIG['strong_signal_strength'] and confidence >= 90:
             position_level = min(3, position_level + 1)
         
-        # 已有持仓检查
+        # 已有持仓检查 - 更严格
         if position:
             profit_pct = position.get('profit_pct', 0)
-            if profit_pct < -3:
+            if profit_pct < -1:  # 亏损超过1%不加仓
                 return False, f"持仓亏损中({profit_pct:.1f}%)，不宜加仓", 0
-            if profit_pct < 2:
-                return False, "盈利不足，暂不加仓", 0
+            if profit_pct < 3:  # 盈利不足3%不加仓
+                return False, f"盈利不足3%({profit_pct:.1f}%)，暂不加仓", 0
         
-        return True, f"买入信号(强度{strength},置信度{confidence}%)", position_level
+        return True, f"高胜率买入信号(强度{strength},置信度{confidence}%)", position_level
     
     @staticmethod
     def should_sell(
@@ -390,7 +437,7 @@ class SignalAnalyzer:
         current_price: float,
         holding_period: str = 'swing'
     ) -> Tuple[bool, str, float]:
-        """判断是否应该卖出
+        """判断是否应该卖出（高胜率版本）
         
         Returns:
             (是否卖出, 原因, 卖出比例)
@@ -401,17 +448,20 @@ class SignalAnalyzer:
         cost_price = position['cost_price']
         profit_pct = (current_price / cost_price - 1) * 100
         
-        # 1. 止损检查
+        # 1. 止损检查 - 最高优先级
         stop_loss, reason, ratio = RiskManager.check_stop_loss(
             position, current_price, holding_period
         )
         if stop_loss:
             return True, reason, ratio
         
-        # 2. 超时检查
+        # 2. 时间止损 - 持有超时且未盈利
         time_stop, reason = RiskManager.check_time_stop(position, holding_period)
-        if time_stop and profit_pct < 0:
-            return True, f"{reason}且亏损", 1.0
+        if time_stop:
+            if profit_pct <= 0:
+                return True, f"{reason}且未盈利", 1.0
+            elif profit_pct < 1:
+                return True, f"{reason}且盈利不足1%", 0.5
         
         signal_type = signal.get('signal_type', signal.get('signal', ''))
         strength = signal.get('strength', 0)
@@ -423,20 +473,20 @@ class SignalAnalyzer:
         if take_profit:
             return True, reason, ratio
         
-        # 4. 信号卖出
+        # 4. 信号卖出 - 更敏感
         if signal_type == 'sell':
             if strength >= SIGNAL_CONFIG['strong_signal_strength']:
                 return True, f"强卖出信号(强度{strength})", 1.0
             if strength >= SIGNAL_CONFIG['min_sell_strength']:
-                if profit_pct > 0:
+                if profit_pct > 0.5:  # 有微利就卖
                     return True, f"卖出信号+盈利({profit_pct:.1f}%)", 0.5
-                if profit_pct < -2:
+                if profit_pct < -0.5:  # 微亏也卖
                     return True, f"卖出信号+亏损({profit_pct:.1f}%)", 1.0
         
-        # 5. 超高盈利保护
+        # 5. 盈利保护 - 更积极
         config = RISK_CONFIG.get(holding_period, RISK_CONFIG['swing'])
-        if profit_pct >= config['take_profit_3'] * 100 * 1.5:
-            return True, f"超高盈利保护({profit_pct:.1f}%)", 0.5
+        if profit_pct >= config['take_profit_2'] * 100:
+            return True, f"盈利保护({profit_pct:.1f}%)", 0.5
         
         return False, "不满足卖出条件", 0
 
