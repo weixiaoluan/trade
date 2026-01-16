@@ -72,12 +72,38 @@ if ! check_disk_space; then
     fi
 fi
 
-# 2. 更新代码
+# 2. 备份数据库（防止 git reset 覆盖）
+echo -e "${YELLOW}[BACKUP]${NC} 备份数据库..."
+DB_FILE="web/data/ai_trade.db"
+BACKUP_DIR="web/data/backups"
+mkdir -p "$BACKUP_DIR"
+
+if [ -f "$DB_FILE" ]; then
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    cp "$DB_FILE" "$BACKUP_DIR/ai_trade_before_update_$TIMESTAMP.db"
+    echo -e "${GREEN}[SUCCESS]${NC} 数据库已备份到: $BACKUP_DIR/ai_trade_before_update_$TIMESTAMP.db"
+fi
+
+# 3. 更新代码（保护数据库文件）
 echo -e "${YELLOW}正在拉取最新代码...${NC}"
 git fetch --all
+
+# 先保存数据库文件
+if [ -f "$DB_FILE" ]; then
+    cp "$DB_FILE" /tmp/ai_trade_temp.db
+fi
+
 git reset --hard origin/main
 
-# 3. 配置 Nginx（如果存在配置文件）
+# 恢复数据库文件
+if [ -f /tmp/ai_trade_temp.db ]; then
+    mkdir -p web/data
+    cp /tmp/ai_trade_temp.db "$DB_FILE"
+    rm /tmp/ai_trade_temp.db
+    echo -e "${GREEN}[SUCCESS]${NC} 数据库已恢复"
+fi
+
+# 4. 配置 Nginx（如果存在配置文件）
 if [ -f nginx.conf ]; then
     echo -e "${YELLOW}正在更新 Nginx 配置...${NC}"
     if command -v nginx &> /dev/null; then
@@ -87,7 +113,7 @@ if [ -f nginx.conf ]; then
     fi
 fi
 
-# 4. 重启 Docker 服务（带重试机制）
+# 5. 重启 Docker 服务（带重试机制）
 echo -e "${YELLOW}正在重建并重启 Docker 服务...${NC}"
 
 build_and_start() {
@@ -113,11 +139,11 @@ if ! build_and_start 2>&1; then
     fi
 fi
 
-# 5. 清理旧镜像（构建成功后）
+# 6. 清理旧镜像（构建成功后）
 echo -e "${BLUE}[INFO]${NC} 清理旧版本镜像..."
 docker image prune -f 2>/dev/null || true
 
-# 6. 完成
+# 7. 完成
 echo -e "${GREEN}=== 更新完成 ===${NC}"
 echo -e "域名访问: http://etf.flytest.com.cn"
 echo -e "前端直连: http://$(hostname -I | awk '{print $1}'):8088"
