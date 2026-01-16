@@ -1901,3 +1901,274 @@ def get_etf_holdings(ticker: str) -> str:
             "ticker": ticker,
             "message": str(e)
         }, ensure_ascii=False)
+
+
+# ============================================
+# 批量行情获取
+# ============================================
+
+# 缓存行情数据，避免频繁请求
+_quote_cache = {
+    'etf': {'data': None, 'time': None},
+    'lof': {'data': None, 'time': None},
+    'stock': {'data': None, 'time': None}
+}
+
+
+def get_market_session() -> str:
+    """
+    获取当前市场时段
+    返回值:
+    - 'pre_market': 集合竞价时段 (9:15-9:25)
+    - 'morning': 上午交易时段 (9:30-11:30)
+    - 'noon_break': 午间休市 (11:30-13:00)
+    - 'afternoon': 下午交易时段 (13:00-15:00)
+    - 'after_hours': 盘后时段 (15:00-15:30)
+    - 'closed': 非交易时间
+    """
+    now = datetime.now()
+    if now.weekday() >= 5:  # 周末
+        return 'closed'
+    
+    current_time = now.strftime("%H:%M")
+    
+    if "09:15" <= current_time < "09:25":
+        return 'pre_market'
+    elif "09:25" <= current_time < "09:30":
+        return 'pre_market'
+    elif "09:30" <= current_time <= "11:30":
+        return 'morning'
+    elif "11:30" < current_time < "13:00":
+        return 'noon_break'
+    elif "13:00" <= current_time <= "15:00":
+        return 'afternoon'
+    elif "15:00" < current_time <= "15:30":
+        return 'after_hours'
+    else:
+        return 'closed'
+
+
+def get_quote_cache_ttl() -> int:
+    """
+    根据市场时段返回合适的行情缓存时间（秒）
+    - 交易时段: 1秒（实时性要求高）
+    - 集合竞价: 3秒
+    - 午间休市: 30秒
+    - 盘后: 300秒
+    - 非交易时间: 600秒
+    """
+    session = get_market_session()
+    cache_ttl_map = {
+        'pre_market': 3,
+        'morning': 1,
+        'noon_break': 30,
+        'afternoon': 1,
+        'after_hours': 300,
+        'closed': 600
+    }
+    return cache_ttl_map.get(session, 60)
+
+
+def get_batch_quotes(symbols: list) -> dict:
+    """
+    批量获取行情数据，使用缓存优化
+    
+    Args:
+        symbols: 标的代码列表
+    
+    Returns:
+        dict: 包含 status 和 quotes 的字典
+        {
+            'status': 'success',
+            'quotes': {
+                'symbol1': {'symbol': 'symbol1', 'current_price': 1.23, 'change_percent': 0.5},
+                ...
+            }
+        }
+    """
+    import math
+    
+    def safe_float(val, default=0.0):
+        """安全转换为float，处理NaN和Infinity"""
+        try:
+            if val is None:
+                return default
+            f = float(val)
+            if math.isnan(f) or math.isinf(f):
+                return default
+            return f
+        except (ValueError, TypeError):
+            return default
+    
+    now = datetime.now()
+    quotes = {}
+    
+    # 根据市场时段动态调整缓存时间
+    cache_ttl = get_quote_cache_ttl()
+    market_session = get_market_session()
+    
+    # 提取纯数字代码
+    code_map = {}
+    for symbol in symbols:
+        code = symbol[2:] if symbol.startswith(("sz", "sh")) else symbol
+        code_map[code] = symbol
+    
+    codes = set(code_map.keys())
+    print(f"[Quotes] 请求代码: {codes}, 市场时段: {market_session}, 缓存TTL: {cache_ttl}s")
+    
+    # 获取 ETF 数据（使用缓存）
+    try:
+        import akshare as ak
+        if _quote_cache['etf']['data'] is None or \
+           _quote_cache['etf']['time'] is None or \
+           (now - _quote_cache['etf']['time']).seconds > cache_ttl:
+            print("[Quotes] 正在获取 ETF 数据...")
+            _quote_cache['etf']['data'] = ak.fund_etf_spot_em()
+            _quote_cache['etf']['time'] = now
+            if _quote_cache['etf']['data'] is not None:
+                print(f"[Quotes] ETF 数据获取成功，共 {len(_quote_cache['etf']['data'])} 条")
+            else:
+                print("[Quotes] ETF 数据为空")
+        
+        df_etf = _quote_cache['etf']['data']
+        if df_etf is not None and len(df_etf) > 0:
+            matched = df_etf[df_etf['代码'].isin(codes)]
+            print(f"[Quotes] ETF 匹配到 {len(matched)} 条")
+            for _, row in matched.iterrows():
+                code = row['代码']
+                symbol = code_map.get(code, code)
+                price = safe_float(row.get('最新价', row.get('现价', 0)))
+                change = safe_float(row.get('涨跌幅', 0))
+                quotes[symbol] = {
+                    'symbol': symbol,
+                    'current_price': price,
+                    'change_percent': change
+                }
+                codes.discard(code)
+    except Exception as e:
+        print(f"ETF批量行情获取失败: {e}")
+    
+    # 获取 LOF 数据
+    if codes:
+        try:
+            import akshare as ak
+            if _quote_cache['lof']['data'] is None or \
+               _quote_cache['lof']['time'] is None or \
+               (now - _quote_cache['lof']['time']).seconds > cache_ttl:
+                print("[Quotes] 正在获取 LOF 数据...")
+                _quote_cache['lof']['data'] = ak.fund_lof_spot_em()
+                _quote_cache['lof']['time'] = now
+            
+            df_lof = _quote_cache['lof']['data']
+            if df_lof is not None and len(df_lof) > 0:
+                for _, row in df_lof[df_lof['代码'].isin(codes)].iterrows():
+                    code = row['代码']
+                    symbol = code_map.get(code, code)
+                    price = safe_float(row.get('最新价', row.get('现价', 0)))
+                    change = safe_float(row.get('涨跌幅', 0))
+                    quotes[symbol] = {
+                        'symbol': symbol,
+                        'current_price': price,
+                        'change_percent': change
+                    }
+                    codes.discard(code)
+        except Exception as e:
+            print(f"LOF批量行情获取失败: {e}")
+    
+    # 获取 A股 数据 - 使用单个查询避免获取全部数据
+    if codes:
+        try:
+            print(f"[Quotes] 正在获取 A股 数据（单个查询）...")
+            for code in list(codes):
+                try:
+                    # 使用东方财富单个股票接口
+                    market = "1" if code.startswith("6") else "0"
+                    url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={market}.{code}&fields=f43,f170,f58"
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    resp = requests.get(url, headers=headers, timeout=3)
+                    if resp.status_code == 200:
+                        data = resp.json().get("data", {})
+                        if data:
+                            symbol = code_map.get(code, code)
+                            price = safe_float(data.get("f43", 0)) / 100
+                            change = safe_float(data.get("f170", 0)) / 100
+                            if price > 0:
+                                quotes[symbol] = {
+                                    'symbol': symbol,
+                                    'current_price': price,
+                                    'change_percent': change
+                                }
+                                codes.discard(code)
+                except Exception as e:
+                    print(f"[Quotes] A股 {code} 获取失败: {e}")
+        except Exception as e:
+            print(f"A股批量行情获取失败: {e}")
+    
+    # 获取场外基金净值数据
+    if codes:
+        remaining_codes = list(codes)
+        print(f"[Quotes] 尝试获取场外基金数据，剩余代码: {remaining_codes}")
+        import re
+        for code in remaining_codes:
+            if code.isdigit() and len(code) == 6:
+                try:
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Referer": "http://fund.eastmoney.com/"
+                    }
+                    info_url = f"http://fundgz.1234567.com.cn/js/{code}.js"
+                    response = requests.get(info_url, headers=headers, timeout=5)
+                    
+                    if response.status_code == 200 and "jsonpgz" in response.text:
+                        json_str = re.search(r'jsonpgz\((.*)\)', response.text)
+                        if json_str:
+                            fund_info = json.loads(json_str.group(1))
+                            symbol = code_map.get(code, code)
+                            nav = safe_float(fund_info.get('gsz', fund_info.get('dwjz', 0)))
+                            change = safe_float(fund_info.get('gszzl', 0))
+                            if nav > 0:
+                                quotes[symbol] = {
+                                    'symbol': symbol,
+                                    'current_price': nav,
+                                    'change_percent': change
+                                }
+                                codes.discard(code)
+                                print(f"[Quotes] 场外基金 {code} 获取成功: 净值={nav}, 涨跌={change}%")
+                except Exception as e:
+                    print(f"[Quotes] 场外基金 {code} 净值获取失败: {e}")
+    
+    # 获取美股/港股数据（使用 yfinance）
+    if codes:
+        remaining_codes = list(codes)
+        print(f"[Quotes] 尝试获取美股/港股数据，剩余代码: {remaining_codes}")
+        try:
+            for code in remaining_codes:
+                if not code.isdigit():
+                    try:
+                        ticker_code = code.replace('_', '.')
+                        ticker = yf.Ticker(ticker_code)
+                        info = ticker.info
+                        if info:
+                            symbol = code_map.get(code, code)
+                            price = safe_float(info.get('currentPrice', info.get('regularMarketPrice', info.get('previousClose', 0))))
+                            prev_close = safe_float(info.get('previousClose', info.get('regularMarketPreviousClose', price)))
+                            if price > 0 and prev_close > 0:
+                                change = ((price - prev_close) / prev_close) * 100
+                            else:
+                                change = safe_float(info.get('regularMarketChangePercent', 0))
+                            if price > 0:
+                                quotes[symbol] = {
+                                    'symbol': symbol,
+                                    'current_price': price,
+                                    'change_percent': round(change, 2)
+                                }
+                                codes.discard(code)
+                                print(f"[Quotes] 美股/港股 {ticker_code}: 价格={price}, 涨跌={change:.2f}%")
+                    except Exception as e:
+                        print(f"[Quotes] 美股/港股 {code} 获取失败: {e}")
+        except Exception as e:
+            print(f"美股/港股批量行情获取失败: {e}")
+    
+    print(f"[Quotes] 返回 {len(quotes)} 条行情数据")
+    # 返回列表格式，与调用代码期望一致
+    return {'status': 'success', 'quotes': list(quotes.values())}
