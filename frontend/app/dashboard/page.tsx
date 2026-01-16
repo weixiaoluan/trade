@@ -279,22 +279,132 @@ export default function DashboardPage() {
 
   // 每个标的的显示周期选择（用于切换显示不同周期的支撑位/阻力位/风险位）
   const [itemDisplayPeriods, setItemDisplayPeriods] = useState<Record<string, string>>({});
+  
+  // 实时价位数据缓存（按周期缓存）
+  const [realtimePricesCache, setRealtimePricesCache] = useState<Record<string, Record<string, {
+    support: number;
+    resistance: number;
+    risk: number;
+    updated_at: string;
+  }>>>({});
+  
+  // 正在加载价位的标的
+  const [loadingPrices, setLoadingPrices] = useState<Set<string>>(new Set());
 
   // 获取标的当前显示周期（默认使用标的的holding_period）
   const getItemDisplayPeriod = useCallback((item: WatchlistItem) => {
     return itemDisplayPeriods[item.symbol] || item.holding_period || 'swing';
   }, [itemDisplayPeriods]);
 
-  // 切换标的显示周期
+  // 从接口实时获取价位数据
+  const fetchRealtimePrices = useCallback(async (symbols: string[], period: string) => {
+    const token = getToken();
+    if (!token || symbols.length === 0) return;
+    
+    // 标记正在加载
+    setLoadingPrices(prev => new Set([...Array.from(prev), ...symbols]));
+    
+    try {
+      const symbolsStr = symbols.join(",");
+      const response = await fetch(`${API_BASE}/api/watchlist/prices/realtime?symbols=${encodeURIComponent(symbolsStr)}&period=${period}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.prices) {
+          // 更新缓存
+          setRealtimePricesCache(prev => {
+            const newCache = { ...prev };
+            Object.entries(data.prices).forEach(([symbol, priceData]: [string, any]) => {
+              if (!priceData.error) {
+                if (!newCache[symbol]) {
+                  newCache[symbol] = {};
+                }
+                newCache[symbol][period] = {
+                  support: priceData.support,
+                  resistance: priceData.resistance,
+                  risk: priceData.risk,
+                  updated_at: priceData.updated_at
+                };
+              }
+            });
+            return newCache;
+          });
+          
+          // 同时更新watchlist状态（用于持久化显示）
+          setWatchlist(prev => prev.map(item => {
+            const priceData = data.prices[item.symbol];
+            if (priceData && !priceData.error) {
+              const updates: Partial<WatchlistItem> = {};
+              if (period === 'short') {
+                updates.short_support = priceData.support;
+                updates.short_resistance = priceData.resistance;
+                updates.short_risk = priceData.risk;
+              } else if (period === 'swing') {
+                updates.swing_support = priceData.support;
+                updates.swing_resistance = priceData.resistance;
+                updates.swing_risk = priceData.risk;
+              } else if (period === 'long') {
+                updates.long_support = priceData.support;
+                updates.long_resistance = priceData.resistance;
+                updates.long_risk = priceData.risk;
+              }
+              return { ...item, ...updates };
+            }
+            return item;
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("获取实时价位失败:", error);
+    } finally {
+      // 移除加载状态
+      setLoadingPrices(prev => {
+        const next = new Set(prev);
+        symbols.forEach(s => next.delete(s));
+        return next;
+      });
+    }
+  }, [getToken]);
+
+  // 切换标的显示周期（同时触发实时获取价位）
   const toggleItemDisplayPeriod = useCallback((symbol: string, currentPeriod: string) => {
     const periods = ['short', 'swing', 'long'];
     const currentIndex = periods.indexOf(currentPeriod);
     const nextPeriod = periods[(currentIndex + 1) % periods.length];
     setItemDisplayPeriods(prev => ({ ...prev, [symbol]: nextPeriod }));
-  }, []);
+    
+    // 检查缓存中是否有该周期的数据，如果没有则实时获取
+    const cachedData = realtimePricesCache[symbol]?.[nextPeriod];
+    const item = watchlist.find(w => w.symbol === symbol);
+    
+    // 检查是否需要获取数据（缓存不存在或数据库中没有对应周期的数据）
+    let needFetch = !cachedData;
+    if (!needFetch && item) {
+      if (nextPeriod === 'short' && !item.short_support) needFetch = true;
+      if (nextPeriod === 'swing' && !item.swing_support) needFetch = true;
+      if (nextPeriod === 'long' && !item.long_support) needFetch = true;
+    }
+    
+    if (needFetch && !loadingPrices.has(symbol)) {
+      fetchRealtimePrices([symbol], nextPeriod);
+    }
+  }, [realtimePricesCache, watchlist, loadingPrices, fetchRealtimePrices]);
 
-  // 根据周期获取对应的价位数据
+  // 根据周期获取对应的价位数据（优先使用缓存，其次使用数据库数据）
   const getPeriodPrices = useCallback((item: WatchlistItem, period: string) => {
+    // 优先使用实时缓存数据
+    const cachedData = realtimePricesCache[item.symbol]?.[period];
+    if (cachedData) {
+      return {
+        support: cachedData.support,
+        resistance: cachedData.resistance,
+        risk: cachedData.risk,
+      };
+    }
+    
+    // 其次使用数据库中的数据
     switch (period) {
       case 'short':
         return {
@@ -316,7 +426,7 @@ export default function DashboardPage() {
           risk: item.swing_risk,
         };
     }
-  }, []);
+  }, [realtimePricesCache]);
 
   // 计算价格与当前价的差异（支撑位/阻力位/风险位）
   // 正数用红色，负数用绿色，触达用黄色
@@ -752,6 +862,97 @@ export default function DashboardPage() {
   // 信号刷新状态
   const [signalRefreshing, setSignalRefreshing] = useState(false);
   const [lastSignalUpdate, setLastSignalUpdate] = useState<string | null>(null);
+  
+  // 价位刷新状态
+  const [pricesRefreshing, setPricesRefreshing] = useState(false);
+  const [lastPricesUpdate, setLastPricesUpdate] = useState<string | null>(null);
+
+  // 批量刷新所有标的的价位数据
+  const refreshAllPrices = useCallback(async () => {
+    const token = getToken();
+    if (!token || watchlist.length === 0) return;
+    
+    setPricesRefreshing(true);
+    
+    try {
+      const symbols = watchlist.map(item => item.symbol);
+      
+      // 分批获取，每批最多10个
+      const batchSize = 10;
+      const periods = ['short', 'swing', 'long'];
+      
+      for (const period of periods) {
+        for (let i = 0; i < symbols.length; i += batchSize) {
+          const batch = symbols.slice(i, i + batchSize);
+          const symbolsStr = batch.join(",");
+          
+          const response = await fetch(`${API_BASE}/api/watchlist/prices/realtime?symbols=${encodeURIComponent(symbolsStr)}&period=${period}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.prices) {
+              // 更新缓存
+              setRealtimePricesCache(prev => {
+                const newCache = { ...prev };
+                Object.entries(data.prices).forEach(([symbol, priceData]: [string, any]) => {
+                  if (!priceData.error) {
+                    if (!newCache[symbol]) {
+                      newCache[symbol] = {};
+                    }
+                    newCache[symbol][period] = {
+                      support: priceData.support,
+                      resistance: priceData.resistance,
+                      risk: priceData.risk,
+                      updated_at: priceData.updated_at
+                    };
+                  }
+                });
+                return newCache;
+              });
+              
+              // 更新watchlist状态
+              setWatchlist(prev => prev.map(item => {
+                const priceData = data.prices[item.symbol];
+                if (priceData && !priceData.error) {
+                  const updates: Partial<WatchlistItem> = {};
+                  if (period === 'short') {
+                    updates.short_support = priceData.support;
+                    updates.short_resistance = priceData.resistance;
+                    updates.short_risk = priceData.risk;
+                  } else if (period === 'swing') {
+                    updates.swing_support = priceData.support;
+                    updates.swing_resistance = priceData.resistance;
+                    updates.swing_risk = priceData.risk;
+                  } else if (period === 'long') {
+                    updates.long_support = priceData.support;
+                    updates.long_resistance = priceData.resistance;
+                    updates.long_risk = priceData.risk;
+                  }
+                  return { ...item, ...updates };
+                }
+                return item;
+              }));
+              
+              if (data.timestamp) {
+                setLastPricesUpdate(data.timestamp);
+              }
+            }
+          }
+          
+          // 批次间延迟
+          if (i + batchSize < symbols.length) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+        }
+      }
+    } catch (error) {
+      console.error("刷新价位失败:", error);
+    } finally {
+      setPricesRefreshing(false);
+    }
+  }, [getToken, watchlist]);
 
   // 获取实时交易信号
   const fetchRealtimeSignals = useCallback(async (forceRefresh: boolean = false) => {
@@ -2212,6 +2413,16 @@ export default function DashboardPage() {
               <RefreshCw className={`w-3.5 h-3.5 ${signalRefreshing ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">{signalRefreshing ? '刷新中...' : '刷新信号'}</span>
             </button>
+            {/* 价位刷新按钮 */}
+            <button
+              onClick={refreshAllPrices}
+              disabled={pricesRefreshing}
+              className="flex items-center gap-1.5 px-2 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-all disabled:opacity-50 text-xs sm:text-sm"
+              title={lastPricesUpdate ? `上次更新: ${new Date(lastPricesUpdate).toLocaleTimeString('zh-CN')}` : '刷新价位'}
+            >
+              <TrendingUp className={`w-3.5 h-3.5 ${pricesRefreshing ? 'animate-pulse' : ''}`} />
+              <span className="hidden sm:inline">{pricesRefreshing ? '刷新中...' : '刷新价位'}</span>
+            </button>
             {/* 排序选择 */}
             <select
               value={sortField ? `${sortField}:${sortOrder}` : "default"}
@@ -2498,13 +2709,17 @@ export default function DashboardPage() {
                               <div className="text-[10px] text-slate-500 mb-0.5">周期</div>
                               <button
                                 onClick={() => toggleItemDisplayPeriod(item.symbol, getItemDisplayPeriod(item))}
-                                className={`px-1.5 py-0.5 text-[10px] rounded cursor-pointer hover:opacity-80 ${
+                                disabled={loadingPrices.has(item.symbol)}
+                                className={`px-1.5 py-0.5 text-[10px] rounded cursor-pointer hover:opacity-80 disabled:opacity-50 flex items-center gap-1 ${
                                   getItemDisplayPeriod(item) === 'short' ? 'bg-amber-500/10 text-amber-400' :
                                   getItemDisplayPeriod(item) === 'long' ? 'bg-violet-500/10 text-violet-400' :
                                   'bg-indigo-500/10 text-indigo-400'
                                 }`}
-                                title="点击切换周期"
+                                title="点击切换周期（实时获取价位）"
                               >
+                                {loadingPrices.has(item.symbol) && (
+                                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                )}
                                 {getItemDisplayPeriod(item) === 'short' ? '短线' : 
                                  getItemDisplayPeriod(item) === 'long' ? '中长线' : '波段'}
                               </button>
@@ -2746,13 +2961,17 @@ export default function DashboardPage() {
                       <div className="w-16 flex-shrink-0">
                         <button
                           onClick={() => toggleItemDisplayPeriod(item.symbol, getItemDisplayPeriod(item))}
-                          className={`px-2.5 py-1 text-sm rounded-md cursor-pointer hover:opacity-80 transition-opacity ${
+                          disabled={loadingPrices.has(item.symbol)}
+                          className={`px-2.5 py-1 text-sm rounded-md cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50 flex items-center gap-1 ${
                             getItemDisplayPeriod(item) === 'short' ? 'bg-amber-500/10 text-amber-400' :
                             getItemDisplayPeriod(item) === 'long' ? 'bg-violet-500/10 text-violet-400' :
                             'bg-indigo-500/10 text-indigo-400'
                           }`}
-                          title="点击切换周期"
+                          title="点击切换周期（实时获取价位）"
                         >
+                          {loadingPrices.has(item.symbol) && (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          )}
                           {getItemDisplayPeriod(item) === 'short' ? '短线' : 
                            getItemDisplayPeriod(item) === 'long' ? '中长线' : '波段'}
                         </button>

@@ -6101,6 +6101,331 @@ async def reset_sim_account(authorization: str = Header(None)):
 
 
 # ============================================
+# 实时价位获取 API
+# ============================================
+
+@app.get("/api/watchlist/prices/realtime")
+async def get_realtime_prices(symbols: str, period: str = "swing", authorization: str = Header(None)):
+    """获取实时支撑位/阻力位/风险位
+    
+    根据最新行情数据实时计算多周期的支撑位、阻力位、风险位。
+    使用ATR动态计算，适用于自选列表的价位实时更新。
+    
+    Args:
+        symbols: 逗号分隔的标的代码列表（最多10个）
+        period: 周期类型 (short/swing/long)，默认swing
+    
+    Returns:
+        包含每个标的的支撑位/阻力位/风险位数据
+    
+    注意：此接口仅供技术分析参考，不构成任何投资建议。
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    
+    if len(symbol_list) > 10:
+        raise HTTPException(status_code=400, detail="单次最多查询10个标的")
+    
+    if period not in ['short', 'swing', 'long']:
+        period = 'swing'
+    
+    # 使用线程池异步执行
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        prices = await loop.run_in_executor(executor, calculate_realtime_prices, symbol_list, period, username)
+    
+    return {
+        "status": "success", 
+        "prices": prices,
+        "period": period,
+        "timestamp": get_beijing_now().isoformat(),
+        "disclaimer": "以上价位仅为技术分析工具输出，不构成任何投资建议。市场有风险，投资需谨慎。"
+    }
+
+
+def calculate_realtime_prices(symbols: list, period: str = "swing", username: str = None) -> dict:
+    """计算实时支撑位/阻力位/风险位
+    
+    使用ATR动态计算各周期的关键价位：
+    - 支撑位：基于技术分析的支撑位
+    - 阻力位：基于技术分析的阻力位  
+    - 风险位：止损位 = 当前价 - n × ATR（根据周期调整n值）
+    
+    Args:
+        symbols: 标的代码列表
+        period: 周期类型 (short/swing/long)
+        username: 用户名（用于持久化到数据库）
+    """
+    import time
+    from web.database import db_update_watchlist_ai_prices
+    
+    prices = {}
+    
+    # 根据周期设置ATR倍数
+    atr_multipliers = {
+        'short': {'support': 0.5, 'resistance': 1.0, 'risk': 1.5},   # 短线：支撑0.5ATR，阻力1ATR，风险1.5ATR
+        'swing': {'support': 1.0, 'resistance': 1.5, 'risk': 2.0},   # 波段：支撑1ATR，阻力1.5ATR，风险2ATR
+        'long': {'support': 1.5, 'resistance': 2.0, 'risk': 3.0},    # 中长线：支撑1.5ATR，阻力2ATR，风险3ATR
+    }
+    
+    multipliers = atr_multipliers.get(period, atr_multipliers['swing'])
+    
+    for symbol in symbols:
+        try:
+            start_time = time.time()
+            
+            # 1. 获取行情数据
+            stock_data = get_stock_data(symbol, period="1y")
+            stock_data_dict = json.loads(stock_data)
+            
+            if stock_data_dict.get("status") != "success":
+                prices[symbol] = {"error": "获取行情数据失败"}
+                continue
+            
+            # 2. 计算技术指标（主要获取ATR）
+            indicators_json = calculate_all_indicators(stock_data)
+            indicators_dict = json.loads(indicators_json)
+            
+            if indicators_dict.get("status") != "success":
+                prices[symbol] = {"error": "计算技术指标失败"}
+                continue
+            
+            indicators = indicators_dict.get("indicators", indicators_dict)
+            current_price = indicators.get("latest_price", 0)
+            
+            # 获取ATR值
+            atr_data = indicators.get("atr", {})
+            atr = atr_data.get("value", current_price * 0.02)  # 默认2%作为ATR
+            
+            # 3. 获取支撑阻力位
+            sr_json = get_support_resistance_levels(stock_data)
+            sr_dict = json.loads(sr_json)
+            
+            support_levels = [l.get("price", 0) for l in sr_dict.get("support_levels", []) if l.get("price", 0) > 0]
+            resistance_levels = [l.get("price", 0) for l in sr_dict.get("resistance_levels", []) if l.get("price", 0) > 0]
+            
+            # 4. 计算各周期的关键价位
+            # 支撑位：取最近的技术支撑位，或使用 当前价 - ATR倍数
+            if support_levels:
+                # 找到最接近当前价的支撑位
+                nearest_support = max([s for s in support_levels if s < current_price], default=None)
+                if nearest_support:
+                    support = nearest_support
+                else:
+                    support = current_price - atr * multipliers['support']
+            else:
+                support = current_price - atr * multipliers['support']
+            
+            # 阻力位：取最近的技术阻力位，或使用 当前价 + ATR倍数
+            if resistance_levels:
+                # 找到最接近当前价的阻力位
+                nearest_resistance = min([r for r in resistance_levels if r > current_price], default=None)
+                if nearest_resistance:
+                    resistance = nearest_resistance
+                else:
+                    resistance = current_price + atr * multipliers['resistance']
+            else:
+                resistance = current_price + atr * multipliers['resistance']
+            
+            # 风险位（止损位）：当前价 - ATR倍数
+            risk = current_price - atr * multipliers['risk']
+            
+            # 5. 构建返回数据
+            price_data = {
+                "current_price": round(current_price, 4),
+                "support": round(support, 4),
+                "resistance": round(resistance, 4),
+                "risk": round(risk, 4),
+                "atr": round(atr, 4),
+                "atr_pct": round(atr / current_price * 100, 2) if current_price > 0 else 0,
+                "period": period,
+                "calc_time": round(time.time() - start_time, 2),
+                "updated_at": get_beijing_now().isoformat()
+            }
+            
+            prices[symbol] = price_data
+            
+            # 6. 持久化到数据库（如果提供了用户名）
+            if username:
+                try:
+                    # 构建多周期价位数据
+                    multi_period_prices = {
+                        period: {
+                            'support': round(support, 4),
+                            'resistance': round(resistance, 4),
+                            'risk': round(risk, 4)
+                        }
+                    }
+                    db_update_watchlist_ai_prices(
+                        username=username,
+                        symbol=symbol,
+                        multi_period_prices=multi_period_prices
+                    )
+                except Exception as db_err:
+                    print(f"[Prices] {symbol} 价位持久化失败: {db_err}")
+            
+            print(f"[Prices] {symbol} {period}周期价位计算完成: 支撑={support:.4f}, 阻力={resistance:.4f}, 风险={risk:.4f}, ATR={atr:.4f}, 耗时={time.time()-start_time:.2f}s")
+            
+        except Exception as e:
+            print(f"[Prices] {symbol} 价位计算失败: {e}")
+            import traceback
+            traceback.print_exc()
+            prices[symbol] = {"error": str(e)}
+    
+    return prices
+
+
+@app.post("/api/watchlist/prices/batch-update")
+async def batch_update_prices(
+    data: dict,
+    background_tasks: BackgroundTasks,
+    authorization: str = Header(None)
+):
+    """批量更新自选列表的支撑位/阻力位/风险位
+    
+    后台异步更新所有自选标的的多周期价位数据。
+    
+    Args:
+        data: 包含 symbols 列表的字典
+    
+    Returns:
+        任务状态
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    username = user['username']
+    symbols = data.get('symbols', [])
+    
+    if not symbols:
+        raise HTTPException(status_code=400, detail="请提供标的列表")
+    
+    if len(symbols) > 50:
+        raise HTTPException(status_code=400, detail="单次最多更新50个标的")
+    
+    # 后台异步执行批量更新
+    background_tasks.add_task(batch_update_all_period_prices, symbols, username)
+    
+    return {
+        "status": "success",
+        "message": f"已开始后台更新 {len(symbols)} 个标的的价位数据",
+        "symbols_count": len(symbols)
+    }
+
+
+def batch_update_all_period_prices(symbols: list, username: str):
+    """后台任务：批量更新所有周期的价位数据"""
+    import time
+    from web.database import db_update_watchlist_ai_prices
+    
+    print(f"[Prices] 开始批量更新 {len(symbols)} 个标的的多周期价位")
+    
+    for symbol in symbols:
+        try:
+            start_time = time.time()
+            
+            # 获取行情数据
+            stock_data = get_stock_data(symbol, period="1y")
+            stock_data_dict = json.loads(stock_data)
+            
+            if stock_data_dict.get("status") != "success":
+                print(f"[Prices] {symbol} 获取行情数据失败")
+                continue
+            
+            # 计算技术指标
+            indicators_json = calculate_all_indicators(stock_data)
+            indicators_dict = json.loads(indicators_json)
+            
+            if indicators_dict.get("status") != "success":
+                print(f"[Prices] {symbol} 计算技术指标失败")
+                continue
+            
+            indicators = indicators_dict.get("indicators", indicators_dict)
+            current_price = indicators.get("latest_price", 0)
+            
+            # 获取ATR值
+            atr_data = indicators.get("atr", {})
+            atr = atr_data.get("value", current_price * 0.02)
+            
+            # 获取支撑阻力位
+            sr_json = get_support_resistance_levels(stock_data)
+            sr_dict = json.loads(sr_json)
+            
+            support_levels = [l.get("price", 0) for l in sr_dict.get("support_levels", []) if l.get("price", 0) > 0]
+            resistance_levels = [l.get("price", 0) for l in sr_dict.get("resistance_levels", []) if l.get("price", 0) > 0]
+            
+            # ATR倍数配置
+            atr_configs = {
+                'short': {'support': 0.5, 'resistance': 1.0, 'risk': 1.5},
+                'swing': {'support': 1.0, 'resistance': 1.5, 'risk': 2.0},
+                'long': {'support': 1.5, 'resistance': 2.0, 'risk': 3.0},
+            }
+            
+            # 计算三个周期的价位
+            multi_period_prices = {}
+            for period, multipliers in atr_configs.items():
+                # 支撑位
+                if support_levels:
+                    nearest_support = max([s for s in support_levels if s < current_price], default=None)
+                    support = nearest_support if nearest_support else current_price - atr * multipliers['support']
+                else:
+                    support = current_price - atr * multipliers['support']
+                
+                # 阻力位
+                if resistance_levels:
+                    nearest_resistance = min([r for r in resistance_levels if r > current_price], default=None)
+                    resistance = nearest_resistance if nearest_resistance else current_price + atr * multipliers['resistance']
+                else:
+                    resistance = current_price + atr * multipliers['resistance']
+                
+                # 风险位
+                risk = current_price - atr * multipliers['risk']
+                
+                multi_period_prices[period] = {
+                    'support': round(support, 4),
+                    'resistance': round(resistance, 4),
+                    'risk': round(risk, 4)
+                }
+            
+            # 持久化到数据库
+            db_update_watchlist_ai_prices(
+                username=username,
+                symbol=symbol,
+                multi_period_prices=multi_period_prices
+            )
+            
+            print(f"[Prices] {symbol} 多周期价位更新完成, 耗时={time.time()-start_time:.2f}s")
+            
+            # 避免请求过快
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"[Prices] {symbol} 价位更新失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    print(f"[Prices] 批量更新完成")
+
+
+# ============================================
 # 启动服务
 # ============================================
 
