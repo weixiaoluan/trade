@@ -340,8 +340,6 @@ export default function SimTradePage() {
       }
     } catch (error) {
       console.error("获取账户信息失败:", error);
-    } finally {
-      setLoading(false);
     }
   }, [getToken]);
 
@@ -522,35 +520,51 @@ export default function SimTradePage() {
     );
   }, [getToken, showConfirmModal, showAlertModal, fetchAccountInfo, fetchRecords, fetchMonitorData]);
 
-  // 初始化加载
+  // 初始化加载 - 优化：先加载核心数据，再加载次要数据
   useEffect(() => {
-    fetchAccountInfo();
-    fetchRecords();
-    fetchMonitorData();
-  }, [fetchAccountInfo, fetchRecords, fetchMonitorData]);
+    const initLoad = async () => {
+      const token = getToken();
+      if (!token) return;
+      
+      // 先加载核心账户数据（最重要）
+      await fetchAccountInfo();
+      setLoading(false);
+      
+      // 后台加载次要数据（不阻塞渲染）
+      fetchRecords();
+      fetchMonitorData();
+    };
+    initLoad();
+  }, [getToken, fetchAccountInfo, fetchRecords, fetchMonitorData]);
 
-  // 实时行情轮询
+  // 实时行情轮询 - 优化：延迟启动，降低非交易时段频率
   useEffect(() => {
-    if (positions.length === 0) return;
-    fetchQuotesOnly();
-    const getInterval = () => isTradingTime() ? 1000 : 30000;  // 交易时间1秒，非交易30秒
+    if (loading || positions.length === 0) return;
+    
+    // 延迟500ms后开始轮询，避免阻塞初始渲染
+    const startPolling = setTimeout(() => {
+      fetchQuotesOnly();
+    }, 500);
+    
+    const getInterval = () => isTradingTime() ? 3000 : 60000;  // 交易时间3秒，非交易60秒
     let intervalId = setInterval(() => { fetchQuotesOnly(); }, getInterval());
-    const checkIntervalId = setInterval(() => {
-      clearInterval(intervalId);
-      intervalId = setInterval(() => { fetchQuotesOnly(); }, getInterval());
-    }, 60000);
-    return () => { clearInterval(intervalId); clearInterval(checkIntervalId); };
-  }, [positions.length, fetchQuotesOnly, isTradingTime]);
+    
+    return () => { 
+      clearTimeout(startPolling);
+      clearInterval(intervalId); 
+    };
+  }, [loading, positions.length, fetchQuotesOnly, isTradingTime]);
 
-  // 监控数据轮询
+  // 监控数据轮询 - 优化：降低频率，仅在监控tab激活时轮询
   useEffect(() => {
+    if (loading || activeTab !== 'monitor') return;
+    
     const interval = setInterval(() => {
-      if (activeTab === 'monitor') {
-        fetchMonitorData();
-      }
-    }, isTradingTime() ? 5000 : 30000);  // 交易时间5秒，非交易30秒
+      fetchMonitorData();
+    }, isTradingTime() ? 10000 : 60000);  // 交易时间10秒，非交易60秒
+    
     return () => clearInterval(interval);
-  }, [activeTab, fetchMonitorData, isTradingTime]);
+  }, [loading, activeTab, fetchMonitorData, isTradingTime]);
 
   const formatMoney = (value: number) => {
     if (Math.abs(value) >= 10000) return `${(value / 10000).toFixed(2)}万`;
