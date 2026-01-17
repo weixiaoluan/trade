@@ -26,6 +26,10 @@ from .momentum_rotation import MomentumRotationStrategy, MOMENTUM_ROTATION_DEFIN
 from .bias_reversion import BiasReversionStrategy, BIAS_REVERSION_DEFINITION
 from .risk_parity import RiskParityStrategy, RISK_PARITY_DEFINITION
 from .adaptive_ma import AdaptiveMAStrategy, ADAPTIVE_MA_DEFINITION
+from .cb_intraday_burst import (
+    CBIntradayBurstStrategy, CB_INTRADAY_BURST_DEFINITION,
+    CBPosition, CBIntradayBurstBT, run_backtest
+)
 from .executor import (
     StrategyExecutor, UserStrategyConfig, ExecutionResult,
     resolve_signal_conflicts, validate_capital_allocation, STRATEGY_CLASSES
@@ -71,6 +75,12 @@ __all__ = [
     'RISK_PARITY_DEFINITION',
     'AdaptiveMAStrategy',
     'ADAPTIVE_MA_DEFINITION',
+    # CB Intraday Burst
+    'CBIntradayBurstStrategy',
+    'CB_INTRADAY_BURST_DEFINITION',
+    'CBPosition',
+    'CBIntradayBurstBT',
+    'run_backtest',
     # Executor
     'StrategyExecutor',
     'UserStrategyConfig',
@@ -134,6 +144,7 @@ def _ensure_strategies_registered():
         ETF_ROTATION_DEFINITION,
         BINARY_ROTATION_DEFINITION,
         INDUSTRY_MOMENTUM_DEFINITION,
+        CB_INTRADAY_BURST_DEFINITION,
     ]
     for strategy in strategies_to_register:
         if StrategyRegistry.get_by_id(strategy.id) is None:

@@ -14,6 +14,7 @@ from typing import List, Dict, Optional
 
 class StrategyCategory(Enum):
     """策略类别"""
+    INTRADAY = "intraday"     # 日内 T+0
     SHORT_TERM = "short"      # 短线 1-5天
     SWING = "swing"           # 波段 1-4周
     LONG_TERM = "long"        # 长线 1月+

@@ -31,6 +31,7 @@ from .etf_rotation import (
     BinaryRotationStrategy, 
     IndustryMomentumStrategy
 )
+from .cb_intraday_burst import CBIntradayBurstStrategy
 
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ STRATEGY_CLASSES: Dict[str, Type[BaseStrategy]] = {
     'etf_momentum_rotation': ETFMomentumRotationStrategy,
     'binary_rotation': BinaryRotationStrategy,
     'industry_momentum': IndustryMomentumStrategy,
+    'cb_intraday_burst': CBIntradayBurstStrategy,
 }
 
 
