@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, Info, CheckCircle, XCircle, HelpCircle } from "lucide-react";
 
@@ -15,7 +16,7 @@ interface ConfirmModalProps {
   loading?: boolean;
 }
 
-export function ConfirmModal({
+export const ConfirmModal = memo(function ConfirmModal({
   isOpen,
   onClose,
   onConfirm,
@@ -138,4 +139,4 @@ export function ConfirmModal({
       )}
     </AnimatePresence>
   );
-}
+});

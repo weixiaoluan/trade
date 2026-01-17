@@ -1,7 +1,8 @@
 "use client";
 
+import { memo, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, X, Info, CheckCircle, XCircle } from "lucide-react";
+import { AlertTriangle, Info, CheckCircle, XCircle } from "lucide-react";
 
 interface AlertModalProps {
   isOpen: boolean;
@@ -12,7 +13,7 @@ interface AlertModalProps {
   confirmText?: string;
 }
 
-export function AlertModal({
+const AlertModalComponent = memo(function AlertModal({
   isOpen,
   onClose,
   title,
@@ -105,4 +106,6 @@ export function AlertModal({
       )}
     </AnimatePresence>
   );
-}
+});
+
+export const AlertModal = AlertModalComponent;
