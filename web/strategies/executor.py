@@ -32,6 +32,7 @@ from .etf_rotation import (
     IndustryMomentumStrategy
 )
 from .cb_intraday_burst import CBIntradayBurstStrategy
+from .rsrs_rotation import RSRSSectorRotationStrategy
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ STRATEGY_CLASSES: Dict[str, Type[BaseStrategy]] = {
     'binary_rotation': BinaryRotationStrategy,
     'industry_momentum': IndustryMomentumStrategy,
     'cb_intraday_burst': CBIntradayBurstStrategy,
+    'rsrs_sector_rotation': RSRSSectorRotationStrategy,
 }
 
 

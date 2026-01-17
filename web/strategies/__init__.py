@@ -30,6 +30,11 @@ from .cb_intraday_burst import (
     CBIntradayBurstStrategy, CB_INTRADAY_BURST_DEFINITION,
     CBPosition, CBIntradayBurstBT, run_backtest
 )
+from .rsrs_rotation import (
+    RSRSSectorRotationStrategy, RSRS_SECTOR_ROTATION_DEFINITION,
+    calculate_rsrs_beta, calculate_rsrs_score, calculate_momentum,
+    RSRSSectorRotationBTStrategy, run_rsrs_backtest
+)
 from .executor import (
     StrategyExecutor, UserStrategyConfig, ExecutionResult,
     resolve_signal_conflicts, validate_capital_allocation, STRATEGY_CLASSES
@@ -81,6 +86,14 @@ __all__ = [
     'CBPosition',
     'CBIntradayBurstBT',
     'run_backtest',
+    # RSRS Sector Rotation
+    'RSRSSectorRotationStrategy',
+    'RSRS_SECTOR_ROTATION_DEFINITION',
+    'calculate_rsrs_beta',
+    'calculate_rsrs_score',
+    'calculate_momentum',
+    'RSRSSectorRotationBTStrategy',
+    'run_rsrs_backtest',
     # Executor
     'StrategyExecutor',
     'UserStrategyConfig',
@@ -145,6 +158,7 @@ def _ensure_strategies_registered():
         BINARY_ROTATION_DEFINITION,
         INDUSTRY_MOMENTUM_DEFINITION,
         CB_INTRADAY_BURST_DEFINITION,
+        RSRS_SECTOR_ROTATION_DEFINITION,
     ]
     for strategy in strategies_to_register:
         if StrategyRegistry.get_by_id(strategy.id) is None:
