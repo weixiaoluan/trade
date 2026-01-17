@@ -137,18 +137,22 @@ COMMISSION_CONFIG = {
     'stock': {
         'rate': 0.854,      # 股票佣金万分之0.854
         'min_fee': 1.0,     # 最低1元
+        'min_amount': 1000, # 0.1万起收（交易金额≥1000元才收费）
     },
     'etf': {
         'rate': 0.6,        # ETF佣金万分之0.6
         'min_fee': 1.0,     # 最低1元
+        'min_amount': 1000, # 0.1万起收（交易金额≥1000元才收费）
     },
     'convertible_bond': {
         'rate': 0.5,        # 可转债佣金万分之0.5
         'min_fee': 1.0,     # 最低1元
+        'min_amount': 1000, # 0.1万起收（交易金额≥1000元才收费）
     },
     'hk_connect': {
         'rate': 1.2,        # 港股通万分之1.2
         'min_fee': 5.0,     # 最低5港元
+        'min_amount': 0,    # 无最低金额限制
     },
     # 印花税（仅卖出收取）
     'stamp_duty': {
@@ -193,9 +197,14 @@ def calculate_commission(symbol: str, amount: float, trade_type: str = 'buy') ->
         # 股票
         config = COMMISSION_CONFIG['stock']
     
-    # 计算佣金
-    commission = amount * config['rate'] / 10000
-    commission = max(commission, config['min_fee'])
+    # 计算佣金（考虑0.1万起收）
+    min_amount = config.get('min_amount', 0)
+    if amount < min_amount:
+        # 金额不足起收标准，按最低收费
+        commission = config['min_fee']
+    else:
+        commission = amount * config['rate'] / 10000
+        commission = max(commission, config['min_fee'])
     
     # 计算印花税（仅卖出）
     stamp_duty = 0
