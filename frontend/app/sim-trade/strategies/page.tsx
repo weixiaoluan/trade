@@ -187,13 +187,14 @@ export default function StrategiesPage() {
       const isAuth = checkAuth();
       if (!isAuth) return;
       
-      await Promise.all([
-        fetchStrategies(),
-        fetchUserConfigs(),
-        fetchPerformances(),
-        fetchAccountInfo(),
-      ]);
+      // 优先加载策略列表，快速显示页面
+      await fetchStrategies();
       setLoading(false);
+      
+      // 后台加载次要数据
+      fetchUserConfigs();
+      fetchPerformances();
+      fetchAccountInfo();
     };
     init();
   }, [checkAuth, fetchStrategies, fetchUserConfigs, fetchPerformances, fetchAccountInfo]);
