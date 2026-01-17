@@ -151,6 +151,22 @@ interface QuoteData {
   change_percent: number;
 }
 
+interface EnabledStrategy {
+  strategy_id: string;
+  strategy_name: string;
+  allocated_capital: number;
+  enabled: boolean;
+  category: string;
+  stats: {
+    total_trades: number;
+    buy_count: number;
+    sell_count: number;
+    total_profit: number;
+    win_rate: number;
+    avg_profit_pct: number;
+  };
+}
+
 export default function SimTradePage() {
   const router = useRouter();
   const [user, setUser] = useState<UserInfo | null>(null);
@@ -170,6 +186,9 @@ export default function SimTradePage() {
   const [tradeLogs, setTradeLogs] = useState<TradeLog[]>([]);
   const [monitorLogs, setMonitorLogs] = useState<MonitorLog[]>([]);
   const [monitorLoading, setMonitorLoading] = useState(false);
+
+  // 启用的策略
+  const [enabledStrategies, setEnabledStrategies] = useState<EnabledStrategy[]>([]);
 
   const [activeTab, setActiveTab] = useState<'monitor' | 'positions' | 'records' | 'stats'>('monitor');
   const [refreshing, setRefreshing] = useState(false);
@@ -393,6 +412,23 @@ export default function SimTradePage() {
     }
   }, [getToken]);
 
+  // 获取启用的策略
+  const fetchEnabledStrategies = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_BASE}/api/sim-trade/enabled-strategies`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setEnabledStrategies(data.strategies || []);
+      }
+    } catch (error) {
+      console.error("获取启用策略失败:", error);
+    }
+  }, [getToken]);
+
   // 手动刷新
   const updatePrices = useCallback(async () => {
     const token = getToken();
@@ -533,9 +569,10 @@ export default function SimTradePage() {
       // 后台加载次要数据（不阻塞渲染）
       fetchRecords();
       fetchMonitorData();
+      fetchEnabledStrategies();
     };
     initLoad();
-  }, [getToken, fetchAccountInfo, fetchRecords, fetchMonitorData]);
+  }, [getToken, fetchAccountInfo, fetchRecords, fetchMonitorData, fetchEnabledStrategies]);
 
   // 实时行情轮询 - 优化：延迟启动，降低非交易时段频率
   useEffect(() => {
@@ -780,24 +817,71 @@ export default function SimTradePage() {
           )}
         </div>
 
-        {/* 策略池入口 */}
-        <button
-          onClick={() => router.push('/sim-trade/strategies')}
-          className="w-full bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-xl border border-indigo-500/30 p-4 hover:from-indigo-500/30 hover:to-purple-500/30 transition-all"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-indigo-500/20">
-                <Zap className="w-5 h-5 text-indigo-400" />
+        {/* 策略池入口 + 已启用策略 */}
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+          <button
+            onClick={() => router.push('/sim-trade/strategies')}
+            className="w-full p-4 hover:bg-slate-700/30 transition-all"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-indigo-500/20">
+                  <Zap className="w-5 h-5 text-indigo-400" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-medium text-white">策略池</div>
+                  <div className="text-xs text-slate-400">
+                    {enabledStrategies.length > 0 
+                      ? `已启用 ${enabledStrategies.length} 个策略` 
+                      : '选择和配置量化交易策略'}
+                  </div>
+                </div>
               </div>
-              <div className="text-left">
-                <div className="text-sm font-medium text-white">策略池</div>
-                <div className="text-xs text-slate-400">选择和配置量化交易策略</div>
-              </div>
+              <ChevronDown className="w-5 h-5 text-slate-400 -rotate-90" />
             </div>
-            <ChevronDown className="w-5 h-5 text-slate-400 -rotate-90" />
-          </div>
-        </button>
+          </button>
+          
+          {/* 已启用策略列表 */}
+          {enabledStrategies.length > 0 && (
+            <div className="px-4 pb-4 space-y-2">
+              {enabledStrategies.map(strategy => (
+                <div key={strategy.strategy_id} className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-white">{strategy.strategy_name}</span>
+                      <span className="px-1.5 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400">运行中</span>
+                    </div>
+                    <span className="text-xs text-slate-400">¥{strategy.allocated_capital.toLocaleString()}</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div>
+                      <span className="text-slate-500">交易</span>
+                      <span className="ml-1 text-white">{strategy.stats.total_trades}笔</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">胜率</span>
+                      <span className={`ml-1 ${strategy.stats.win_rate >= 50 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {strategy.stats.win_rate.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">盈亏</span>
+                      <span className={`ml-1 ${strategy.stats.total_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {strategy.stats.total_profit >= 0 ? '+' : ''}¥{strategy.stats.total_profit.toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">均收益</span>
+                      <span className={`ml-1 ${strategy.stats.avg_profit_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {strategy.stats.avg_profit_pct >= 0 ? '+' : ''}{strategy.stats.avg_profit_pct.toFixed(2)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Tab 切换 */}
         <div className="flex gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">

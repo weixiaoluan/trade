@@ -7584,6 +7584,44 @@ async def execute_strategy_now(
     return result
 
 
+@app.get("/api/sim-trade/enabled-strategies")
+async def get_enabled_strategies_with_stats(
+    authorization: str = Header(None)
+):
+    """获取用户启用的策略列表及交易统计"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_get_enabled_strategy_configs, db_get_strategy_trade_stats
+    from web.strategies import StrategyRegistry
+    
+    # 获取启用的策略配置
+    configs = db_get_enabled_strategy_configs(user["username"])
+    
+    result = []
+    for cfg in configs:
+        strategy_id = cfg.get('strategy_id')
+        strategy = StrategyRegistry.get_by_id(strategy_id)
+        
+        # 获取交易统计
+        stats = db_get_strategy_trade_stats(user["username"], strategy_id)
+        
+        result.append({
+            'strategy_id': strategy_id,
+            'strategy_name': strategy.name if strategy else strategy_id,
+            'allocated_capital': cfg.get('allocated_capital', 0),
+            'enabled': cfg.get('enabled', False),
+            'category': strategy.category.value if strategy else 'unknown',
+            'stats': stats
+        })
+    
+    return {'strategies': result, 'count': len(result)}
+
+
 # ============================================
 # ETF策略相关API
 # ============================================
