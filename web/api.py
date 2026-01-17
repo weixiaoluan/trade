@@ -7219,9 +7219,12 @@ class StrategyConfigUpdateRequest(BaseModel):
 @app.get("/api/strategies")
 async def get_all_strategies(authorization: str = Header(None)):
     """获取所有预设策略列表"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     # 确保策略已注册
     from web.strategies import (
@@ -7263,9 +7266,12 @@ async def get_all_strategies(authorization: str = Header(None)):
 @app.get("/api/strategies/{strategy_id}")
 async def get_strategy_detail(strategy_id: str, authorization: str = Header(None)):
     """获取策略详情"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     strategy = StrategyRegistry.get_by_id(strategy_id)
     if not strategy:
@@ -7291,9 +7297,12 @@ async def get_strategy_detail(strategy_id: str, authorization: str = Header(None
 @app.get("/api/strategies/category/{category}")
 async def get_strategies_by_category(category: str, authorization: str = Header(None)):
     """按类别获取策略"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     try:
         cat = StrategyCategory(category)
@@ -7317,9 +7326,12 @@ async def get_strategies_by_category(category: str, authorization: str = Header(
 @app.get("/api/sim-trade/strategies")
 async def get_user_strategy_configs(authorization: str = Header(None)):
     """获取用户策略配置"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     configs = db_get_user_strategy_configs(user["username"])
     
@@ -7346,9 +7358,12 @@ async def add_strategy_config(
     authorization: str = Header(None)
 ):
     """添加策略配置"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     # 验证策略是否存在
     strategy = StrategyRegistry.get_by_id(request.strategy_id)
@@ -7383,9 +7398,12 @@ async def update_strategy_config(
     authorization: str = Header(None)
 ):
     """更新策略配置"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     # 检查配置是否存在
     config = db_get_strategy_config(user["username"], strategy_id)
@@ -7420,9 +7438,12 @@ async def update_strategy_config(
 @app.delete("/api/sim-trade/strategies/{strategy_id}")
 async def delete_strategy_config(strategy_id: str, authorization: str = Header(None)):
     """删除策略配置"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     success = db_delete_strategy_config(user["username"], strategy_id)
     
@@ -7435,9 +7456,12 @@ async def delete_strategy_config(strategy_id: str, authorization: str = Header(N
 @app.get("/api/sim-trade/strategies/performance")
 async def get_all_strategies_perf(authorization: str = Header(None)):
     """获取所有策略性能对比"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     performances = db_get_all_strategies_performance(user["username"])
     
@@ -7457,9 +7481,12 @@ async def get_strategy_perf(
     authorization: str = Header(None)
 ):
     """获取单策略性能详情"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     performances = db_get_strategy_performance(
         user["username"], strategy_id, start_date, end_date
@@ -7530,9 +7557,12 @@ async def get_etf_strategies():
 @app.get("/api/etf/strategies/{strategy_id}/status")
 async def get_etf_strategy_status_api(strategy_id: str, authorization: str = Header(None)):
     """获取ETF策略当前状态"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     from web.strategies import get_etf_strategy_status
     
@@ -7547,9 +7577,12 @@ async def get_etf_strategy_status_api(strategy_id: str, authorization: str = Hea
 @app.post("/api/etf/strategies/{strategy_id}/execute")
 async def execute_etf_strategy_api(strategy_id: str, authorization: str = Header(None)):
     """手动执行ETF策略"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     from web.strategies import execute_etf_strategy
     
@@ -7613,9 +7646,12 @@ async def get_etf_daily_api(symbol: str, days: int = 60):
 @app.post("/api/etf/sync")
 async def sync_etf_data_api(authorization: str = Header(None)):
     """手动触发ETF数据同步"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     from web.data import get_sync_service
     
@@ -7637,9 +7673,12 @@ async def sync_etf_data_api(authorization: str = Header(None)):
 @app.post("/api/etf/init")
 async def init_etf_data_api(authorization: str = Header(None)):
     """初始化ETF数据（首次使用）"""
-    user = await get_current_user(authorization)
-    if not user:
+    if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
     
     from web.data import init_etf_data
     
