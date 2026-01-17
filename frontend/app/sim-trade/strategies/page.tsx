@@ -102,35 +102,28 @@ export default function StrategiesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const getAuthHeader = useCallback((): Record<string, string> => {
-    const token = localStorage.getItem("auth_token");
+    const token = localStorage.getItem("token");
     if (token) {
       return { Authorization: `Bearer ${token}` };
     }
     return {};
   }, []);
 
-  const checkAuth = useCallback(async () => {
-    const token = localStorage.getItem("auth_token");
-    if (!token) {
+  const checkAuth = useCallback(() => {
+    const token = localStorage.getItem("token");
+    const storedUser = localStorage.getItem("user");
+    if (!token || !storedUser) {
       router.push("/login");
-      return;
+      return false;
     }
-
     try {
-      const response = await fetch(`${API_BASE}/api/auth/me`, {
-        headers: getAuthHeader(),
-      });
-      if (!response.ok) {
-        localStorage.removeItem("auth_token");
-        router.push("/login");
-        return;
-      }
-      const data = await response.json();
-      setUser(data.user);
+      setUser(JSON.parse(storedUser));
+      return true;
     } catch {
       router.push("/login");
+      return false;
     }
-  }, [router, getAuthHeader]);
+  }, [router]);
 
   const fetchStrategies = useCallback(async () => {
     try {
@@ -191,8 +184,9 @@ export default function StrategiesPage() {
 
   useEffect(() => {
     const init = async () => {
-      await checkAuth();
-      setLoading(true);
+      const isAuth = checkAuth();
+      if (!isAuth) return;
+      
       await Promise.all([
         fetchStrategies(),
         fetchUserConfigs(),
