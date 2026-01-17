@@ -7504,6 +7504,87 @@ async def get_strategy_perf(
 
 
 # ============================================
+# 策略交易记录API
+# ============================================
+
+@app.get("/api/sim-trade/strategies/{strategy_id}/trades")
+async def get_strategy_trades(
+    strategy_id: str,
+    limit: int = 50,
+    authorization: str = Header(None)
+):
+    """获取策略的交易记录"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_get_sim_trade_records_by_strategy
+    
+    trades = db_get_sim_trade_records_by_strategy(user["username"], strategy_id, limit)
+    
+    return {"trades": trades, "strategy_id": strategy_id}
+
+
+@app.get("/api/sim-trade/strategies/{strategy_id}/stats")
+async def get_strategy_trade_stats(
+    strategy_id: str,
+    authorization: str = Header(None)
+):
+    """获取策略的交易统计"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.database import db_get_strategy_trade_stats
+    
+    stats = db_get_strategy_trade_stats(user["username"], strategy_id)
+    
+    # 获取策略名称
+    strategy = StrategyRegistry.get_by_id(strategy_id)
+    stats["strategy_name"] = strategy.name if strategy else strategy_id
+    
+    return stats
+
+
+@app.post("/api/sim-trade/strategies/{strategy_id}/execute")
+async def execute_strategy_now(
+    strategy_id: str,
+    authorization: str = Header(None)
+):
+    """手动执行策略（立即生成信号并交易）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期，请重新登录")
+    
+    from web.strategies import execute_etf_strategy
+    from web.database import db_get_strategy_config
+    
+    # 获取用户策略配置
+    config = db_get_strategy_config(user["username"], strategy_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="未找到策略配置，请先启用该策略")
+    
+    if not config.get("enabled"):
+        raise HTTPException(status_code=400, detail="策略未启用")
+    
+    allocated_capital = config.get("allocated_capital", 50000)
+    
+    # 执行策略
+    result = execute_etf_strategy(user["username"], strategy_id, allocated_capital)
+    
+    return result
+
+
+# ============================================
 # ETF策略相关API
 # ============================================
 

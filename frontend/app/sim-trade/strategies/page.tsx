@@ -73,6 +73,38 @@ interface StrategyPerformance {
   trade_count: number;
 }
 
+interface StrategyTradeStats {
+  strategy_id: string;
+  strategy_name: string;
+  total_trades: number;
+  buy_count: number;
+  sell_count: number;
+  total_amount: number;
+  total_profit: number;
+  win_count: number;
+  loss_count: number;
+  win_rate: number;
+  avg_profit_pct: number;
+  max_profit_pct: number;
+  min_profit_pct: number;
+  avg_holding_days: number;
+}
+
+interface TradeRecord {
+  id: number;
+  symbol: string;
+  name: string;
+  trade_type: string;
+  quantity: number;
+  price: number;
+  amount: number;
+  profit: number | null;
+  profit_pct: number | null;
+  holding_days: number | null;
+  trade_date: string;
+  created_at: string;
+}
+
 const categoryLabels: Record<string, string> = {
   short: "短线",
   swing: "波段",
@@ -99,7 +131,10 @@ export default function StrategiesPage() {
   const [editingConfig, setEditingConfig] = useState<string | null>(null);
   const [editCapital, setEditCapital] = useState<number>(0);
   const [saving, setSaving] = useState(false);
+  const [executing, setExecuting] = useState<string | null>(null);
+  const [tradeStats, setTradeStats] = useState<Record<string, StrategyTradeStats>>({});
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const getAuthHeader = useCallback((): Record<string, string> => {
     const token = localStorage.getItem("token");
@@ -181,6 +216,56 @@ export default function StrategiesPage() {
       console.error("获取账户信息失败:", err);
     }
   }, [getAuthHeader]);
+
+  const fetchTradeStats = useCallback(async (strategyId: string) => {
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/sim-trade/strategies/${strategyId}/stats`,
+        { headers: getAuthHeader() }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setTradeStats(prev => ({ ...prev, [strategyId]: data }));
+      }
+    } catch (err) {
+      console.error("获取交易统计失败:", err);
+    }
+  }, [getAuthHeader]);
+
+  const handleExecuteStrategy = async (strategyId: string) => {
+    setExecuting(strategyId);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/sim-trade/strategies/${strategyId}/execute`,
+        {
+          method: "POST",
+          headers: getAuthHeader(),
+        }
+      );
+      const data = await response.json();
+      if (response.ok) {
+        if (data.orders > 0) {
+          setSuccessMsg(`策略执行成功: ${data.executed}/${data.orders} 笔交易, 目标: ${data.target || '-'}`);
+        } else {
+          setSuccessMsg(data.message || "策略执行完成，无需交易");
+        }
+        // 刷新数据
+        fetchUserConfigs();
+        fetchPerformances();
+        fetchAccountInfo();
+        fetchTradeStats(strategyId);
+      } else {
+        setError(data.detail || "策略执行失败");
+      }
+    } catch (err) {
+      console.error("执行策略失败:", err);
+      setError("网络错误，请稍后重试");
+    } finally {
+      setExecuting(null);
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -437,6 +522,24 @@ export default function StrategiesPage() {
           )}
         </AnimatePresence>
 
+        {/* 成功提示 */}
+        <AnimatePresence>
+          {successMsg && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="p-3 bg-green-500/20 border border-green-500/50 rounded-lg flex items-center gap-2 text-green-400"
+            >
+              <Check className="w-4 h-4" />
+              {successMsg}
+              <button onClick={() => setSuccessMsg(null)} className="ml-auto">
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* 分类筛选 */}
         <div className="flex gap-2">
           {[
@@ -495,6 +598,21 @@ export default function StrategiesPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {/* 立即执行按钮 */}
+                      {isEnabled && (
+                        <button
+                          onClick={() => handleExecuteStrategy(strategy.id)}
+                          disabled={executing === strategy.id}
+                          className="p-2 rounded-lg transition-colors bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50"
+                          title="立即执行策略"
+                        >
+                          {executing === strategy.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Zap className="w-5 h-5" />
+                          )}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleToggleStrategy(strategy.id, isEnabled)}
                         disabled={saving}
@@ -503,6 +621,7 @@ export default function StrategiesPage() {
                             ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
                             : "bg-gray-700/50 text-gray-400 hover:bg-gray-700"
                         }`}
+                        title={isEnabled ? "已启用自动交易" : "未启用"}
                       >
                         {isEnabled ? (
                           <Play className="w-5 h-5" />
@@ -511,9 +630,12 @@ export default function StrategiesPage() {
                         )}
                       </button>
                       <button
-                        onClick={() =>
-                          setExpandedStrategy(isExpanded ? null : strategy.id)
-                        }
+                        onClick={() => {
+                          setExpandedStrategy(isExpanded ? null : strategy.id);
+                          if (!isExpanded && isEnabled) {
+                            fetchTradeStats(strategy.id);
+                          }
+                        }}
                         className="p-2 hover:bg-gray-700/50 rounded-lg transition-colors"
                       >
                         {isExpanded ? (
@@ -732,15 +854,77 @@ export default function StrategiesPage() {
                           )}
                         </div>
 
+                        {/* 交易统计（实盘数据） */}
+                        {tradeStats[strategy.id] && (
+                          <div className="bg-gray-700/30 rounded-lg p-3">
+                            <h4 className="text-sm font-medium text-blue-400 mb-3 flex items-center gap-2">
+                              <BarChart3 className="w-4 h-4" />
+                              实盘交易统计
+                            </h4>
+                            <div className="grid grid-cols-4 gap-4 text-center mb-3">
+                              <div>
+                                <p className="text-xs text-gray-500">总交易</p>
+                                <p className="font-bold text-white">
+                                  {tradeStats[strategy.id].total_trades}笔
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">买入/卖出</p>
+                                <p className="font-bold text-white">
+                                  {tradeStats[strategy.id].buy_count}/{tradeStats[strategy.id].sell_count}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">胜率</p>
+                                <p className={`font-bold ${tradeStats[strategy.id].win_rate >= 50 ? 'text-green-400' : 'text-yellow-400'}`}>
+                                  {tradeStats[strategy.id].win_rate.toFixed(1)}%
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">总盈亏</p>
+                                <p className={`font-bold ${tradeStats[strategy.id].total_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {tradeStats[strategy.id].total_profit >= 0 ? '+' : ''}¥{tradeStats[strategy.id].total_profit.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-4 gap-4 text-center">
+                              <div>
+                                <p className="text-xs text-gray-500">平均收益</p>
+                                <p className={`font-bold ${tradeStats[strategy.id].avg_profit_pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {tradeStats[strategy.id].avg_profit_pct >= 0 ? '+' : ''}{tradeStats[strategy.id].avg_profit_pct.toFixed(2)}%
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">最大盈利</p>
+                                <p className="font-bold text-green-400">
+                                  +{tradeStats[strategy.id].max_profit_pct.toFixed(2)}%
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">最大亏损</p>
+                                <p className="font-bold text-red-400">
+                                  {tradeStats[strategy.id].min_profit_pct.toFixed(2)}%
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">平均持仓</p>
+                                <p className="font-bold text-white">
+                                  {tradeStats[strategy.id].avg_holding_days.toFixed(1)}天
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {/* 实盘性能（如果有） */}
                         {perf && (
                           <div className="bg-gray-700/30 rounded-lg p-3">
                             <h4 className="text-sm font-medium text-gray-400 mb-3">
-                              实盘表现
+                              策略性能
                             </h4>
                             <div className="grid grid-cols-4 gap-4 text-center">
                               <div>
-                                <p className="text-xs text-gray-500">总收益</p>
+                                <p className="text-xs text-gray-500">总收益率</p>
                                 <p
                                   className={`font-bold ${
                                     perf.total_return >= 0
@@ -765,9 +949,9 @@ export default function StrategiesPage() {
                                 </p>
                               </div>
                               <div>
-                                <p className="text-xs text-gray-500">交易次数</p>
+                                <p className="text-xs text-gray-500">夏普比率</p>
                                 <p className="font-bold text-white">
-                                  {perf.trade_count}
+                                  {perf.sharpe_ratio?.toFixed(2) || '-'}
                                 </p>
                               </div>
                             </div>

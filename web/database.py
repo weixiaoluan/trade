@@ -1845,6 +1845,96 @@ def db_get_sim_trade_records(username: str, symbol: str = None, limit: int = 100
         return [dict(row) for row in cursor.fetchall()]
 
 
+def db_get_sim_trade_records_by_strategy(username: str, strategy_id: str, limit: int = 100) -> List[Dict]:
+    """获取指定策略的交易记录
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        limit: 返回记录数限制
+        
+    Returns:
+        交易记录列表
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM sim_trade_records 
+            WHERE username = ? AND signal_type = ?
+            ORDER BY created_at DESC LIMIT ?
+        ''', (username, strategy_id, limit))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_get_strategy_trade_stats(username: str, strategy_id: str) -> Dict:
+    """获取指定策略的交易统计
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        
+    Returns:
+        交易统计数据
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # 总交易次数
+        cursor.execute('''
+            SELECT COUNT(*) as total_trades,
+                   SUM(CASE WHEN trade_type = 'buy' THEN 1 ELSE 0 END) as buy_count,
+                   SUM(CASE WHEN trade_type = 'sell' THEN 1 ELSE 0 END) as sell_count,
+                   SUM(amount) as total_amount
+            FROM sim_trade_records 
+            WHERE username = ? AND signal_type = ?
+        ''', (username, strategy_id))
+        row = cursor.fetchone()
+        total_trades = row['total_trades'] or 0
+        buy_count = row['buy_count'] or 0
+        sell_count = row['sell_count'] or 0
+        total_amount = row['total_amount'] or 0
+        
+        # 盈亏统计（只统计卖出记录）
+        cursor.execute('''
+            SELECT SUM(profit) as total_profit,
+                   SUM(CASE WHEN profit > 0 THEN 1 ELSE 0 END) as win_count,
+                   SUM(CASE WHEN profit <= 0 THEN 1 ELSE 0 END) as loss_count,
+                   AVG(profit_pct) as avg_profit_pct,
+                   MAX(profit_pct) as max_profit_pct,
+                   MIN(profit_pct) as min_profit_pct,
+                   AVG(holding_days) as avg_holding_days
+            FROM sim_trade_records 
+            WHERE username = ? AND signal_type = ? AND trade_type = 'sell' AND profit IS NOT NULL
+        ''', (username, strategy_id))
+        row = cursor.fetchone()
+        
+        total_profit = row['total_profit'] or 0
+        win_count = row['win_count'] or 0
+        loss_count = row['loss_count'] or 0
+        avg_profit_pct = row['avg_profit_pct'] or 0
+        max_profit_pct = row['max_profit_pct'] or 0
+        min_profit_pct = row['min_profit_pct'] or 0
+        avg_holding_days = row['avg_holding_days'] or 0
+        
+        win_rate = (win_count / (win_count + loss_count) * 100) if (win_count + loss_count) > 0 else 0
+        
+        return {
+            'strategy_id': strategy_id,
+            'total_trades': total_trades,
+            'buy_count': buy_count,
+            'sell_count': sell_count,
+            'total_amount': round(total_amount, 2),
+            'total_profit': round(total_profit, 2),
+            'win_count': win_count,
+            'loss_count': loss_count,
+            'win_rate': round(win_rate, 2),
+            'avg_profit_pct': round(avg_profit_pct, 2),
+            'max_profit_pct': round(max_profit_pct, 2),
+            'min_profit_pct': round(min_profit_pct, 2),
+            'avg_holding_days': round(avg_holding_days, 1)
+        }
+
+
 def db_get_sim_trade_stats(username: str) -> Dict:
     """获取模拟交易统计"""
     with get_db() as conn:
