@@ -129,6 +129,96 @@ SIGNAL_CONFIG = {
     'pullback_add_min_score': 90,     # 回调加仓最低评分
 }
 
+# ============================================
+# 手续费配置（按万分比计算）
+# 参考实盘费率标准
+# ============================================
+COMMISSION_CONFIG = {
+    'stock': {
+        'rate': 0.854,      # 股票佣金万分之0.854
+        'min_fee': 1.0,     # 最低1元
+    },
+    'etf': {
+        'rate': 0.6,        # ETF佣金万分之0.6
+        'min_fee': 1.0,     # 最低1元
+    },
+    'convertible_bond': {
+        'rate': 0.5,        # 可转债佣金万分之0.5
+        'min_fee': 1.0,     # 最低1元
+    },
+    'hk_connect': {
+        'rate': 1.2,        # 港股通万分之1.2
+        'min_fee': 5.0,     # 最低5港元
+    },
+    # 印花税（仅卖出收取）
+    'stamp_duty': {
+        'rate': 10.0,       # 印花税万分之10（千分之1）
+        'only_sell': True,  # 仅卖出收取
+    },
+    # 过户费（沪市）
+    'transfer_fee': {
+        'rate': 0.2,        # 过户费万分之0.2
+        'only_sh': True,    # 仅沪市收取
+    }
+}
+
+
+def calculate_commission(symbol: str, amount: float, trade_type: str = 'buy') -> Dict[str, float]:
+    """
+    计算交易手续费
+    
+    Args:
+        symbol: 标的代码
+        amount: 交易金额
+        trade_type: 交易类型 'buy' 或 'sell'
+        
+    Returns:
+        {
+            'commission': 佣金,
+            'stamp_duty': 印花税,
+            'transfer_fee': 过户费,
+            'total_fee': 总费用
+        }
+    """
+    symbol = symbol.upper()
+    
+    # 判断标的类型
+    if symbol.startswith('11') or symbol.startswith('12'):
+        # 可转债
+        config = COMMISSION_CONFIG['convertible_bond']
+    elif symbol.startswith('5') or symbol.startswith('159'):
+        # ETF
+        config = COMMISSION_CONFIG['etf']
+    else:
+        # 股票
+        config = COMMISSION_CONFIG['stock']
+    
+    # 计算佣金
+    commission = amount * config['rate'] / 10000
+    commission = max(commission, config['min_fee'])
+    
+    # 计算印花税（仅卖出）
+    stamp_duty = 0
+    if trade_type == 'sell':
+        # 可转债和ETF免印花税
+        if not (symbol.startswith('11') or symbol.startswith('12') or 
+                symbol.startswith('5') or symbol.startswith('159')):
+            stamp_duty = amount * COMMISSION_CONFIG['stamp_duty']['rate'] / 10000
+    
+    # 计算过户费（仅沪市）
+    transfer_fee = 0
+    if symbol.endswith('.SH') or symbol.startswith('6') or symbol.startswith('5'):
+        transfer_fee = amount * COMMISSION_CONFIG['transfer_fee']['rate'] / 10000
+    
+    total_fee = commission + stamp_duty + transfer_fee
+    
+    return {
+        'commission': round(commission, 2),
+        'stamp_duty': round(stamp_duty, 2),
+        'transfer_fee': round(transfer_fee, 2),
+        'total_fee': round(total_fee, 2)
+    }
+
 
 def get_beijing_now() -> datetime:
     """获取当前北京时间"""

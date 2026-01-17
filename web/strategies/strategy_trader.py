@@ -274,8 +274,13 @@ class StrategyTrader:
             db_get_sim_position, db_update_sim_position,
             db_add_sim_trade_record, get_trade_rule
         )
+        from ..sim_trade import calculate_commission
         
-        total_cost = order.quantity * order.price
+        trade_amount = order.quantity * order.price
+        
+        # 计算手续费
+        fee_info = calculate_commission(order.symbol, trade_amount, 'buy')
+        total_cost = trade_amount + fee_info['total_fee']
         
         # 检查资金 - 使用 current_capital 字段
         available_cash = account.get('current_capital', account.get('cash', 0))
@@ -283,10 +288,10 @@ class StrategyTrader:
             return {
                 'order': order,
                 'success': False,
-                'error': f'资金不足: 需要{total_cost:.2f}, 可用{available_cash:.2f}'
+                'error': f'资金不足: 需要{total_cost:.2f}(含手续费{fee_info["total_fee"]:.2f}), 可用{available_cash:.2f}'
             }
         
-        # 扣除资金
+        # 扣除资金（含手续费）
         new_capital = available_cash - total_cost
         db_update_sim_account(self.username, current_capital=new_capital)
         
@@ -332,12 +337,12 @@ class StrategyTrader:
             signal_strength=3
         )
         
-        logger.info(f"[{self.username}] 买入 {order.symbol} {order.quantity}股 @ {order.price}")
+        logger.info(f"[{self.username}] 买入 {order.symbol} {order.quantity}股 @ {order.price}(手续费{fee_info['total_fee']:.2f})")
         
         return {
             'order': order,
             'success': True,
-            'message': f'买入成功: {order.quantity}股 @ {order.price}'
+            'message': f'买入成功: {order.quantity}股 @ {order.price}(手续费{fee_info["total_fee"]:.2f})'
         }
     
     def _execute_sell(self, order: TradeOrder, account: Dict) -> Dict:
@@ -347,6 +352,7 @@ class StrategyTrader:
             db_update_sim_position, db_remove_sim_position,
             db_add_sim_trade_record
         )
+        from ..sim_trade import calculate_commission
         from datetime import datetime
         
         # 检查持仓
@@ -362,13 +368,20 @@ class StrategyTrader:
         if position['quantity'] < order.quantity:
             order.quantity = position['quantity']  # 卖出全部
         
-        # 计算收益 - 使用正确的字段名 cost_price
+        # 计算卖出金额和手续费
         sell_amount = order.quantity * order.price
+        fee_info = calculate_commission(order.symbol, sell_amount, 'sell')
+        net_sell_amount = sell_amount - fee_info['total_fee']  # 扣除手续费后的实际到账金额
+        
+        # 计算收益 - 使用正确的字段名 cost_price
         cost_per_share = position.get('cost_price', 0)
         if cost_per_share <= 0:
             cost_per_share = order.price  # 防止除零错误
-        profit = (order.price - cost_per_share) * order.quantity
-        profit_pct = ((order.price / cost_per_share) - 1) * 100 if cost_per_share > 0 else 0
+        
+        # 收益 = 卖出到账金额 - 买入成本（手续费已在买入时扣除）
+        buy_cost = cost_per_share * order.quantity
+        profit = net_sell_amount - buy_cost
+        profit_pct = (profit / buy_cost) * 100 if buy_cost > 0 else 0
         
         # 计算持有天数
         buy_date_str = position.get('buy_date', '')
@@ -380,9 +393,9 @@ class StrategyTrader:
             except:
                 pass
         
-        # 获取当前资金
+        # 获取当前资金（扣除手续费后的实际到账金额）
         available_cash = account.get('current_capital', account.get('cash', 0))
-        new_capital = available_cash + sell_amount
+        new_capital = available_cash + net_sell_amount
         
         # 更新账户统计 - 一次性更新所有字段避免多次调用
         new_total_profit = account.get('total_profit', 0) + profit
@@ -434,12 +447,12 @@ class StrategyTrader:
             holding_days=holding_days
         )
         
-        logger.info(f"[{self.username}] 卖出 {order.symbol} {order.quantity}股 @ {order.price}, 盈亏: {profit:.2f}")
+        logger.info(f"[{self.username}] 卖出 {order.symbol} {order.quantity}股 @ {order.price}, 盈亏: {profit:.2f}(手续费{fee_info['total_fee']:.2f})")
         
         return {
             'order': order,
             'success': True,
-            'message': f'卖出成功: {order.quantity}股 @ {order.price}, 盈亏: {profit:.2f}'
+            'message': f'卖出成功: {order.quantity}股 @ {order.price}, 盈亏: {profit:.2f}(手续费{fee_info["total_fee"]:.2f})'
         }
 
 
