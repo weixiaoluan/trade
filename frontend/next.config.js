@@ -17,7 +17,7 @@ const nextConfig = {
   
   // 实验性优化
   experimental: {
-    optimizeCss: true, // CSS优化
+    // optimizeCss: true, // CSS优化 - 需要 critters 包，暂时禁用
     optimizePackageImports: ['lucide-react', 'framer-motion', 'recharts'], // 按需导入优化
   },
   
