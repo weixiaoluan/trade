@@ -2576,6 +2576,324 @@ def db_get_strategy_performance_summary(username: str, strategy_id: str) -> Opti
 
 
 # ============================================
+# 策略标的池管理
+# ============================================
+
+def db_init_strategy_asset_pool_table():
+    """初始化策略标的池表"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # 策略标的池表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS strategy_asset_pool (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                strategy_id TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                name TEXT,
+                asset_type TEXT,
+                category TEXT DEFAULT 'risk',
+                trading_rule TEXT DEFAULT 'T+1',
+                is_qdii INTEGER DEFAULT 0,
+                max_premium_rate REAL DEFAULT 0.03,
+                enabled INTEGER DEFAULT 1,
+                sort_order INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                UNIQUE(strategy_id, symbol)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_asset_pool_strategy ON strategy_asset_pool(strategy_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_asset_pool_symbol ON strategy_asset_pool(symbol)')
+
+
+def db_get_strategy_assets(strategy_id: str) -> List[Dict]:
+    """获取策略的标的池
+    
+    Args:
+        strategy_id: 策略ID
+        
+    Returns:
+        标的列表
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, strategy_id, symbol, name, asset_type, category,
+                   trading_rule, is_qdii, max_premium_rate, enabled, sort_order,
+                   created_at, updated_at
+            FROM strategy_asset_pool
+            WHERE strategy_id = ? AND enabled = 1
+            ORDER BY sort_order ASC, created_at ASC
+        ''', (strategy_id,))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+def db_get_all_strategy_assets() -> Dict[str, List[Dict]]:
+    """获取所有策略的标的池
+    
+    Returns:
+        {strategy_id: [标的列表]}
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, strategy_id, symbol, name, asset_type, category,
+                   trading_rule, is_qdii, max_premium_rate, enabled, sort_order,
+                   created_at, updated_at
+            FROM strategy_asset_pool
+            WHERE enabled = 1
+            ORDER BY strategy_id, sort_order ASC, created_at ASC
+        ''')
+        rows = cursor.fetchall()
+        
+        result = {}
+        for row in rows:
+            data = dict(row)
+            sid = data['strategy_id']
+            if sid not in result:
+                result[sid] = []
+            result[sid].append(data)
+        return result
+
+
+def db_add_strategy_asset(strategy_id: str, symbol: str, name: str = None,
+                          asset_type: str = None, category: str = 'risk',
+                          trading_rule: str = 'T+1', is_qdii: bool = False,
+                          max_premium_rate: float = 0.03) -> bool:
+    """添加策略标的
+    
+    Args:
+        strategy_id: 策略ID
+        symbol: 标的代码
+        name: 标的名称
+        asset_type: 资产类型
+        category: 分类 (risk/cash)
+        trading_rule: 交易规则 (T+0/T+1)
+        is_qdii: 是否跨境ETF
+        max_premium_rate: 最大溢价率
+        
+    Returns:
+        是否添加成功
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        try:
+            cursor.execute('''
+                INSERT INTO strategy_asset_pool 
+                (strategy_id, symbol, name, asset_type, category, trading_rule,
+                 is_qdii, max_premium_rate, enabled, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ON CONFLICT(strategy_id, symbol) DO UPDATE SET
+                    name = excluded.name,
+                    asset_type = excluded.asset_type,
+                    category = excluded.category,
+                    trading_rule = excluded.trading_rule,
+                    is_qdii = excluded.is_qdii,
+                    max_premium_rate = excluded.max_premium_rate,
+                    enabled = 1,
+                    updated_at = excluded.updated_at
+            ''', (strategy_id, symbol, name, asset_type, category, trading_rule,
+                  1 if is_qdii else 0, max_premium_rate, now, now))
+            return True
+        except Exception as e:
+            print(f"添加策略标的失败: {e}")
+            return False
+
+
+def db_remove_strategy_asset(strategy_id: str, symbol: str) -> bool:
+    """移除策略标的
+    
+    Args:
+        strategy_id: 策略ID
+        symbol: 标的代码
+        
+    Returns:
+        是否移除成功
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM strategy_asset_pool
+            WHERE strategy_id = ? AND symbol = ?
+        ''', (strategy_id, symbol))
+        return cursor.rowcount > 0
+
+
+def db_update_strategy_asset(strategy_id: str, symbol: str, **kwargs) -> bool:
+    """更新策略标的
+    
+    Args:
+        strategy_id: 策略ID
+        symbol: 标的代码
+        **kwargs: 要更新的字段
+        
+    Returns:
+        是否更新成功
+    """
+    if not kwargs:
+        return False
+    
+    allowed_fields = ['name', 'asset_type', 'category', 'trading_rule', 
+                      'is_qdii', 'max_premium_rate', 'enabled', 'sort_order']
+    updates = []
+    values = []
+    
+    for key, value in kwargs.items():
+        if key in allowed_fields:
+            updates.append(f"{key} = ?")
+            if key == 'is_qdii':
+                values.append(1 if value else 0)
+            else:
+                values.append(value)
+    
+    if not updates:
+        return False
+    
+    updates.append("updated_at = ?")
+    values.append(datetime.now().isoformat())
+    values.extend([strategy_id, symbol])
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(f'''
+            UPDATE strategy_asset_pool 
+            SET {', '.join(updates)}
+            WHERE strategy_id = ? AND symbol = ?
+        ''', values)
+        return cursor.rowcount > 0
+
+
+def db_batch_add_strategy_assets(strategy_id: str, assets: List[Dict]) -> int:
+    """批量添加策略标的
+    
+    Args:
+        strategy_id: 策略ID
+        assets: 标的列表 [{'symbol': '', 'name': '', ...}, ...]
+        
+    Returns:
+        成功添加的数量
+    """
+    count = 0
+    for asset in assets:
+        if db_add_strategy_asset(
+            strategy_id=strategy_id,
+            symbol=asset.get('symbol'),
+            name=asset.get('name'),
+            asset_type=asset.get('asset_type'),
+            category=asset.get('category', 'risk'),
+            trading_rule=asset.get('trading_rule', 'T+1'),
+            is_qdii=asset.get('is_qdii', False),
+            max_premium_rate=asset.get('max_premium_rate', 0.03)
+        ):
+            count += 1
+    return count
+
+
+def db_clear_strategy_assets(strategy_id: str) -> int:
+    """清空策略的所有标的
+    
+    Args:
+        strategy_id: 策略ID
+        
+    Returns:
+        删除的数量
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM strategy_asset_pool
+            WHERE strategy_id = ?
+        ''', (strategy_id,))
+        return cursor.rowcount
+
+
+def db_get_strategy_asset_symbols(strategy_id: str) -> List[str]:
+    """获取策略的标的代码列表
+    
+    Args:
+        strategy_id: 策略ID
+        
+    Returns:
+        标的代码列表
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT symbol FROM strategy_asset_pool
+            WHERE strategy_id = ? AND enabled = 1
+            ORDER BY sort_order ASC, created_at ASC
+        ''', (strategy_id,))
+        return [row['symbol'] for row in cursor.fetchall()]
+
+
+def db_import_from_watchlist(strategy_id: str, username: str, 
+                             symbols: List[str] = None) -> int:
+    """从用户自选列表导入标的到策略
+    
+    Args:
+        strategy_id: 策略ID
+        username: 用户名
+        symbols: 指定的标的代码列表（为空则导入全部自选）
+        
+    Returns:
+        导入的数量
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        if symbols:
+            placeholders = ','.join(['?' for _ in symbols])
+            cursor.execute(f'''
+                SELECT symbol, name, type FROM watchlist
+                WHERE username = ? AND symbol IN ({placeholders})
+            ''', [username] + symbols)
+        else:
+            cursor.execute('''
+                SELECT symbol, name, type FROM watchlist
+                WHERE username = ?
+            ''', (username,))
+        
+        rows = cursor.fetchall()
+        
+        count = 0
+        for row in rows:
+            # 根据代码判断交易规则
+            symbol = row['symbol']
+            trading_rule = 'T+1'  # 默认T+1
+            is_qdii = False
+            
+            # 判断是否为T+0标的
+            code = symbol.split('.')[0] if '.' in symbol else symbol
+            if (code.startswith('51') or  # 场内基金ETF
+                code.startswith('15') or  # 深圳ETF
+                code.startswith('11') or code.startswith('12')):  # 可转债
+                # 跨境ETF、债券ETF、货币ETF等为T+0
+                if code in ['513100', '513050', '518880', '511880', '159941']:
+                    trading_rule = 'T+0'
+                    if code in ['513100', '513050', '159941']:
+                        is_qdii = True
+            
+            if db_add_strategy_asset(
+                strategy_id=strategy_id,
+                symbol=symbol,
+                name=row['name'],
+                asset_type=row['type'],
+                trading_rule=trading_rule,
+                is_qdii=is_qdii
+            ):
+                count += 1
+        
+        return count
+
+
+# 初始化策略标的池表
+db_init_strategy_asset_pool_table()
+
+
+# ============================================
 # 数据迁移 - 从 JSON 迁移到数据库
 # ============================================
 

@@ -7939,6 +7939,246 @@ async def update_backup_settings(request: BackupSettingsRequest, authorization: 
 
 
 # ============================================
+# 策略标的池管理 API
+# ============================================
+
+@app.get("/api/strategy/assets/{strategy_id}")
+async def get_strategy_assets(strategy_id: str, authorization: str = Header(None)):
+    """获取策略的标的池"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+    
+    from web.database import db_get_strategy_assets
+    
+    assets = db_get_strategy_assets(strategy_id)
+    return {"strategy_id": strategy_id, "assets": assets}
+
+
+@app.get("/api/strategy/assets")
+async def get_all_strategy_assets(authorization: str = Header(None)):
+    """获取所有策略的标的池"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+    
+    from web.database import db_get_all_strategy_assets
+    from web.strategies import StrategyRegistry
+    
+    # 获取数据库中的标的池
+    db_assets = db_get_all_strategy_assets()
+    
+    # 获取所有策略定义
+    strategies = []
+    for strategy_def in StrategyRegistry.get_all():
+        strategies.append({
+            "id": strategy_def.id,
+            "name": strategy_def.name,
+            "category": strategy_def.category.value,
+            "risk_level": strategy_def.risk_level.value,
+            "assets": db_assets.get(strategy_def.id, [])
+        })
+    
+    return {"strategies": strategies}
+
+
+class AddAssetRequest(BaseModel):
+    symbol: str
+    name: Optional[str] = None
+    asset_type: Optional[str] = None
+    category: str = "risk"
+    trading_rule: str = "T+1"
+    is_qdii: bool = False
+    max_premium_rate: float = 0.03
+
+
+@app.post("/api/admin/strategy/assets/{strategy_id}")
+async def add_strategy_asset(strategy_id: str, request: AddAssetRequest, authorization: str = Header(None)):
+    """添加策略标的（管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.database import db_add_strategy_asset
+    
+    success = db_add_strategy_asset(
+        strategy_id=strategy_id,
+        symbol=request.symbol,
+        name=request.name,
+        asset_type=request.asset_type,
+        category=request.category,
+        trading_rule=request.trading_rule,
+        is_qdii=request.is_qdii,
+        max_premium_rate=request.max_premium_rate
+    )
+    
+    if success:
+        return {"success": True, "message": f"标的 {request.symbol} 已添加到策略 {strategy_id}"}
+    else:
+        raise HTTPException(status_code=500, detail="添加失败")
+
+
+@app.delete("/api/admin/strategy/assets/{strategy_id}/{symbol}")
+async def remove_strategy_asset(strategy_id: str, symbol: str, authorization: str = Header(None)):
+    """移除策略标的（管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.database import db_remove_strategy_asset
+    
+    # URL解码symbol（可能包含.）
+    import urllib.parse
+    symbol = urllib.parse.unquote(symbol)
+    
+    success = db_remove_strategy_asset(strategy_id, symbol)
+    
+    if success:
+        return {"success": True, "message": f"标的 {symbol} 已从策略 {strategy_id} 移除"}
+    else:
+        raise HTTPException(status_code=404, detail="标的不存在")
+
+
+class BatchAddAssetsRequest(BaseModel):
+    assets: List[AddAssetRequest]
+
+
+@app.post("/api/admin/strategy/assets/{strategy_id}/batch")
+async def batch_add_strategy_assets(strategy_id: str, request: BatchAddAssetsRequest, authorization: str = Header(None)):
+    """批量添加策略标的（管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.database import db_batch_add_strategy_assets
+    
+    assets = [asset.dict() for asset in request.assets]
+    count = db_batch_add_strategy_assets(strategy_id, assets)
+    
+    return {"success": True, "added_count": count, "total": len(request.assets)}
+
+
+@app.delete("/api/admin/strategy/assets/{strategy_id}/clear")
+async def clear_strategy_assets(strategy_id: str, authorization: str = Header(None)):
+    """清空策略标的池（管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.database import db_clear_strategy_assets
+    
+    count = db_clear_strategy_assets(strategy_id)
+    
+    return {"success": True, "deleted_count": count}
+
+
+class ImportFromWatchlistRequest(BaseModel):
+    username: str
+    symbols: Optional[List[str]] = None
+
+
+@app.post("/api/admin/strategy/assets/{strategy_id}/import-watchlist")
+async def import_from_watchlist(strategy_id: str, request: ImportFromWatchlistRequest, authorization: str = Header(None)):
+    """从用户自选列表导入标的到策略（管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.database import db_import_from_watchlist
+    
+    count = db_import_from_watchlist(strategy_id, request.username, request.symbols)
+    
+    return {"success": True, "imported_count": count}
+
+
+class UpdateAssetRequest(BaseModel):
+    name: Optional[str] = None
+    asset_type: Optional[str] = None
+    category: Optional[str] = None
+    trading_rule: Optional[str] = None
+    is_qdii: Optional[bool] = None
+    max_premium_rate: Optional[float] = None
+    enabled: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+@app.put("/api/admin/strategy/assets/{strategy_id}/{symbol}")
+async def update_strategy_asset(strategy_id: str, symbol: str, request: UpdateAssetRequest, authorization: str = Header(None)):
+    """更新策略标的（管理员）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.database import db_update_strategy_asset
+    import urllib.parse
+    symbol = urllib.parse.unquote(symbol)
+    
+    # 过滤掉None值
+    updates = {k: v for k, v in request.dict().items() if v is not None}
+    
+    if not updates:
+        raise HTTPException(status_code=400, detail="没有要更新的字段")
+    
+    success = db_update_strategy_asset(strategy_id, symbol, **updates)
+    
+    if success:
+        return {"success": True, "message": f"标的 {symbol} 已更新"}
+    else:
+        raise HTTPException(status_code=404, detail="标的不存在")
+
+
+@app.get("/api/strategy/symbols/{strategy_id}")
+async def get_strategy_symbols(strategy_id: str, authorization: str = Header(None)):
+    """获取策略的标的代码列表（供策略执行使用）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+    
+    from web.database import db_get_strategy_asset_symbols
+    from web.strategies import STRATEGY_CLASSES
+    
+    # 先从数据库获取
+    db_symbols = db_get_strategy_asset_symbols(strategy_id)
+    
+    # 如果数据库没有，则从策略默认参数获取
+    if not db_symbols and strategy_id in STRATEGY_CLASSES:
+        strategy_class = STRATEGY_CLASSES[strategy_id]
+        default_params = strategy_class.get_default_params()
+        db_symbols = (default_params.get('applicable_etfs') or 
+                      default_params.get('sector_etfs') or 
+                      [])
+    
+    return {"strategy_id": strategy_id, "symbols": db_symbols}
+
+
+# ============================================
 # 启动服务
 # ============================================
 

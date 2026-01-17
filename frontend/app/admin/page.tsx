@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { 
   Shield, Users, Check, X, ArrowLeft, 
   Crown, Clock, UserCheck, UserX, Eye, Trash2, Loader2, UserPlus, Star, RefreshCw,
-  Database, Download, Upload, Settings, Save, RotateCcw
+  Database, Download, Upload, Settings, Save, RotateCcw, Layers, Plus, Search, Import
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -26,6 +26,34 @@ interface AiPick {
   type: string;
   added_by: string;
   added_at: string;
+}
+
+interface StrategyAsset {
+  id: number;
+  strategy_id: string;
+  symbol: string;
+  name: string;
+  asset_type: string;
+  category: string;
+  trading_rule: string;
+  is_qdii: number;
+  max_premium_rate: number;
+  enabled: number;
+  sort_order: number;
+}
+
+interface StrategyInfo {
+  id: string;
+  name: string;
+  category: string;
+  risk_level: string;
+  assets: StrategyAsset[];
+}
+
+interface WatchlistItem {
+  symbol: string;
+  name: string;
+  type: string;
 }
 
 export default function AdminPage() {
@@ -56,7 +84,7 @@ export default function AdminPage() {
   const [aiPicksLoading, setAiPicksLoading] = useState(false);
 
   // 数据库管理
-  const [activeTab, setActiveTab] = useState<'users' | 'database'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'database' | 'assets'>('users');
   const [backups, setBackups] = useState<any[]>([]);
   const [backupsLoading, setBackupsLoading] = useState(false);
   const [backupSettings, setBackupSettings] = useState<{
@@ -66,6 +94,22 @@ export default function AdminPage() {
   }>({ auto_backup_enabled: true, backup_time: '03:00', keep_days: 7 });
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [backupOperating, setBackupOperating] = useState<string | null>(null);
+
+  // 策略标的池管理
+  const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
+  const [strategiesLoading, setStrategiesLoading] = useState(false);
+  const [selectedStrategy, setSelectedStrategy] = useState<string>('');
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [assetOperating, setAssetOperating] = useState<string | null>(null);
+  const [showAddAssetModal, setShowAddAssetModal] = useState(false);
+  const [newAsset, setNewAsset] = useState({
+    symbol: '',
+    name: '',
+    category: 'risk',
+    trading_rule: 'T+1',
+    is_qdii: false,
+  });
 
   const getToken = () => {
     if (typeof window !== "undefined") {
@@ -122,6 +166,59 @@ export default function AdminPage() {
       fetchAiPicks();
     }
   }, [currentUser, fetchUsers]);
+
+  // 切换到策略标的管理时加载数据
+  useEffect(() => {
+    if (currentUser && activeTab === 'assets') {
+      const loadAssetsData = async () => {
+        const token = getToken();
+        if (!token) return;
+        
+        setStrategiesLoading(true);
+        try {
+          const response = await fetch(`${API_BASE}/api/strategy/assets`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            setStrategies(data.strategies || []);
+            if (data.strategies?.length > 0 && !selectedStrategy) {
+              setSelectedStrategy(data.strategies[0].id);
+            }
+          }
+        } catch (error) {
+          console.error("加载策略标的数据失败:", error);
+        } finally {
+          setStrategiesLoading(false);
+        }
+      };
+      loadAssetsData();
+      
+      // 加载自选列表
+      const loadWatchlist = async () => {
+        const token = getToken();
+        if (!token) return;
+        
+        setWatchlistLoading(true);
+        try {
+          const response = await fetch(`${API_BASE}/api/watchlist`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            setWatchlist(data.watchlist || []);
+          }
+        } catch (error) {
+          console.error("加载自选列表失败:", error);
+        } finally {
+          setWatchlistLoading(false);
+        }
+      };
+      loadWatchlist();
+    }
+  }, [currentUser, activeTab, selectedStrategy]);
 
   // 切换到数据库管理时加载数据
   useEffect(() => {
@@ -489,6 +586,115 @@ export default function AdminPage() {
     }
   };
 
+  // 添加策略标的
+  const handleAddAsset = async () => {
+    if (!selectedStrategy || !newAsset.symbol) return;
+    
+    const token = getToken();
+    if (!token) return;
+    
+    setAssetOperating(newAsset.symbol);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/strategy/assets/${selectedStrategy}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(newAsset),
+      });
+      
+      if (response.ok) {
+        // 刷新策略列表
+        const res = await fetch(`${API_BASE}/api/strategy/assets`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setStrategies(data.strategies || []);
+        }
+        setShowAddAssetModal(false);
+        setNewAsset({ symbol: '', name: '', category: 'risk', trading_rule: 'T+1', is_qdii: false });
+      }
+    } catch (error) {
+      console.error("添加标的失败:", error);
+    } finally {
+      setAssetOperating(null);
+    }
+  };
+
+  // 移除策略标的
+  const handleRemoveAsset = async (symbol: string) => {
+    if (!selectedStrategy) return;
+    
+    const token = getToken();
+    if (!token) return;
+    
+    setAssetOperating(symbol);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/strategy/assets/${selectedStrategy}/${encodeURIComponent(symbol)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (response.ok) {
+        // 刷新策略列表
+        const res = await fetch(`${API_BASE}/api/strategy/assets`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setStrategies(data.strategies || []);
+        }
+      }
+    } catch (error) {
+      console.error("移除标的失败:", error);
+    } finally {
+      setAssetOperating(null);
+    }
+  };
+
+  // 从自选列表导入标的
+  const handleImportFromWatchlist = async (symbols: string[]) => {
+    if (!selectedStrategy || symbols.length === 0) return;
+    
+    const token = getToken();
+    if (!token) return;
+    
+    setAssetOperating('import');
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/strategy/assets/${selectedStrategy}/import-watchlist`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          username: currentUser?.username,
+          symbols: symbols,
+        }),
+      });
+      
+      if (response.ok) {
+        // 刷新策略列表
+        const res = await fetch(`${API_BASE}/api/strategy/assets`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setStrategies(data.strategies || []);
+        }
+      }
+    } catch (error) {
+      console.error("导入标的失败:", error);
+    } finally {
+      setAssetOperating(null);
+    }
+  };
+
+  // 获取当前选中策略的标的列表
+  const currentStrategyAssets = strategies.find(s => s.id === selectedStrategy)?.assets || [];
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "approved":
@@ -573,7 +779,7 @@ export default function AdminPage() {
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-white">管理员控制台</h1>
-                <p className="text-xs text-slate-500">用户管理 / 数据库管理</p>
+                <p className="text-xs text-slate-500">用户管理 / 数据库管理 / 标的管理</p>
               </div>
             </div>
           </div>
@@ -614,6 +820,17 @@ export default function AdminPage() {
           >
             <Database className="w-4 h-4" />
             数据库管理
+          </button>
+          <button
+            onClick={() => setActiveTab('assets')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
+              activeTab === 'assets'
+                ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40'
+                : 'bg-white/[0.03] text-slate-400 border border-white/[0.06] hover:bg-white/[0.05]'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            标的管理
           </button>
         </div>
 
@@ -977,6 +1194,138 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {/* 标的管理 Tab */}
+        {activeTab === 'assets' && (
+          <div className="space-y-6">
+            {/* 策略选择 */}
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-indigo-400" />
+                  <h2 className="text-lg font-semibold text-white">选择策略</h2>
+                </div>
+                <button
+                  onClick={() => setShowAddAssetModal(true)}
+                  disabled={!selectedStrategy}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-all disabled:opacity-50"
+                >
+                  <Plus className="w-4 h-4" />
+                  添加标的
+                </button>
+              </div>
+              
+              {strategiesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {strategies.map((strategy) => (
+                    <button
+                      key={strategy.id}
+                      onClick={() => setSelectedStrategy(strategy.id)}
+                      className={`px-4 py-2 rounded-lg transition-all ${
+                        selectedStrategy === strategy.id
+                          ? 'bg-indigo-500/30 text-indigo-300 border border-indigo-500/50'
+                          : 'bg-white/[0.03] text-slate-400 border border-white/[0.06] hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="text-sm font-medium">{strategy.name}</div>
+                      <div className="text-xs opacity-60">{strategy.assets.length} 个标的</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 当前策略标的列表 */}
+            {selectedStrategy && (
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold text-white">
+                      {strategies.find(s => s.id === selectedStrategy)?.name} - 标的池
+                    </h2>
+                    <span className="text-xs text-slate-500">（共 {currentStrategyAssets.length} 个）</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const symbols = watchlist.map(w => w.symbol);
+                      if (symbols.length > 0) {
+                        handleImportFromWatchlist(symbols);
+                      }
+                    }}
+                    disabled={assetOperating === 'import' || watchlist.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-all disabled:opacity-50"
+                  >
+                    {assetOperating === 'import' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Import className="w-4 h-4" />}
+                    从自选导入 ({watchlist.length})
+                  </button>
+                </div>
+                
+                {currentStrategyAssets.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500">
+                    <Layers className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>暂无标的，点击"添加标的"或"从自选导入"</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-white/[0.02]">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">代码</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">名称</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">分类</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">交易规则</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.06]">
+                        {currentStrategyAssets.map((asset) => (
+                          <tr key={asset.symbol} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="px-6 py-4">
+                              <span className="text-sm font-mono text-indigo-400">{asset.symbol}</span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-white">{asset.name || '-'}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                asset.category === 'cash'
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : 'bg-indigo-500/20 text-indigo-400'
+                              }`}>
+                                {asset.category === 'cash' ? '现金' : '风险'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                asset.trading_rule === 'T+0'
+                                  ? 'bg-amber-500/20 text-amber-400'
+                                  : 'bg-slate-500/20 text-slate-400'
+                              }`}>
+                                {asset.trading_rule}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                onClick={() => handleRemoveAsset(asset.symbol)}
+                                disabled={assetOperating === asset.symbol}
+                                className="p-2 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 transition-all disabled:opacity-50"
+                                title="移除标的"
+                              >
+                                {assetOperating === asset.symbol ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* 注销确认弹窗 */}
@@ -1156,6 +1505,116 @@ export default function AdminPage() {
                 >
                   {addingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                   创建用户
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 添加标的弹窗 */}
+      <AnimatePresence>
+        {showAddAssetModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setShowAddAssetModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                  <Plus className="w-5 h-5 text-indigo-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">添加标的</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    标的代码 <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newAsset.symbol}
+                    onChange={(e) => setNewAsset({ ...newAsset, symbol: e.target.value })}
+                    placeholder="如: 510300.SH"
+                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">名称</label>
+                  <input
+                    type="text"
+                    value={newAsset.name}
+                    onChange={(e) => setNewAsset({ ...newAsset, name: e.target.value })}
+                    placeholder="如: 沪深300ETF"
+                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">分类</label>
+                    <select
+                      value={newAsset.category}
+                      onChange={(e) => setNewAsset({ ...newAsset, category: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    >
+                      <option value="risk">风险资产</option>
+                      <option value="cash">现金资产</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">交易规则</label>
+                    <select
+                      value={newAsset.trading_rule}
+                      onChange={(e) => setNewAsset({ ...newAsset, trading_rule: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    >
+                      <option value="T+1">T+1</option>
+                      <option value="T+0">T+0</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="is_qdii"
+                    checked={newAsset.is_qdii}
+                    onChange={(e) => setNewAsset({ ...newAsset, is_qdii: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/[0.08] bg-white/[0.03] text-indigo-500 focus:ring-indigo-500/50"
+                  />
+                  <label htmlFor="is_qdii" className="text-sm text-slate-400">跨境ETF (QDII)</label>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowAddAssetModal(false);
+                    setNewAsset({ symbol: '', name: '', category: 'risk', trading_rule: 'T+1', is_qdii: false });
+                  }}
+                  className="flex-1 py-2.5 bg-white/[0.05] text-slate-300 rounded-xl hover:bg-white/[0.08] transition-all"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleAddAsset}
+                  disabled={!newAsset.symbol || assetOperating !== null}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 hover:from-indigo-600 hover:to-violet-700 transition-all"
+                >
+                  {assetOperating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  添加
                 </button>
               </div>
             </motion.div>

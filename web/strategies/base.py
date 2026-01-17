@@ -112,10 +112,24 @@ class BaseStrategy(ABC):
         """
         获取适用的标的列表
         
+        优先从数据库获取，如果数据库没有则使用默认参数
+        
         Returns:
             标的代码列表
         """
-        return self.params.get('applicable_etfs', [])
+        # 优先从数据库获取
+        try:
+            from web.database import db_get_strategy_asset_symbols
+            db_symbols = db_get_strategy_asset_symbols(self.STRATEGY_ID)
+            if db_symbols:
+                return db_symbols
+        except Exception:
+            pass
+        
+        # 回退到默认参数
+        return (self.params.get('applicable_etfs') or 
+                self.params.get('sector_etfs') or 
+                [])
     
     def on_trade_executed(self, trade_result: Dict) -> None:
         """
