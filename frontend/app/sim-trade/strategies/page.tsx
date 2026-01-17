@@ -101,9 +101,12 @@ export default function StrategiesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getAuthHeader = useCallback(() => {
+  const getAuthHeader = useCallback((): Record<string, string> => {
     const token = localStorage.getItem("auth_token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+    return {};
   }, []);
 
   const checkAuth = useCallback(async () => {
