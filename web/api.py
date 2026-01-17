@@ -7813,6 +7813,132 @@ async def init_etf_data_api(authorization: str = Header(None)):
 
 
 # ============================================
+# 数据库管理 API
+# ============================================
+
+@app.get("/api/admin/database/backups")
+async def list_database_backups(authorization: str = Header(None)):
+    """获取数据库备份列表"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.db_backup import list_backups
+    
+    backups = list_backups()
+    return {"backups": backups}
+
+
+@app.post("/api/admin/database/backup")
+async def create_database_backup(authorization: str = Header(None)):
+    """创建数据库备份"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.db_backup import create_backup
+    
+    result = create_backup(manual=True, created_by=user["username"])
+    
+    if result["success"]:
+        return result
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "备份失败"))
+
+
+@app.post("/api/admin/database/restore/{backup_name}")
+async def restore_database_backup(backup_name: str, authorization: str = Header(None)):
+    """恢复数据库备份"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.db_backup import restore_backup
+    
+    result = restore_backup(backup_name)
+    
+    if result["success"]:
+        return result
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "恢复失败"))
+
+
+@app.delete("/api/admin/database/backup/{backup_name}")
+async def delete_database_backup(backup_name: str, authorization: str = Header(None)):
+    """删除数据库备份"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.db_backup import delete_backup
+    
+    result = delete_backup(backup_name)
+    
+    if result["success"]:
+        return result
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "删除失败"))
+
+
+@app.get("/api/admin/database/settings")
+async def get_backup_settings(authorization: str = Header(None)):
+    """获取备份设置"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.db_backup import get_backup_settings
+    
+    settings = get_backup_settings()
+    return settings
+
+
+class BackupSettingsRequest(BaseModel):
+    auto_backup_enabled: bool
+    backup_time: str  # HH:MM 格式
+    keep_days: int = 7
+
+
+@app.post("/api/admin/database/settings")
+async def update_backup_settings(request: BackupSettingsRequest, authorization: str = Header(None)):
+    """更新备份设置"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user or not is_admin(user["username"]):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from web.db_backup import update_backup_settings
+    
+    result = update_backup_settings(
+        auto_backup_enabled=request.auto_backup_enabled,
+        backup_time=request.backup_time,
+        keep_days=request.keep_days
+    )
+    
+    if result["success"]:
+        return result
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "更新失败"))
+
+
+# ============================================
 # 启动服务
 # ============================================
 

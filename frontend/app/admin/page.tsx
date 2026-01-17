@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Shield, Users, Check, X, ArrowLeft, 
-  Crown, Clock, UserCheck, UserX, Eye, Trash2, Loader2, UserPlus, Star, RefreshCw
+  Crown, Clock, UserCheck, UserX, Eye, Trash2, Loader2, UserPlus, Star, RefreshCw,
+  Database, Download, Upload, Settings, Save, RotateCcw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -53,6 +54,18 @@ export default function AdminPage() {
   // 研究列表记录
   const [aiPicks, setAiPicks] = useState<AiPick[]>([]);
   const [aiPicksLoading, setAiPicksLoading] = useState(false);
+
+  // 数据库管理
+  const [activeTab, setActiveTab] = useState<'users' | 'database'>('users');
+  const [backups, setBackups] = useState<any[]>([]);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [backupSettings, setBackupSettings] = useState<{
+    auto_backup_enabled: boolean;
+    backup_time: string;
+    keep_days: number;
+  }>({ auto_backup_enabled: true, backup_time: '03:00', keep_days: 7 });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [backupOperating, setBackupOperating] = useState<string | null>(null);
 
   const getToken = () => {
     if (typeof window !== "undefined") {
@@ -110,6 +123,46 @@ export default function AdminPage() {
     }
   }, [currentUser, fetchUsers]);
 
+  // 切换到数据库管理时加载数据
+  useEffect(() => {
+    if (currentUser && activeTab === 'database') {
+      const loadDatabaseData = async () => {
+        const token = getToken();
+        if (!token) return;
+        
+        setBackupsLoading(true);
+        try {
+          const [backupsRes, settingsRes] = await Promise.all([
+            fetch(`${API_BASE}/api/admin/database/backups`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+            fetch(`${API_BASE}/api/admin/database/settings`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          ]);
+          
+          if (backupsRes.ok) {
+            const data = await backupsRes.json();
+            setBackups(data.backups || []);
+          }
+          if (settingsRes.ok) {
+            const data = await settingsRes.json();
+            setBackupSettings({
+              auto_backup_enabled: data.auto_backup_enabled ?? true,
+              backup_time: data.backup_time || '03:00',
+              keep_days: data.keep_days || 7,
+            });
+          }
+        } catch (error) {
+          console.error("加载数据库管理数据失败:", error);
+        } finally {
+          setBackupsLoading(false);
+        }
+      };
+      loadDatabaseData();
+    }
+  }, [currentUser, activeTab]);
+
   // 获取研究列表记录
   const fetchAiPicks = useCallback(async () => {
     const token = getToken();
@@ -131,6 +184,148 @@ export default function AdminPage() {
       setAiPicksLoading(false);
     }
   }, []);
+
+  // 获取备份列表
+  const fetchBackups = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+
+    setBackupsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/database/backups`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBackups(data.backups || []);
+      }
+    } catch (error) {
+      console.error("获取备份列表失败:", error);
+    } finally {
+      setBackupsLoading(false);
+    }
+  }, []);
+
+  // 获取备份设置
+  const fetchBackupSettings = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/database/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBackupSettings({
+          auto_backup_enabled: data.auto_backup_enabled ?? true,
+          backup_time: data.backup_time || '03:00',
+          keep_days: data.keep_days || 7,
+        });
+      }
+    } catch (error) {
+      console.error("获取备份设置失败:", error);
+    }
+  }, []);
+
+  // 创建备份
+  const handleCreateBackup = async () => {
+    const token = getToken();
+    if (!token) return;
+
+    setBackupOperating('create');
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/database/backup`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        fetchBackups();
+      }
+    } catch (error) {
+      console.error("创建备份失败:", error);
+    } finally {
+      setBackupOperating(null);
+    }
+  };
+
+  // 恢复备份
+  const handleRestoreBackup = async (backupName: string) => {
+    const token = getToken();
+    if (!token) return;
+
+    if (!confirm(`确定要恢复备份 ${backupName} 吗？当前数据将被覆盖！`)) return;
+
+    setBackupOperating(backupName);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/database/restore/${encodeURIComponent(backupName)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        alert("备份恢复成功！");
+        fetchBackups();
+      }
+    } catch (error) {
+      console.error("恢复备份失败:", error);
+    } finally {
+      setBackupOperating(null);
+    }
+  };
+
+  // 删除备份
+  const handleDeleteBackup = async (backupName: string) => {
+    const token = getToken();
+    if (!token) return;
+
+    if (!confirm(`确定要删除备份 ${backupName} 吗？`)) return;
+
+    setBackupOperating(backupName);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/database/backup/${encodeURIComponent(backupName)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        fetchBackups();
+      }
+    } catch (error) {
+      console.error("删除备份失败:", error);
+    } finally {
+      setBackupOperating(null);
+    }
+  };
+
+  // 保存备份设置
+  const handleSaveBackupSettings = async () => {
+    const token = getToken();
+    if (!token) return;
+
+    setSettingsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/database/settings`, {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(backupSettings),
+      });
+
+      if (response.ok) {
+        alert("设置保存成功！");
+      }
+    } catch (error) {
+      console.error("保存设置失败:", error);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
 
   // 删除研究列表标的
   const handleDeleteAiPick = async (symbol: string) => {
@@ -377,23 +572,53 @@ export default function AdminPage() {
                 </div>
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-white">用户管理</h1>
-                <p className="text-xs text-slate-500">管理员控制台</p>
+                <h1 className="text-lg font-semibold text-white">管理员控制台</h1>
+                <p className="text-xs text-slate-500">用户管理 / 数据库管理</p>
               </div>
             </div>
           </div>
-          <button
-            onClick={() => setShowAddUserModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl hover:from-indigo-600 hover:to-violet-700 transition-all"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span className="hidden sm:inline">新增用户</span>
-          </button>
+          {activeTab === 'users' && (
+            <button
+              onClick={() => setShowAddUserModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl hover:from-indigo-600 hover:to-violet-700 transition-all"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span className="hidden sm:inline">新增用户</span>
+            </button>
+          )}
         </div>
       </header>
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
+              activeTab === 'users'
+                ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40'
+                : 'bg-white/[0.03] text-slate-400 border border-white/[0.06] hover:bg-white/[0.05]'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            用户管理
+          </button>
+          <button
+            onClick={() => setActiveTab('database')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
+              activeTab === 'database'
+                ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40'
+                : 'bg-white/[0.03] text-slate-400 border border-white/[0.06] hover:bg-white/[0.05]'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            数据库管理
+          </button>
+        </div>
+
+        {activeTab === 'users' && (
+          <>
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
@@ -605,6 +830,153 @@ export default function AdminPage() {
             )}
           </div>
         </div>
+          </>
+        )}
+
+        {/* Database Management Tab */}
+        {activeTab === 'database' && (
+          <div className="space-y-6">
+            {/* Backup Settings */}
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-indigo-400" />
+                  <h2 className="text-lg font-semibold text-white">自动备份设置</h2>
+                </div>
+                <button
+                  onClick={handleSaveBackupSettings}
+                  disabled={settingsLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-all disabled:opacity-50"
+                >
+                  {settingsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  保存设置
+                </button>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">自动备份</label>
+                    <button
+                      onClick={() => setBackupSettings(prev => ({ ...prev, auto_backup_enabled: !prev.auto_backup_enabled }))}
+                      className={`w-full px-4 py-3 rounded-xl border transition-all ${
+                        backupSettings.auto_backup_enabled
+                          ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                          : 'bg-white/[0.03] border-white/[0.08] text-slate-400'
+                      }`}
+                    >
+                      {backupSettings.auto_backup_enabled ? '已启用' : '已禁用'}
+                    </button>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">备份时间</label>
+                    <input
+                      type="time"
+                      value={backupSettings.backup_time}
+                      onChange={(e) => setBackupSettings(prev => ({ ...prev, backup_time: e.target.value }))}
+                      className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">保留天数</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={backupSettings.keep_days}
+                      onChange={(e) => setBackupSettings(prev => ({ ...prev, keep_days: parseInt(e.target.value) || 7 }))}
+                      className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Manual Backup */}
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="w-5 h-5 text-emerald-400" />
+                  <h2 className="text-lg font-semibold text-white">备份管理</h2>
+                  <span className="text-xs text-slate-500">（共 {backups.length} 个备份）</span>
+                </div>
+                <button
+                  onClick={handleCreateBackup}
+                  disabled={backupOperating === 'create'}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-all disabled:opacity-50"
+                >
+                  {backupOperating === 'create' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  立即备份
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                {backupsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+                  </div>
+                ) : backups.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500">
+                    <Database className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>暂无备份记录</p>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead className="bg-white/[0.02]">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">备份名称</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">类型</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">大小</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">创建时间</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.06]">
+                      {backups.map((backup) => (
+                        <tr key={backup.backup_name} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="px-6 py-4">
+                            <span className="text-sm font-mono text-white">{backup.backup_name}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              backup.type === 'manual'
+                                ? 'bg-indigo-500/20 text-indigo-400'
+                                : 'bg-slate-500/20 text-slate-400'
+                            }`}>
+                              {backup.type === 'manual' ? '手动' : '自动'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-400">{backup.size_display}</td>
+                          <td className="px-6 py-4 text-sm text-slate-400">
+                            {backup.created_at ? new Date(backup.created_at).toLocaleString("zh-CN", { hour12: false }) : "-"}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleRestoreBackup(backup.backup_name)}
+                                disabled={backupOperating === backup.backup_name}
+                                className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-all disabled:opacity-50"
+                                title="恢复此备份"
+                              >
+                                {backupOperating === backup.backup_name ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteBackup(backup.backup_name)}
+                                disabled={backupOperating === backup.backup_name}
+                                className="p-2 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 transition-all disabled:opacity-50"
+                                title="删除备份"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* 注销确认弹窗 */}

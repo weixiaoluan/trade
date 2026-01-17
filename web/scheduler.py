@@ -830,6 +830,9 @@ def start_scheduler():
     # 每天23:59清空研究列表（保留当天的）
     schedule.every().day.at("23:59").do(clear_ai_picks_daily)
     
+    # 每分钟检查一次是否需要自动备份数据库
+    schedule.every(1).minutes.do(check_auto_backup)
+    
     # 在后台线程运行
     def run_schedule():
         while True:
@@ -850,6 +853,15 @@ def clear_ai_picks_daily():
         logger.info(f"[研究列表] 每日清理完成，删除 {deleted_count} 条非今日数据")
     except Exception as e:
         logger.error(f"[研究列表] 每日清理失败: {e}")
+
+
+def check_auto_backup():
+    """检查并执行自动备份"""
+    try:
+        from web.db_backup import run_auto_backup
+        run_auto_backup()
+    except Exception as e:
+        logger.error(f"[自动备份] 检查失败: {e}")
 
 
 if __name__ == "__main__":
