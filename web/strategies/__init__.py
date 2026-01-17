@@ -116,3 +116,25 @@ __all__ = [
     'execute_etf_strategy',
     'get_etf_strategy_status',
 ]
+
+# ============================================
+# 确保所有策略都已注册到 StrategyRegistry
+# ============================================
+def _ensure_strategies_registered():
+    """确保所有预设策略都已注册"""
+    strategies_to_register = [
+        RSI_REVERSAL_DEFINITION,
+        OVERNIGHT_DEFINITION,
+        MOMENTUM_ROTATION_DEFINITION,
+        BIAS_REVERSION_DEFINITION,
+        RISK_PARITY_DEFINITION,
+        ADAPTIVE_MA_DEFINITION,
+        ETF_ROTATION_DEFINITION,
+        BINARY_ROTATION_DEFINITION,
+        INDUSTRY_MOMENTUM_DEFINITION,
+    ]
+    for strategy in strategies_to_register:
+        if StrategyRegistry.get_by_id(strategy.id) is None:
+            StrategyRegistry.register(strategy)
+
+_ensure_strategies_registered()
