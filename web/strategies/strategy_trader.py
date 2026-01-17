@@ -300,9 +300,10 @@ class StrategyTrader:
         
         if existing:
             # 更新持仓 - 使用正确的字段名 cost_price
+            # 注意：均价计算不应包含手续费，手续费单独计入交易成本
             new_quantity = existing['quantity'] + order.quantity
             old_cost = existing.get('cost_price', 0) * existing['quantity']
-            new_total_cost = old_cost + total_cost
+            new_total_cost = old_cost + trade_amount  # 使用交易金额，不含手续费
             new_avg_price = new_total_cost / new_quantity
             
             db_update_sim_position(
@@ -352,7 +353,7 @@ class StrategyTrader:
             db_update_sim_position, db_remove_sim_position,
             db_add_sim_trade_record
         )
-        from ..sim_trade import calculate_commission
+        from ..sim_trade import calculate_commission, get_beijing_now
         from datetime import datetime
         
         # 检查持仓
@@ -363,6 +364,17 @@ class StrategyTrader:
                 'order': order,
                 'success': False,
                 'error': f'没有{order.symbol}的持仓'
+            }
+        
+        # 检查T+1规则
+        today = get_beijing_now().strftime('%Y-%m-%d')
+        can_sell_date = position.get('can_sell_date', today)
+        if can_sell_date > today:
+            trade_rule = position.get('trade_rule', 'T+1')
+            return {
+                'order': order,
+                'success': False,
+                'error': f'{trade_rule}规则，{can_sell_date}后可卖出'
             }
         
         if position['quantity'] < order.quantity:
