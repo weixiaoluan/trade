@@ -1474,6 +1474,8 @@ def init_sim_trade_tables():
                 holding_period TEXT DEFAULT 'swing',
                 trade_rule TEXT DEFAULT 'T+1',
                 can_sell_date TEXT,
+                highest_price REAL,
+                sold_ratio REAL DEFAULT 0,
                 UNIQUE(username, symbol),
                 FOREIGN KEY (username) REFERENCES users(username)
             )
@@ -2092,6 +2094,395 @@ try:
     init_sim_trade_tables()
 except Exception as e:
     print(f"初始化模拟交易表失败: {e}")
+
+
+# ============================================
+# 策略配置管理
+# ============================================
+
+def db_get_user_strategy_configs(username: str) -> List[Dict]:
+    """获取用户的所有策略配置
+    
+    Args:
+        username: 用户名
+        
+    Returns:
+        策略配置列表
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, username, strategy_id, enabled, allocated_capital, 
+                   params, created_at, updated_at
+            FROM strategy_configs
+            WHERE username = ?
+            ORDER BY created_at DESC
+        ''', (username,))
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            config = dict(row)
+            # 解析 params JSON
+            if config.get('params'):
+                try:
+                    config['params'] = json.loads(config['params'])
+                except:
+                    config['params'] = {}
+            else:
+                config['params'] = {}
+            result.append(config)
+        return result
+
+
+def db_get_strategy_config(username: str, strategy_id: str) -> Optional[Dict]:
+    """获取单个策略配置
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        
+    Returns:
+        策略配置，不存在返回None
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, username, strategy_id, enabled, allocated_capital, 
+                   params, created_at, updated_at
+            FROM strategy_configs
+            WHERE username = ? AND strategy_id = ?
+        ''', (username, strategy_id))
+        row = cursor.fetchone()
+        if row:
+            config = dict(row)
+            if config.get('params'):
+                try:
+                    config['params'] = json.loads(config['params'])
+                except:
+                    config['params'] = {}
+            else:
+                config['params'] = {}
+            return config
+        return None
+
+
+def db_save_user_strategy_config(username: str, strategy_id: str, 
+                                  enabled: bool = True,
+                                  allocated_capital: float = 10000.0,
+                                  params: Dict = None) -> bool:
+    """保存用户策略配置（新增或更新）
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        enabled: 是否启用
+        allocated_capital: 分配资金
+        params: 策略参数
+        
+    Returns:
+        是否保存成功
+    """
+    now = datetime.now().isoformat()
+    params_json = json.dumps(params) if params else None
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO strategy_configs 
+                (username, strategy_id, enabled, allocated_capital, params, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(username, strategy_id) DO UPDATE SET
+                    enabled = excluded.enabled,
+                    allocated_capital = excluded.allocated_capital,
+                    params = excluded.params,
+                    updated_at = excluded.updated_at
+            ''', (username, strategy_id, 1 if enabled else 0, allocated_capital, 
+                  params_json, now, now))
+            return True
+        except Exception as e:
+            print(f"保存策略配置失败: {e}")
+            return False
+
+
+def db_update_strategy_config(username: str, strategy_id: str, **kwargs) -> bool:
+    """更新策略配置
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        **kwargs: 要更新的字段 (enabled, allocated_capital, params)
+        
+    Returns:
+        是否更新成功
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        updates = ['updated_at = ?']
+        values = [datetime.now().isoformat()]
+        
+        if 'enabled' in kwargs:
+            updates.append('enabled = ?')
+            values.append(1 if kwargs['enabled'] else 0)
+        
+        if 'allocated_capital' in kwargs:
+            updates.append('allocated_capital = ?')
+            values.append(kwargs['allocated_capital'])
+        
+        if 'params' in kwargs:
+            updates.append('params = ?')
+            values.append(json.dumps(kwargs['params']) if kwargs['params'] else None)
+        
+        values.extend([username, strategy_id])
+        
+        cursor.execute(f'''
+            UPDATE strategy_configs 
+            SET {', '.join(updates)}
+            WHERE username = ? AND strategy_id = ?
+        ''', values)
+        return cursor.rowcount > 0
+
+
+def db_delete_strategy_config(username: str, strategy_id: str) -> bool:
+    """删除策略配置
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        
+    Returns:
+        是否删除成功
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM strategy_configs
+            WHERE username = ? AND strategy_id = ?
+        ''', (username, strategy_id))
+        return cursor.rowcount > 0
+
+
+def db_get_enabled_strategy_configs(username: str) -> List[Dict]:
+    """获取用户启用的策略配置
+    
+    Args:
+        username: 用户名
+        
+    Returns:
+        启用的策略配置列表
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, username, strategy_id, enabled, allocated_capital, 
+                   params, created_at, updated_at
+            FROM strategy_configs
+            WHERE username = ? AND enabled = 1
+            ORDER BY created_at DESC
+        ''', (username,))
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            config = dict(row)
+            if config.get('params'):
+                try:
+                    config['params'] = json.loads(config['params'])
+                except:
+                    config['params'] = {}
+            else:
+                config['params'] = {}
+            result.append(config)
+        return result
+
+
+def db_get_total_allocated_capital(username: str) -> float:
+    """获取用户已分配的总资金
+    
+    Args:
+        username: 用户名
+        
+    Returns:
+        已分配总资金
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COALESCE(SUM(allocated_capital), 0)
+            FROM strategy_configs
+            WHERE username = ? AND enabled = 1
+        ''', (username,))
+        return cursor.fetchone()[0]
+
+
+# ============================================
+# 策略性能统计
+# ============================================
+
+def db_save_strategy_performance(username: str, strategy_id: str, date: str,
+                                  total_return: float = 0, daily_return: float = 0,
+                                  win_count: int = 0, loss_count: int = 0,
+                                  win_rate: float = 0, max_drawdown: float = 0,
+                                  sharpe_ratio: float = 0, trade_count: int = 0,
+                                  position_value: float = 0) -> bool:
+    """保存策略性能数据
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        date: 日期 (YYYY-MM-DD)
+        其他: 性能指标
+        
+    Returns:
+        是否保存成功
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO strategy_performance 
+                (username, strategy_id, date, total_return, daily_return,
+                 win_count, loss_count, win_rate, max_drawdown, sharpe_ratio,
+                 trade_count, position_value)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(username, strategy_id, date) DO UPDATE SET
+                    total_return = excluded.total_return,
+                    daily_return = excluded.daily_return,
+                    win_count = excluded.win_count,
+                    loss_count = excluded.loss_count,
+                    win_rate = excluded.win_rate,
+                    max_drawdown = excluded.max_drawdown,
+                    sharpe_ratio = excluded.sharpe_ratio,
+                    trade_count = excluded.trade_count,
+                    position_value = excluded.position_value
+            ''', (username, strategy_id, date, total_return, daily_return,
+                  win_count, loss_count, win_rate, max_drawdown, sharpe_ratio,
+                  trade_count, position_value))
+            return True
+        except Exception as e:
+            print(f"保存策略性能数据失败: {e}")
+            return False
+
+
+def db_get_strategy_performance(username: str, strategy_id: str, 
+                                 start_date: str = None, end_date: str = None) -> List[Dict]:
+    """获取策略性能数据
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        start_date: 开始日期 (可选)
+        end_date: 结束日期 (可选)
+        
+    Returns:
+        性能数据列表
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        query = '''
+            SELECT * FROM strategy_performance
+            WHERE username = ? AND strategy_id = ?
+        '''
+        params = [username, strategy_id]
+        
+        if start_date:
+            query += ' AND date >= ?'
+            params.append(start_date)
+        if end_date:
+            query += ' AND date <= ?'
+            params.append(end_date)
+        
+        query += ' ORDER BY date DESC'
+        cursor.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_get_latest_strategy_performance(username: str, strategy_id: str) -> Optional[Dict]:
+    """获取策略最新性能数据
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        
+    Returns:
+        最新性能数据
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM strategy_performance
+            WHERE username = ? AND strategy_id = ?
+            ORDER BY date DESC LIMIT 1
+        ''', (username, strategy_id))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def db_get_all_strategies_performance(username: str, date: str = None) -> List[Dict]:
+    """获取用户所有策略的性能数据
+    
+    Args:
+        username: 用户名
+        date: 指定日期 (可选，默认获取最新)
+        
+    Returns:
+        所有策略的性能数据列表
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if date:
+            cursor.execute('''
+                SELECT * FROM strategy_performance
+                WHERE username = ? AND date = ?
+            ''', (username, date))
+        else:
+            # 获取每个策略的最新数据
+            cursor.execute('''
+                SELECT sp.* FROM strategy_performance sp
+                INNER JOIN (
+                    SELECT strategy_id, MAX(date) as max_date
+                    FROM strategy_performance
+                    WHERE username = ?
+                    GROUP BY strategy_id
+                ) latest ON sp.strategy_id = latest.strategy_id 
+                       AND sp.date = latest.max_date
+                WHERE sp.username = ?
+            ''', (username, username))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def db_get_strategy_performance_summary(username: str, strategy_id: str) -> Optional[Dict]:
+    """获取策略性能汇总
+    
+    Args:
+        username: 用户名
+        strategy_id: 策略ID
+        
+    Returns:
+        性能汇总数据
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                strategy_id,
+                COUNT(*) as days,
+                MAX(total_return) as total_return,
+                AVG(daily_return) as avg_daily_return,
+                SUM(win_count) as total_wins,
+                SUM(loss_count) as total_losses,
+                SUM(trade_count) as total_trades,
+                MAX(max_drawdown) as max_drawdown,
+                AVG(sharpe_ratio) as avg_sharpe
+            FROM strategy_performance
+            WHERE username = ? AND strategy_id = ?
+        ''', (username, strategy_id))
+        row = cursor.fetchone()
+        if row:
+            result = dict(row)
+            total = result.get('total_wins', 0) + result.get('total_losses', 0)
+            result['overall_win_rate'] = result.get('total_wins', 0) / total if total > 0 else 0
+            return result
+        return None
 
 
 # ============================================

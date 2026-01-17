@@ -766,6 +766,25 @@ export default function SimTradePage() {
           )}
         </div>
 
+        {/* 策略池入口 */}
+        <button
+          onClick={() => router.push('/sim-trade/strategies')}
+          className="w-full bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-xl border border-indigo-500/30 p-4 hover:from-indigo-500/30 hover:to-purple-500/30 transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-indigo-500/20">
+                <Zap className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div className="text-left">
+                <div className="text-sm font-medium text-white">策略池</div>
+                <div className="text-xs text-slate-400">选择和配置量化交易策略</div>
+              </div>
+            </div>
+            <ChevronDown className="w-5 h-5 text-slate-400 -rotate-90" />
+          </div>
+        </button>
+
         {/* Tab 切换 */}
         <div className="flex gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
           {[

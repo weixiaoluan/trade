@@ -99,12 +99,12 @@ class RSIReversalStrategy(BaseStrategy):
         'ma_exit_period': 5,       # 出场均线周期
         'stop_loss_pct': 0.03,     # 止损百分比
         'applicable_etfs': [
-            '159915',  # 创业板ETF
-            '510300',  # 沪深300ETF
-            '510500',  # 中证500ETF
-            '159919',  # 沪深300ETF
-            '510050',  # 上证50ETF
-            '159901',  # 深100ETF
+            '159915.SZ',  # 创业板ETF
+            '510300.SH',  # 沪深300ETF
+            '510500.SH',  # 中证500ETF
+            '159919.SZ',  # 沪深300ETF
+            '510050.SH',  # 上证50ETF
+            '159901.SZ',  # 深100ETF
         ]
     }
     

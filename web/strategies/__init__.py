@@ -24,6 +24,32 @@ from .rsi_reversal import RSIReversalStrategy, RSI_REVERSAL_DEFINITION
 from .overnight import OvernightStrategy, OVERNIGHT_DEFINITION
 from .momentum_rotation import MomentumRotationStrategy, MOMENTUM_ROTATION_DEFINITION
 from .bias_reversion import BiasReversionStrategy, BIAS_REVERSION_DEFINITION
+from .risk_parity import RiskParityStrategy, RISK_PARITY_DEFINITION
+from .adaptive_ma import AdaptiveMAStrategy, ADAPTIVE_MA_DEFINITION
+from .executor import (
+    StrategyExecutor, UserStrategyConfig, ExecutionResult,
+    resolve_signal_conflicts, validate_capital_allocation, STRATEGY_CLASSES
+)
+from .performance import (
+    PerformanceMetrics, StrategyPerformanceCalculator,
+    calculate_total_return, calculate_daily_return, calculate_win_rate,
+    calculate_max_drawdown, calculate_sharpe_ratio, calculate_profit_factor,
+    compare_strategies_performance, aggregate_performance_by_period
+)
+from .risk_control import (
+    RiskConfig, RiskState, PauseReason,
+    StrategyRiskControl, RiskControlManager, validate_risk_config
+)
+from .etf_rotation import (
+    ETFMomentumRotationStrategy, BinaryRotationStrategy, IndustryMomentumStrategy,
+    ETF_ROTATION_DEFINITION, BINARY_ROTATION_DEFINITION, INDUSTRY_MOMENTUM_DEFINITION,
+    TICKER_POOL, BINARY_ROTATION_POOL, ETFInfo, TradingRule,
+    Backtester, BacktestResult, generate_mock_data, generate_mock_premium_data
+)
+from .strategy_trader import (
+    StrategyTrader, TradeOrder,
+    execute_etf_strategy, get_etf_strategy_status
+)
 
 __all__ = [
     'StrategyCategory',
@@ -40,4 +66,53 @@ __all__ = [
     'MOMENTUM_ROTATION_DEFINITION',
     'BiasReversionStrategy',
     'BIAS_REVERSION_DEFINITION',
+    'RiskParityStrategy',
+    'RISK_PARITY_DEFINITION',
+    'AdaptiveMAStrategy',
+    'ADAPTIVE_MA_DEFINITION',
+    # Executor
+    'StrategyExecutor',
+    'UserStrategyConfig',
+    'ExecutionResult',
+    'resolve_signal_conflicts',
+    'validate_capital_allocation',
+    'STRATEGY_CLASSES',
+    # Performance
+    'PerformanceMetrics',
+    'StrategyPerformanceCalculator',
+    'calculate_total_return',
+    'calculate_daily_return',
+    'calculate_win_rate',
+    'calculate_max_drawdown',
+    'calculate_sharpe_ratio',
+    'calculate_profit_factor',
+    'compare_strategies_performance',
+    'aggregate_performance_by_period',
+    # Risk Control
+    'RiskConfig',
+    'RiskState',
+    'PauseReason',
+    'StrategyRiskControl',
+    'RiskControlManager',
+    'validate_risk_config',
+    # ETF Rotation
+    'ETFMomentumRotationStrategy',
+    'BinaryRotationStrategy',
+    'IndustryMomentumStrategy',
+    'ETF_ROTATION_DEFINITION',
+    'BINARY_ROTATION_DEFINITION',
+    'INDUSTRY_MOMENTUM_DEFINITION',
+    'TICKER_POOL',
+    'BINARY_ROTATION_POOL',
+    'ETFInfo',
+    'TradingRule',
+    'Backtester',
+    'BacktestResult',
+    'generate_mock_data',
+    'generate_mock_premium_data',
+    # Strategy Trader
+    'StrategyTrader',
+    'TradeOrder',
+    'execute_etf_strategy',
+    'get_etf_strategy_status',
 ]

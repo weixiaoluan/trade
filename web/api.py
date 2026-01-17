@@ -7187,6 +7187,457 @@ def batch_calculate_prices_task(symbols: list, username: str):
 
 
 # ============================================
+# 策略池 API
+# ============================================
+
+from web.database import (
+    db_get_user_strategy_configs, db_get_strategy_config,
+    db_save_user_strategy_config, db_update_strategy_config,
+    db_delete_strategy_config, db_get_enabled_strategy_configs,
+    db_get_total_allocated_capital, db_save_strategy_performance,
+    db_get_strategy_performance, db_get_latest_strategy_performance,
+    db_get_all_strategies_performance, db_get_strategy_performance_summary
+)
+from web.strategies import StrategyRegistry, StrategyCategory
+
+
+class StrategyConfigRequest(BaseModel):
+    """策略配置请求"""
+    strategy_id: str
+    enabled: bool = True
+    allocated_capital: float = 10000.0
+    params: Optional[Dict[str, Any]] = None
+
+
+class StrategyConfigUpdateRequest(BaseModel):
+    """策略配置更新请求"""
+    enabled: Optional[bool] = None
+    allocated_capital: Optional[float] = None
+    params: Optional[Dict[str, Any]] = None
+
+
+@app.get("/api/strategies")
+async def get_all_strategies(authorization: str = Header(None)):
+    """获取所有预设策略列表"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    strategies = StrategyRegistry.get_all()
+    result = []
+    for s in strategies:
+        result.append({
+            "id": s.id,
+            "name": s.name,
+            "category": s.category.value,
+            "description": s.description,
+            "risk_level": s.risk_level.value,
+            "applicable_types": s.applicable_types,
+            "entry_logic": s.entry_logic,
+            "exit_logic": s.exit_logic,
+            "min_capital": s.min_capital,
+            "backtest_return": s.backtest_return,
+            "backtest_sharpe": s.backtest_sharpe,
+            "backtest_max_drawdown": s.backtest_max_drawdown,
+        })
+    return {"strategies": result}
+
+
+@app.get("/api/strategies/{strategy_id}")
+async def get_strategy_detail(strategy_id: str, authorization: str = Header(None)):
+    """获取策略详情"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    strategy = StrategyRegistry.get_by_id(strategy_id)
+    if not strategy:
+        raise HTTPException(status_code=404, detail="策略不存在")
+    
+    return {
+        "id": strategy.id,
+        "name": strategy.name,
+        "category": strategy.category.value,
+        "description": strategy.description,
+        "risk_level": strategy.risk_level.value,
+        "applicable_types": strategy.applicable_types,
+        "entry_logic": strategy.entry_logic,
+        "exit_logic": strategy.exit_logic,
+        "default_params": strategy.default_params,
+        "min_capital": strategy.min_capital,
+        "backtest_return": strategy.backtest_return,
+        "backtest_sharpe": strategy.backtest_sharpe,
+        "backtest_max_drawdown": strategy.backtest_max_drawdown,
+    }
+
+
+@app.get("/api/strategies/category/{category}")
+async def get_strategies_by_category(category: str, authorization: str = Header(None)):
+    """按类别获取策略"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    try:
+        cat = StrategyCategory(category)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="无效的策略类别")
+    
+    strategies = StrategyRegistry.get_by_category(cat)
+    result = []
+    for s in strategies:
+        result.append({
+            "id": s.id,
+            "name": s.name,
+            "category": s.category.value,
+            "description": s.description,
+            "risk_level": s.risk_level.value,
+            "min_capital": s.min_capital,
+        })
+    return {"strategies": result}
+
+
+@app.get("/api/sim-trade/strategies")
+async def get_user_strategy_configs(authorization: str = Header(None)):
+    """获取用户策略配置"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    configs = db_get_user_strategy_configs(user["username"])
+    
+    # 附加策略定义信息
+    result = []
+    for config in configs:
+        strategy_def = StrategyRegistry.get_by_id(config["strategy_id"])
+        config["strategy_name"] = strategy_def.name if strategy_def else config["strategy_id"]
+        config["strategy_category"] = strategy_def.category.value if strategy_def else "unknown"
+        config["min_capital"] = strategy_def.min_capital if strategy_def else 0
+        result.append(config)
+    
+    total_allocated = db_get_total_allocated_capital(user["username"])
+    
+    return {
+        "configs": result,
+        "total_allocated": total_allocated
+    }
+
+
+@app.post("/api/sim-trade/strategies")
+async def add_strategy_config(
+    request: StrategyConfigRequest,
+    authorization: str = Header(None)
+):
+    """添加策略配置"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    # 验证策略是否存在
+    strategy = StrategyRegistry.get_by_id(request.strategy_id)
+    if not strategy:
+        raise HTTPException(status_code=404, detail="策略不存在")
+    
+    # 验证最小资金要求
+    if request.allocated_capital < strategy.min_capital:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"分配资金不足，最低要求 {strategy.min_capital}"
+        )
+    
+    success = db_save_user_strategy_config(
+        username=user["username"],
+        strategy_id=request.strategy_id,
+        enabled=request.enabled,
+        allocated_capital=request.allocated_capital,
+        params=request.params
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="保存配置失败")
+    
+    return {"success": True, "message": "策略配置已保存"}
+
+
+@app.put("/api/sim-trade/strategies/{strategy_id}")
+async def update_strategy_config(
+    strategy_id: str,
+    request: StrategyConfigUpdateRequest,
+    authorization: str = Header(None)
+):
+    """更新策略配置"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    # 检查配置是否存在
+    config = db_get_strategy_config(user["username"], strategy_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="策略配置不存在")
+    
+    # 验证最小资金要求
+    if request.allocated_capital is not None:
+        strategy = StrategyRegistry.get_by_id(strategy_id)
+        if strategy and request.allocated_capital < strategy.min_capital:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"分配资金不足，最低要求 {strategy.min_capital}"
+            )
+    
+    update_data = {}
+    if request.enabled is not None:
+        update_data["enabled"] = request.enabled
+    if request.allocated_capital is not None:
+        update_data["allocated_capital"] = request.allocated_capital
+    if request.params is not None:
+        update_data["params"] = request.params
+    
+    success = db_update_strategy_config(user["username"], strategy_id, **update_data)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="更新配置失败")
+    
+    return {"success": True, "message": "策略配置已更新"}
+
+
+@app.delete("/api/sim-trade/strategies/{strategy_id}")
+async def delete_strategy_config(strategy_id: str, authorization: str = Header(None)):
+    """删除策略配置"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    success = db_delete_strategy_config(user["username"], strategy_id)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="策略配置不存在")
+    
+    return {"success": True, "message": "策略配置已删除"}
+
+
+@app.get("/api/sim-trade/strategies/performance")
+async def get_all_strategies_perf(authorization: str = Header(None)):
+    """获取所有策略性能对比"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    performances = db_get_all_strategies_performance(user["username"])
+    
+    # 附加策略名称
+    for perf in performances:
+        strategy = StrategyRegistry.get_by_id(perf.get("strategy_id", ""))
+        perf["strategy_name"] = strategy.name if strategy else perf.get("strategy_id", "")
+    
+    return {"performances": performances}
+
+
+@app.get("/api/sim-trade/strategies/{strategy_id}/performance")
+async def get_strategy_perf(
+    strategy_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    authorization: str = Header(None)
+):
+    """获取单策略性能详情"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    performances = db_get_strategy_performance(
+        user["username"], strategy_id, start_date, end_date
+    )
+    summary = db_get_strategy_performance_summary(user["username"], strategy_id)
+    
+    strategy = StrategyRegistry.get_by_id(strategy_id)
+    
+    return {
+        "strategy_id": strategy_id,
+        "strategy_name": strategy.name if strategy else strategy_id,
+        "daily_performances": performances,
+        "summary": summary
+    }
+
+
+# ============================================
+# ETF策略相关API
+# ============================================
+
+@app.get("/api/etf/strategies")
+async def get_etf_strategies():
+    """获取所有ETF策略"""
+    from web.strategies import (
+        ETF_ROTATION_DEFINITION, BINARY_ROTATION_DEFINITION, 
+        INDUSTRY_MOMENTUM_DEFINITION
+    )
+    
+    strategies = [
+        {
+            "id": ETF_ROTATION_DEFINITION.id,
+            "name": ETF_ROTATION_DEFINITION.name,
+            "description": ETF_ROTATION_DEFINITION.description,
+            "category": ETF_ROTATION_DEFINITION.category.value,
+            "risk_level": ETF_ROTATION_DEFINITION.risk_level.value,
+            "min_capital": ETF_ROTATION_DEFINITION.min_capital,
+            "backtest_return": ETF_ROTATION_DEFINITION.backtest_return,
+            "backtest_sharpe": ETF_ROTATION_DEFINITION.backtest_sharpe,
+            "backtest_max_drawdown": ETF_ROTATION_DEFINITION.backtest_max_drawdown,
+        },
+        {
+            "id": BINARY_ROTATION_DEFINITION.id,
+            "name": BINARY_ROTATION_DEFINITION.name,
+            "description": BINARY_ROTATION_DEFINITION.description,
+            "category": BINARY_ROTATION_DEFINITION.category.value,
+            "risk_level": BINARY_ROTATION_DEFINITION.risk_level.value,
+            "min_capital": BINARY_ROTATION_DEFINITION.min_capital,
+            "backtest_return": BINARY_ROTATION_DEFINITION.backtest_return,
+            "backtest_sharpe": BINARY_ROTATION_DEFINITION.backtest_sharpe,
+            "backtest_max_drawdown": BINARY_ROTATION_DEFINITION.backtest_max_drawdown,
+        },
+        {
+            "id": INDUSTRY_MOMENTUM_DEFINITION.id,
+            "name": INDUSTRY_MOMENTUM_DEFINITION.name,
+            "description": INDUSTRY_MOMENTUM_DEFINITION.description,
+            "category": INDUSTRY_MOMENTUM_DEFINITION.category.value,
+            "risk_level": INDUSTRY_MOMENTUM_DEFINITION.risk_level.value,
+            "min_capital": INDUSTRY_MOMENTUM_DEFINITION.min_capital,
+            "backtest_return": INDUSTRY_MOMENTUM_DEFINITION.backtest_return,
+            "backtest_sharpe": INDUSTRY_MOMENTUM_DEFINITION.backtest_sharpe,
+            "backtest_max_drawdown": INDUSTRY_MOMENTUM_DEFINITION.backtest_max_drawdown,
+        },
+    ]
+    
+    return {"strategies": strategies}
+
+
+@app.get("/api/etf/strategies/{strategy_id}/status")
+async def get_etf_strategy_status_api(strategy_id: str, authorization: str = Header(None)):
+    """获取ETF策略当前状态"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    from web.strategies import get_etf_strategy_status
+    
+    status = get_etf_strategy_status(user["username"], strategy_id)
+    
+    if "error" in status:
+        raise HTTPException(status_code=400, detail=status["error"])
+    
+    return status
+
+
+@app.post("/api/etf/strategies/{strategy_id}/execute")
+async def execute_etf_strategy_api(strategy_id: str, authorization: str = Header(None)):
+    """手动执行ETF策略"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    from web.strategies import execute_etf_strategy
+    
+    # 获取用户策略配置
+    config = db_get_strategy_config(user["username"], strategy_id)
+    allocated_capital = config.get("allocated_capital", 50000) if config else 50000
+    
+    result = execute_etf_strategy(user["username"], strategy_id, allocated_capital)
+    
+    return result
+
+
+@app.get("/api/etf/pool")
+async def get_etf_pool():
+    """获取ETF标的池"""
+    from web.data import DEFAULT_ETF_POOL
+    
+    return {"etf_pool": DEFAULT_ETF_POOL}
+
+
+@app.get("/api/etf/realtime/{symbol}")
+async def get_etf_realtime_api(symbol: str):
+    """获取ETF实时行情"""
+    from web.data import db_get_etf_realtime, get_etf_data_manager
+    
+    # 先从缓存获取
+    cached = db_get_etf_realtime(symbol)
+    
+    if cached:
+        return cached
+    
+    # 从数据源获取
+    manager = get_etf_data_manager()
+    realtime = manager.get_etf_realtime(symbol)
+    
+    if not realtime:
+        raise HTTPException(status_code=404, detail=f"未找到{symbol}的行情数据")
+    
+    return realtime
+
+
+@app.get("/api/etf/daily/{symbol}")
+async def get_etf_daily_api(symbol: str, days: int = 60):
+    """获取ETF日线数据"""
+    from web.data import db_get_etf_daily
+    
+    df = db_get_etf_daily(symbol, limit=days)
+    
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"未找到{symbol}的日线数据")
+    
+    # 转换为JSON格式
+    records = df.to_dict(orient="records")
+    for r in records:
+        if "date" in r and hasattr(r["date"], "isoformat"):
+            r["date"] = r["date"].isoformat()
+    
+    return {"symbol": symbol, "data": records}
+
+
+@app.post("/api/etf/sync")
+async def sync_etf_data_api(authorization: str = Header(None)):
+    """手动触发ETF数据同步"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    from web.data import get_sync_service
+    
+    service = get_sync_service()
+    
+    # 同步日线数据
+    daily_results = service.sync_all_etf_daily(days=60, force=False)
+    
+    # 更新实时行情
+    realtime_results = service.update_all_realtime_cache()
+    
+    return {
+        "success": True,
+        "daily_synced": sum(daily_results.values()),
+        "realtime_updated": sum(1 for v in realtime_results.values() if v)
+    }
+
+
+@app.post("/api/etf/init")
+async def init_etf_data_api(authorization: str = Header(None)):
+    """初始化ETF数据（首次使用）"""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    from web.data import init_etf_data
+    
+    # 异步执行初始化（这可能需要较长时间）
+    import threading
+    thread = threading.Thread(target=init_etf_data, daemon=True)
+    thread.start()
+    
+    return {
+        "success": True,
+        "message": "ETF数据初始化已开始，请稍后查看数据"
+    }
+
+
+# ============================================
 # 启动服务
 # ============================================
 

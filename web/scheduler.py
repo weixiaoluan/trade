@@ -605,6 +605,172 @@ def generate_quant_signal_for_auto_trade(symbol: str, watchlist_item: Dict, quot
         }
 
 
+def execute_strategy_signals():
+    """执行策略池信号（交易时间内）"""
+    if not is_trading_time():
+        return
+    
+    try:
+        from web.database import (
+            db_get_all_auto_trade_users, db_get_enabled_strategy_configs,
+            db_save_strategy_performance
+        )
+        from web.strategies import StrategyExecutor, UserStrategyConfig
+        
+        # 获取开启自动交易的用户
+        auto_trade_users = db_get_all_auto_trade_users()
+        
+        for user in auto_trade_users:
+            username = user.get('username')
+            if not username:
+                continue
+            
+            # 获取用户启用的策略配置
+            strategy_configs = db_get_enabled_strategy_configs(username)
+            if not strategy_configs:
+                continue
+            
+            # 转换为 UserStrategyConfig 对象
+            configs = []
+            for cfg in strategy_configs:
+                configs.append(UserStrategyConfig(
+                    strategy_id=cfg['strategy_id'],
+                    enabled=bool(cfg.get('enabled', True)),
+                    allocated_capital=cfg.get('allocated_capital', 10000),
+                    params=cfg.get('params', {})
+                ))
+            
+            # 创建执行器并加载策略
+            executor = StrategyExecutor()
+            loaded, errors = executor.load_user_strategies(configs)
+            
+            if errors:
+                for err in errors:
+                    logger.warning(f"[策略池] 用户 {username} 策略加载警告: {err}")
+            
+            if loaded == 0:
+                continue
+            
+            # 获取市场数据（简化版，实际需要更完整的数据）
+            market_data = get_market_data_for_strategies(executor.get_all_applicable_symbols())
+            
+            # 执行所有策略
+            signals, results = executor.execute_all(market_data)
+            
+            # 记录执行结果
+            for result in results:
+                if result.errors:
+                    for err in result.errors:
+                        logger.error(f"[策略池] 用户 {username} 策略 {result.strategy_id} 执行错误: {err}")
+                
+                if result.resolved_signals:
+                    logger.info(
+                        f"[策略池] 用户 {username} 策略 {result.strategy_id} "
+                        f"生成 {len(result.resolved_signals)} 个信号"
+                    )
+            
+            # TODO: 将信号传递给交易执行模块
+            # 这里需要与现有的自动交易逻辑集成
+            
+    except Exception as e:
+        logger.error(f"[策略池] 执行策略信号失败: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def get_market_data_for_strategies(symbols: List[str]) -> Dict:
+    """获取策略所需的市场数据"""
+    market_data = {}
+    
+    for symbol in symbols:
+        try:
+            stock_info = get_stock_info(symbol)
+            if not stock_info:
+                continue
+            
+            price_info = stock_info.get('price_info', {})
+            
+            market_data[symbol] = {
+                'close': price_info.get('current_price'),
+                'open': price_info.get('open'),
+                'high': price_info.get('high'),
+                'low': price_info.get('low'),
+                'volume': price_info.get('volume'),
+                'change_pct': price_info.get('change_pct'),
+            }
+        except Exception as e:
+            logger.warning(f"[策略池] 获取 {symbol} 市场数据失败: {e}")
+    
+    return market_data
+
+
+def execute_etf_strategy_signals():
+    """执行ETF轮动策略信号"""
+    if not is_trading_time():
+        return
+    
+    try:
+        from web.database import db_get_all_auto_trade_users, db_get_enabled_strategy_configs
+        from web.strategies import execute_etf_strategy
+        
+        # ETF策略ID列表
+        etf_strategies = ['etf_momentum_rotation', 'binary_rotation', 'industry_momentum']
+        
+        # 获取开启自动交易的用户
+        auto_trade_users = db_get_all_auto_trade_users()
+        
+        for user in auto_trade_users:
+            username = user.get('username')
+            if not username:
+                continue
+            
+            # 获取用户启用的策略配置
+            strategy_configs = db_get_enabled_strategy_configs(username)
+            if not strategy_configs:
+                continue
+            
+            # 过滤出ETF策略
+            for cfg in strategy_configs:
+                strategy_id = cfg.get('strategy_id')
+                if strategy_id not in etf_strategies:
+                    continue
+                
+                if not cfg.get('enabled', True):
+                    continue
+                
+                allocated_capital = cfg.get('allocated_capital', 50000)
+                
+                # 执行ETF策略
+                result = execute_etf_strategy(username, strategy_id, allocated_capital)
+                
+                if result.get('success'):
+                    if result.get('orders', 0) > 0:
+                        logger.info(
+                            f"[ETF策略] 用户 {username} 策略 {strategy_id} "
+                            f"执行 {result.get('executed', 0)}/{result.get('orders', 0)} 笔交易, "
+                            f"目标: {result.get('target')}"
+                        )
+                else:
+                    logger.warning(
+                        f"[ETF策略] 用户 {username} 策略 {strategy_id} "
+                        f"执行失败: {result.get('error')}"
+                    )
+                    
+    except Exception as e:
+        logger.error(f"[ETF策略] 执行失败: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def sync_etf_data():
+    """同步ETF数据（盘后执行）"""
+    try:
+        from web.data import sync_etf_data_task
+        sync_etf_data_task()
+    except Exception as e:
+        logger.error(f"[ETF数据同步] 失败: {e}")
+
+
 def start_scheduler():
     """启动调度器"""
     logger.info("启动定时任务调度器...")
@@ -615,6 +781,15 @@ def start_scheduler():
     # 每60秒执行一次自动交易（交易时间内）
     # 自动交易会检查所有开启自动交易的用户，执行买卖操作
     schedule.every(60).seconds.do(process_auto_trades)
+    
+    # 每2分钟执行一次策略池信号（交易时间内）
+    schedule.every(2).minutes.do(execute_strategy_signals)
+    
+    # 每5分钟执行一次ETF轮动策略（交易时间内）
+    schedule.every(5).minutes.do(execute_etf_strategy_signals)
+    
+    # 每天16:00同步ETF数据（收盘后）
+    schedule.every().day.at("16:00").do(sync_etf_data)
     
     # 每天23:59清空研究列表（保留当天的）
     schedule.every().day.at("23:59").do(clear_ai_picks_daily)
