@@ -613,12 +613,14 @@ def execute_strategy_signals():
     try:
         from web.database import (
             db_get_all_auto_trade_users, db_get_enabled_strategy_configs,
-            db_save_strategy_performance
+            db_save_strategy_performance, db_add_monitor_log
         )
-        from web.strategies import StrategyExecutor, UserStrategyConfig
+        from web.strategies import StrategyExecutor, UserStrategyConfig, execute_strategy_signal
         
         # 获取开启自动交易的用户
         auto_trade_users = db_get_all_auto_trade_users()
+        
+        total_trades = 0
         
         for user in auto_trade_users:
             username = user.get('username')
@@ -630,15 +632,26 @@ def execute_strategy_signals():
             if not strategy_configs:
                 continue
             
+            # ETF策略单独处理（在execute_etf_strategy_signals中）
+            etf_strategies = ['etf_momentum_rotation', 'binary_rotation', 'industry_momentum']
+            
+            # 过滤出非ETF策略
+            non_etf_configs = [cfg for cfg in strategy_configs if cfg['strategy_id'] not in etf_strategies]
+            
+            if not non_etf_configs:
+                continue
+            
             # 转换为 UserStrategyConfig 对象
             configs = []
-            for cfg in strategy_configs:
+            capital_map = {}  # 策略ID -> 分配资金映射
+            for cfg in non_etf_configs:
                 configs.append(UserStrategyConfig(
                     strategy_id=cfg['strategy_id'],
                     enabled=bool(cfg.get('enabled', True)),
                     allocated_capital=cfg.get('allocated_capital', 10000),
                     params=cfg.get('params', {})
                 ))
+                capital_map[cfg['strategy_id']] = cfg.get('allocated_capital', 10000)
             
             # 创建执行器并加载策略
             executor = StrategyExecutor()
@@ -651,10 +664,10 @@ def execute_strategy_signals():
             if loaded == 0:
                 continue
             
-            # 获取市场数据（简化版，实际需要更完整的数据）
+            # 获取市场数据
             market_data = get_market_data_for_strategies(executor.get_all_applicable_symbols())
             
-            # 执行所有策略
+            # 执行所有策略生成信号
             signals, results = executor.execute_all(market_data)
             
             # 记录执行结果
@@ -669,8 +682,31 @@ def execute_strategy_signals():
                         f"生成 {len(result.resolved_signals)} 个信号"
                     )
             
-            # TODO: 将信号传递给交易执行模块
-            # 这里需要与现有的自动交易逻辑集成
+            # 执行交易信号
+            for signal in signals:
+                if signal.signal_type in ('buy', 'sell'):
+                    # 获取该策略的分配资金
+                    allocated_capital = capital_map.get(signal.strategy_id, 10000)
+                    
+                    # 执行交易
+                    result = execute_strategy_signal(username, signal, allocated_capital)
+                    
+                    if result.get('success'):
+                        executed = result.get('executed', 0)
+                        if executed > 0:
+                            total_trades += executed
+                            logger.info(
+                                f"[策略池] 用户 {username} 策略 {signal.strategy_id} "
+                                f"执行{signal.signal_type}: {signal.symbol}, 成功{executed}笔"
+                            )
+                    else:
+                        logger.warning(
+                            f"[策略池] 用户 {username} 策略 {signal.strategy_id} "
+                            f"执行失败: {result.get('error')}"
+                        )
+        
+        if total_trades > 0:
+            logger.info(f"[策略池] 本轮执行完成，共执行 {total_trades} 笔交易")
             
     except Exception as e:
         logger.error(f"[策略池] 执行策略信号失败: {e}")

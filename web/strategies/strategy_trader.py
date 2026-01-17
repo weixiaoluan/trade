@@ -543,6 +543,150 @@ def execute_etf_strategy(username: str, strategy_id: str,
         return {'success': False, 'error': str(e)}
 
 
+def execute_strategy_signal(username: str, signal, allocated_capital: float = None) -> Dict:
+    """
+    执行策略信号（通用，适用于所有策略）
+    
+    Args:
+        username: 用户名
+        signal: Signal对象，包含symbol, signal_type, strategy_id等
+        allocated_capital: 分配资金
+        
+    Returns:
+        执行结果
+    """
+    from ..database import (
+        db_get_sim_account, db_get_sim_positions, db_get_sim_position,
+        db_add_monitor_log
+    )
+    from ..stock import get_stock_info
+    
+    try:
+        trader = StrategyTrader(username)
+        
+        # 获取账户信息
+        account = db_get_sim_account(username)
+        if not account:
+            return {'success': False, 'error': '账户不存在'}
+        
+        # 获取当前持仓
+        positions = db_get_sim_positions(username)
+        
+        symbol = signal.symbol
+        signal_type = signal.signal_type
+        strategy_id = signal.strategy_id or 'unknown'
+        
+        # 获取实时价格
+        stock_info = get_stock_info(symbol)
+        if not stock_info:
+            return {'success': False, 'error': f'无法获取{symbol}行情'}
+        
+        price_info = stock_info.get('price_info', {})
+        current_price = price_info.get('current_price', 0)
+        
+        if current_price <= 0:
+            return {'success': False, 'error': f'无效价格: {current_price}'}
+        
+        stock_name = stock_info.get('basic_info', {}).get('name', symbol)
+        
+        orders = []
+        
+        if signal_type == 'buy':
+            # 检查是否已有持仓
+            existing = db_get_sim_position(username, symbol)
+            if existing and existing.get('quantity', 0) > 0:
+                return {'success': True, 'message': f'{symbol}已有持仓，跳过买入'}
+            
+            # 计算可买数量
+            available_cash = account.get('current_capital', 0)
+            capital_to_use = min(allocated_capital or available_cash, available_cash)
+            
+            # 考虑手续费，留一点余量
+            effective_capital = capital_to_use * 0.998
+            
+            # 计算买入数量（100股为一手）
+            quantity = int(effective_capital / current_price / 100) * 100
+            
+            if quantity >= 100:
+                orders.append(TradeOrder(
+                    symbol=symbol,
+                    name=stock_name,
+                    action='buy',
+                    quantity=quantity,
+                    price=current_price,
+                    reason=signal.reason or f'{strategy_id}买入信号',
+                    strategy_id=strategy_id
+                ))
+                
+                # 记录监控日志
+                db_add_monitor_log(
+                    username, 'signal',
+                    f'策略{strategy_id}触发买入信号: {stock_name}({symbol})',
+                    symbol=symbol,
+                    details=f'信号强度: {signal.strength}, 置信度: {signal.confidence}%'
+                )
+        
+        elif signal_type == 'sell':
+            # 检查持仓
+            existing = db_get_sim_position(username, symbol)
+            if not existing or existing.get('quantity', 0) <= 0:
+                return {'success': True, 'message': f'{symbol}无持仓，跳过卖出'}
+            
+            quantity = existing.get('quantity', 0)
+            
+            orders.append(TradeOrder(
+                symbol=symbol,
+                name=existing.get('name', stock_name),
+                action='sell',
+                quantity=quantity,
+                price=current_price,
+                reason=signal.reason or f'{strategy_id}卖出信号',
+                strategy_id=strategy_id
+            ))
+            
+            # 记录监控日志
+            db_add_monitor_log(
+                username, 'signal',
+                f'策略{strategy_id}触发卖出信号: {stock_name}({symbol})',
+                symbol=symbol,
+                details=f'信号强度: {signal.strength}, 置信度: {signal.confidence}%'
+            )
+        
+        if not orders:
+            return {'success': True, 'message': '无需执行交易', 'signal_type': signal_type}
+        
+        # 执行订单
+        results = trader.execute_orders(orders)
+        
+        success_count = sum(1 for r in results if r.get('success'))
+        
+        # 记录交易执行日志
+        for result in results:
+            if result.get('success'):
+                order = result.get('order')
+                db_add_monitor_log(
+                    username, 'trade',
+                    f'策略{strategy_id}执行{order.action}: {order.name}({order.symbol}) {order.quantity}股 @ ¥{order.price:.3f}',
+                    symbol=order.symbol,
+                    details=f'原因: {order.reason}'
+                )
+        
+        return {
+            'success': True,
+            'strategy_id': strategy_id,
+            'signal_type': signal_type,
+            'orders': len(orders),
+            'executed': success_count,
+            'results': results
+        }
+        
+    except Exception as e:
+        logger.error(f"执行策略信号失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+
 def get_etf_strategy_status(username: str, strategy_id: str) -> Dict:
     """
     获取ETF策略状态

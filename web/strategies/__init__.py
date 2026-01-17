@@ -48,7 +48,8 @@ from .etf_rotation import (
 )
 from .strategy_trader import (
     StrategyTrader, TradeOrder,
-    execute_etf_strategy, get_etf_strategy_status
+    execute_etf_strategy, get_etf_strategy_status,
+    execute_strategy_signal
 )
 
 __all__ = [
@@ -115,6 +116,7 @@ __all__ = [
     'TradeOrder',
     'execute_etf_strategy',
     'get_etf_strategy_status',
+    'execute_strategy_signal',
 ]
 
 # ============================================
