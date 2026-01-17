@@ -1050,7 +1050,6 @@ class TradingSignalGenerator:
         return self._generate_position_strategy_v5(
             signal_type, strength, position_pct, stop_loss, take_profit, current_price, 0
         )
-        )
     
     def _default_risk_management(self, price: float) -> Tuple[RiskManagement, PositionStrategy]:
         """默认风险管理参数"""
