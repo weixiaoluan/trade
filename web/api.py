@@ -7223,6 +7223,23 @@ async def get_all_strategies(authorization: str = Header(None)):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     
+    # 确保策略已注册
+    from web.strategies import (
+        RSI_REVERSAL_DEFINITION, OVERNIGHT_DEFINITION, MOMENTUM_ROTATION_DEFINITION,
+        BIAS_REVERSION_DEFINITION, RISK_PARITY_DEFINITION, ADAPTIVE_MA_DEFINITION,
+        ETF_ROTATION_DEFINITION, BINARY_ROTATION_DEFINITION, INDUSTRY_MOMENTUM_DEFINITION
+    )
+    
+    all_definitions = [
+        RSI_REVERSAL_DEFINITION, OVERNIGHT_DEFINITION, MOMENTUM_ROTATION_DEFINITION,
+        BIAS_REVERSION_DEFINITION, RISK_PARITY_DEFINITION, ADAPTIVE_MA_DEFINITION,
+        ETF_ROTATION_DEFINITION, BINARY_ROTATION_DEFINITION, INDUSTRY_MOMENTUM_DEFINITION
+    ]
+    
+    for defn in all_definitions:
+        if StrategyRegistry.get_by_id(defn.id) is None:
+            StrategyRegistry.register(defn)
+    
     strategies = StrategyRegistry.get_all()
     result = []
     for s in strategies:
