@@ -6595,15 +6595,19 @@ async def get_sim_trade_monitor(authorization: str = Header(None)):
         position = position_map.get(symbol)
         holding_period = item.get('holding_period', 'swing')
         
-        current_price = quote.get('current_price', 0)
-        change_pct = quote.get('change_percent', 0)
+        current_price = quote.get('current_price') or 0
+        change_pct = quote.get('change_percent') or 0
         
-        # 获取支撑位/阻力位
-        support = item.get(f'{holding_period}_support') or item.get('ai_buy_price', 0)
-        resistance = item.get(f'{holding_period}_resistance') or item.get('ai_sell_price', 0)
-        risk = item.get(f'{holding_period}_risk', 0)
+        # 获取支撑位/阻力位（确保不为None）
+        support = item.get(f'{holding_period}_support') or item.get('ai_buy_price') or 0
+        resistance = item.get(f'{holding_period}_resistance') or item.get('ai_sell_price') or 0
+        risk = item.get(f'{holding_period}_risk') or 0
         
-        # 计算距离
+        # 计算距离（确保数值类型）
+        current_price = float(current_price) if current_price else 0
+        support = float(support) if support else 0
+        resistance = float(resistance) if resistance else 0
+        
         dist_to_support = ((current_price - support) / support * 100) if support > 0 and current_price > 0 else None
         dist_to_resistance = ((resistance - current_price) / current_price * 100) if resistance > 0 and current_price > 0 else None
         
