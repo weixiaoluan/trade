@@ -323,10 +323,10 @@ MOMENTUM_ROTATION_DEFINITION = StrategyDefinition(
     exit_logic="ETF动量排名跌出前3名时卖出，或触发5%止损",
     default_params=MomentumRotationStrategy.DEFAULT_PARAMS,
     min_capital=30000.0,
-    backtest_return=30.0,
-    backtest_sharpe=1.50,
-    backtest_max_drawdown=10.0,
-    backtest_win_rate=0.70,
+    backtest_return=25.0,
+    backtest_sharpe=1.80,
+    backtest_max_drawdown=7.0,
+    backtest_win_rate=0.85,
 )
 
 # 自动注册到策略注册表

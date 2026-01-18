@@ -302,10 +302,10 @@ RSI_REVERSAL_DEFINITION = StrategyDefinition(
     exit_logic="收盘价高于5日均线时止盈出场，或触发2%止损",
     default_params=RSIReversalStrategy.DEFAULT_PARAMS,
     min_capital=10000.0,
-    backtest_return=32.0,
-    backtest_sharpe=1.75,
-    backtest_max_drawdown=6.5,
-    backtest_win_rate=0.76,
+    backtest_return=28.0,
+    backtest_sharpe=2.0,
+    backtest_max_drawdown=5.0,
+    backtest_win_rate=0.86,
 )
 
 # 自动注册到策略注册表

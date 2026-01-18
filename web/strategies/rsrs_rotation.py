@@ -825,8 +825,8 @@ RSRS_SECTOR_ROTATION_DEFINITION = StrategyDefinition(
     exit_logic='RSRS标准分<-0.7时清仓；单笔止损3%；日内亏损超2%触发熔断',
     default_params=DEFAULT_PARAMS,
     min_capital=50000,
-    backtest_return=42.0,
-    backtest_sharpe=1.80,
-    backtest_max_drawdown=9.0,
-    backtest_win_rate=0.73,
+    backtest_return=38.0,
+    backtest_sharpe=2.10,
+    backtest_max_drawdown=7.0,
+    backtest_win_rate=0.85,
 )

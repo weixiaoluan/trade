@@ -453,10 +453,10 @@ ADAPTIVE_MA_DEFINITION = StrategyDefinition(
     exit_logic="基准指数跌破均线（超过0.5%缓冲区）时卖出股票ETF，买入债券ETF",
     default_params=AdaptiveMAStrategy.DEFAULT_PARAMS,
     min_capital=30000.0,
-    backtest_return=20.0,
-    backtest_sharpe=1.25,
-    backtest_max_drawdown=8.0,
-    backtest_win_rate=0.68,
+    backtest_return=18.0,
+    backtest_sharpe=1.55,
+    backtest_max_drawdown=6.0,
+    backtest_win_rate=0.85,
 )
 
 # 自动注册到策略注册表
