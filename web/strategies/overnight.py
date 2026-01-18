@@ -156,44 +156,27 @@ class OvernightStrategy(BaseStrategy):
                 if close is None:
                     continue
                 
-                # ========== 85%+胜率优化：多重确认 ==========
+                # 检查历史隔夜收益率
                 avg_overnight_return = data.get('avg_overnight_return', 0)
-                win_rate = data.get('overnight_win_rate', 0.5)  # 历史隔夜胜率
-                recent_trend = data.get('recent_trend', 0)  # 近期趋势
-                volatility = data.get('volatility', 0.02)  # 波动率
                 
-                # 条件1: 历史隔夜收益率为正且较高
-                good_overnight = avg_overnight_return >= min_overnight_return * 1.5
-                
-                # 条件2: 历史隔夜胜率高于60%
-                high_win_rate = win_rate >= 0.6
-                
-                # 条件3: 近期趋势向上或中性
-                trend_ok = recent_trend >= -0.01
-                
-                # 条件4: 波动率适中（不太高）
-                vol_ok = volatility < 0.03
-                
-                # 必须满足至少3个条件
-                conditions_met = sum([good_overnight, high_win_rate, trend_ok, vol_ok])
-                
-                if conditions_met >= 3 and avg_overnight_return >= min_overnight_return:
-                    if avg_overnight_return >= 0.004 and win_rate >= 0.7:
-                        strength = 5
-                        confidence = 90
-                    elif avg_overnight_return >= 0.003:
+                if avg_overnight_return >= min_overnight_return:
+                    # 计算信号强度基于历史隔夜收益率
+                    if avg_overnight_return >= 0.003:  # 0.3%以上
                         strength = 4
                         confidence = 85
-                    else:
+                    elif avg_overnight_return >= 0.002:  # 0.2%以上
                         strength = 3
                         confidence = 80
+                    else:
+                        strength = 3
+                        confidence = 75
                     
                     signals.append(Signal(
                         symbol=symbol,
                         signal_type='buy',
                         strength=strength,
                         confidence=confidence,
-                        reason=f'隔夜效应买入, 收益{avg_overnight_return*100:.3f}%, 胜率{win_rate*100:.0f}%',
+                        reason=f'隔夜效应买入, 历史平均隔夜收益{avg_overnight_return*100:.3f}%',
                         strategy_id=self.STRATEGY_ID
                     ))
         
