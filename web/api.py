@@ -7735,7 +7735,7 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
             IndustryMomentumStrategy, Backtester,
             TICKER_POOL, BINARY_ROTATION_POOL
         )
-        from web.strategies.etf_short_term import ShortTermMomentumStrategy, ShortTermBacktester, SHORT_TERM_ETF_POOL
+        from web.strategies.etf_short_term import ETFShortTermStrategy, ShortTermBacktester, SHORT_TERM_ETF_POOL
         
         # 根据策略类型选择对应的策略和标的池
         if strategy_id == "etf_momentum_rotation":
@@ -7748,7 +7748,7 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
             strategy = IndustryMomentumStrategy()
             etf_pool = strategy.INDUSTRY_POOL  # 类属性
         elif strategy_id == "etf_short_term":
-            strategy = ShortTermMomentumStrategy()
+            strategy = ETFShortTermStrategy()
             etf_pool = SHORT_TERM_ETF_POOL
         else:
             raise HTTPException(status_code=400, detail=f"不支持的策略: {strategy_id}")
