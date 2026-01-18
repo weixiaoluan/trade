@@ -9,7 +9,10 @@ import asyncio
 import json
 import uuid
 import os
+import logging
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
@@ -7823,7 +7826,7 @@ async def list_database_backups(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.db_backup import list_backups
@@ -7839,7 +7842,7 @@ async def create_database_backup(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.db_backup import create_backup
@@ -7859,7 +7862,7 @@ async def restore_database_backup(backup_name: str, authorization: str = Header(
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.db_backup import restore_backup
@@ -7879,7 +7882,7 @@ async def delete_database_backup(backup_name: str, authorization: str = Header(N
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.db_backup import delete_backup
@@ -7899,7 +7902,7 @@ async def get_backup_settings(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.db_backup import get_backup_settings
@@ -7922,7 +7925,7 @@ async def update_backup_settings(request: BackupSettingsRequest, authorization: 
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.db_backup import update_backup_settings
@@ -8007,7 +8010,7 @@ async def add_strategy_asset(strategy_id: str, request: AddAssetRequest, authori
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.database import db_add_strategy_asset
@@ -8036,7 +8039,7 @@ async def remove_strategy_asset(strategy_id: str, symbol: str, authorization: st
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.database import db_remove_strategy_asset
@@ -8064,7 +8067,7 @@ async def batch_add_strategy_assets(strategy_id: str, request: BatchAddAssetsReq
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.database import db_batch_add_strategy_assets
@@ -8082,7 +8085,7 @@ async def clear_strategy_assets(strategy_id: str, authorization: str = Header(No
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.database import db_clear_strategy_assets
@@ -8104,7 +8107,7 @@ async def import_from_watchlist(strategy_id: str, request: ImportFromWatchlistRe
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.database import db_import_from_watchlist
@@ -8132,7 +8135,7 @@ async def update_strategy_asset(strategy_id: str, symbol: str, request: UpdateAs
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
     user = get_current_user(token)
-    if not user or not is_admin(user["username"]):
+    if not user or not is_admin(user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from web.database import db_update_strategy_asset
