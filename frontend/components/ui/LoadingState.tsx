@@ -8,14 +8,14 @@ const loadingStages = [
   // 第一列：数据获取
   { icon: Bot, text: 'AI Agents正在集结', color: 'text-electric-blue', column: 1 },
   { icon: Database, text: '正在获取实时行情数据', color: 'text-emerald-400', column: 1 },
-  { icon: BarChart3, text: '基本面分析师正在评估价值', color: 'text-amber-400', column: 1 },
+  { icon: BarChart3, text: '基本面分析师正在评估价�?, color: 'text-amber-400', column: 1 },
   // 第二列：量化分析
-  { icon: Brain, text: '技术面分析师正在计算指标', color: 'text-purple-400', column: 2 },
+  { icon: Brain, text: '技术面分析师正在计算指�?, color: 'text-purple-400', column: 2 },
   { icon: BarChart3, text: '量化引擎正在生成信号', color: 'text-cyan-400', column: 2 },
-  { icon: Shield, text: '数据审计员正在验证来源', color: 'text-rose-400', column: 2 },
+  { icon: Shield, text: '数据审计员正在验证来�?, color: 'text-rose-400', column: 2 },
   // 第三列：AI分析
   { icon: Shield, text: '风险管理专家正在评估风险', color: 'text-orange-400', column: 3 },
-  { icon: MessageSquare, text: '首席投资官正在生成报告', color: 'text-indigo-400', column: 3 },
+  { icon: MessageSquare, text: '首席投资官正在生成报�?, color: 'text-indigo-400', column: 3 },
   { icon: Bot, text: '质量控制专员正在审核', color: 'text-teal-400', column: 3 },
 ];
 
@@ -38,24 +38,18 @@ export function LoadingState({ progress = 0, currentStep }: LoadingStateProps) {
   const Icon = currentStage.icon;
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+    <div
       className="flex flex-col items-center justify-center py-20"
     >
       {/* Radar Animation */}
       <div className="relative w-48 h-48 mb-8">
         {/* Outer rings */}
         {[1, 2, 3].map((ring) => (
-          <motion.div
+          <div
             key={ring}
             className="absolute inset-0 rounded-full border border-electric-blue/20"
             style={{
               transform: `scale(${0.3 + ring * 0.25})`,
-            }}
-            animate={{
-              opacity: [0.2, 0.5, 0.2],
             }}
             transition={{
               duration: 2,
@@ -66,39 +60,31 @@ export function LoadingState({ progress = 0, currentStep }: LoadingStateProps) {
         ))}
 
         {/* Scanning line */}
-        <motion.div
+        <div
           className="absolute inset-0"
-          animate={{ rotate: 360 }}
           transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
         >
           <div className="absolute top-1/2 left-1/2 w-1/2 h-0.5 bg-gradient-to-r from-electric-blue to-transparent origin-left" />
-        </motion.div>
+        </div>
 
         {/* Center icon */}
-        <motion.div
+        <div
           className="absolute inset-0 flex items-center justify-center"
-          animate={{ scale: [1, 1.1, 1] }}
           transition={{ duration: 2, repeat: Infinity }}
         >
           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-electric-blue/20 to-purple-500/20 flex items-center justify-center backdrop-blur-sm border border-electric-blue/30">
             <Icon className={`w-10 h-10 ${currentStage.color}`} />
           </div>
-        </motion.div>
+        </div>
 
         {/* Floating particles */}
         {[...Array(6)].map((_, i) => (
-          <motion.div
+          <div
             key={i}
             className="absolute w-2 h-2 rounded-full bg-electric-blue/50"
             style={{
               top: '50%',
               left: '50%',
-            }}
-            animate={{
-              x: [0, Math.cos((i * Math.PI) / 3) * 60],
-              y: [0, Math.sin((i * Math.PI) / 3) * 60],
-              opacity: [1, 0],
-              scale: [0, 1],
             }}
             transition={{
               duration: 2,
@@ -111,21 +97,17 @@ export function LoadingState({ progress = 0, currentStep }: LoadingStateProps) {
 
       {/* Status Text */}
       <AnimatePresence mode="wait">
-        <motion.div
+        <div
           key={stageIndex}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
           className="text-center"
         >
           <p className={`text-xl font-medium mb-2 ${currentStage.color}`}>
             {currentStep || currentStage.text}
           </p>
           <p className="text-slate-500 text-sm">
-            数据分析处理中，请稍候...
+            数据分析处理中，请稍�?..
           </p>
-        </motion.div>
-      </AnimatePresence>
+        </div>
 
       {/* Progress Bar */}
       <div className="w-80 mt-8">
@@ -134,23 +116,22 @@ export function LoadingState({ progress = 0, currentStep }: LoadingStateProps) {
           <span>{progress}%</span>
         </div>
         <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-          <motion.div
+          <div
             className="h-full bg-gradient-to-r from-electric-blue via-purple-500 to-rose"
-            initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
             transition={{ duration: 0.5 }}
           />
         </div>
       </div>
 
-      {/* Agent Status Grid - 3列×3行 */}
+      {/* Agent Status Grid - 3列�?�?*/}
       <div className="grid grid-cols-3 gap-3 mt-8 max-w-4xl">
         {loadingStages.map((stage, index) => {
           const StageIcon = stage.icon;
           const isActive = index <= Math.floor((progress / 100) * 8);
           const isCompleted = index < Math.floor((progress / 100) * 8);
           return (
-            <motion.div
+            <div
               key={index}
               className={`flex flex-col gap-2 px-4 py-3 rounded-lg border transition-all ${
                 isActive 
@@ -164,9 +145,7 @@ export function LoadingState({ progress = 0, currentStep }: LoadingStateProps) {
                   className={`w-4 h-4 ${isActive ? stage.color : 'text-slate-600'}`}
                 />
                 {isCompleted && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
+                  <div
                     className="ml-auto w-2 h-2 rounded-full bg-emerald-500"
                   />
                 )}
@@ -178,10 +157,10 @@ export function LoadingState({ progress = 0, currentStep }: LoadingStateProps) {
               >
                 {stage.text}
               </span>
-            </motion.div>
+            </div>
           );
         })}
       </div>
-    </motion.div>
+    </div>
   );
 }

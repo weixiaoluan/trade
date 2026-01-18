@@ -10,7 +10,7 @@ interface SearchBoxProps {
   isCompact?: boolean;
 }
 
-// 默认快速访问标的（在没有统计数据时使用）
+// 默认快速访问标的（在没有统计数据时使用�?
 const DEFAULT_QUICK_TICKERS = [
   { symbol: '159941', name: '纳指100ETF' },
   { symbol: '159915', name: '创业板ETF' },
@@ -23,7 +23,7 @@ const suggestions = [
   { symbol: 'AAPL', name: 'Apple Inc.', type: 'US' },
   { symbol: 'TSLA', name: 'Tesla Inc.', type: 'US' },
   { symbol: 'NVDA', name: 'NVIDIA Corp', type: 'US' },
-  { symbol: '600519', name: '贵州茅台', type: 'A股' },
+  { symbol: '600519', name: '贵州茅台', type: 'A�? },
   { symbol: '513180', name: '恒生科技ETF', type: 'ETF' },
   { symbol: '159941', name: '纳指100ETF', type: 'ETF' },
   { symbol: '020398', name: '诺安创新驱动混合A', type: '基金' },
@@ -69,7 +69,7 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
           );
         }
       } catch {
-        // 忽略错误，保持默认快速访问列表
+        // 忽略错误，保持默认快速访问列�?
       }
     };
 
@@ -115,7 +115,7 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
                 setIsFocused(false);
                 setTimeout(() => setShowSuggestions(false), 200);
               }}
-              placeholder="输入代码（推荐直接输入6位数字，如: 600519、159941；美股可输入 AAPL）"
+              placeholder="输入代码（推荐直接输�?位数字，�? 600519�?59941；美股可输入 AAPL�?
               className={`
                 flex-1 bg-transparent border-none outline-none 
                 text-slate-100 placeholder-slate-500 font-medium
@@ -144,7 +144,7 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
               {isLoading ? (
                 <>
                   <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
-                  <span className={isCompact ? 'hidden' : 'hidden sm:inline'}>分析中</span>
+                  <span className={isCompact ? 'hidden' : 'hidden sm:inline'}>分析�?/span>
                 </>
               ) : (
                 <>
@@ -159,13 +159,11 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
 
       {/* Quick Tickers - Only show on non-compact */}
       {!isCompact && !isFocused && (
-        <motion.div 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
+        <div 
           transition={{ delay: 0.2 }}
           className="flex flex-wrap items-center justify-center gap-2 mt-4"
         >
-          <span className="text-xs text-slate-600 mr-1">快速访问:</span>
+          <span className="text-xs text-slate-600 mr-1">快速访�?</span>
           {quickTickers.map((ticker) => (
             <button
               key={ticker.symbol}
@@ -181,23 +179,17 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
               {ticker.symbol}
             </button>
           ))}
-        </motion.div>
+        </div>
       )}
 
       {/* Suggestions Dropdown */}
-      <AnimatePresence>
-        {showSuggestions && query && filteredSuggestions.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
+      {showSuggestions && query && filteredSuggestions.length > 0 && (
+          <div
             className="absolute w-full mt-2 bg-slate-900/95 backdrop-blur-md rounded-xl border border-white/[0.08] overflow-hidden z-50 shadow-2xl"
           >
             {filteredSuggestions.map((suggestion, index) => (
               <motion.button
                 key={suggestion.symbol}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
                 transition={{ delay: index * 0.03 }}
                 onClick={() => handleSuggestionClick(suggestion.symbol)}
                 className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.05] transition-colors text-left group"
@@ -219,9 +211,8 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
                 </div>
               </motion.button>
             ))}
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
     </div>
   );
 }

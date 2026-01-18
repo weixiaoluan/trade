@@ -14,13 +14,13 @@ interface PredictionCard {
 
 const defaultPredictions: PredictionCard[] = [
   { period: '1D', label: '明日', trend: 'bullish', confidence: 'medium', target: '+0.5%' },
-  { period: '3D', label: '3天', trend: 'bullish', confidence: 'medium', target: '+1.2%' },
-  { period: '1W', label: '1周', trend: 'bullish', confidence: 'high', target: '+2.5%' },
-  { period: '15D', label: '15天', trend: 'neutral', confidence: 'medium', target: '±1%' },
+  { period: '3D', label: '3�?, trend: 'bullish', confidence: 'medium', target: '+1.2%' },
+  { period: '1W', label: '1�?, trend: 'bullish', confidence: 'high', target: '+2.5%' },
+  { period: '15D', label: '15�?, trend: 'neutral', confidence: 'medium', target: '±1%' },
   { period: '1M', label: '1个月', trend: 'bullish', confidence: 'high', target: '+5%' },
   { period: '3M', label: '3个月', trend: 'bullish', confidence: 'medium', target: '+10%' },
   { period: '6M', label: '6个月', trend: 'bullish', confidence: 'low', target: '+15%' },
-  { period: '1Y', label: '1年', trend: 'bullish', confidence: 'low', target: '+25%' },
+  { period: '1Y', label: '1�?, trend: 'bullish', confidence: 'low', target: '+25%' },
 ];
 
 interface SparklineProps {
@@ -84,7 +84,7 @@ const horizonMap: Record<string, 'short' | 'mid' | 'long'> = {
 export function PredictionTimeline({ predictions = defaultPredictions, onHoverHorizon }: PredictionTimelineProps) {
   return (
     <div className="w-full">
-      {/* Header - 响应式 */}
+      {/* Header - 响应�?*/}
       <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="p-1 sm:p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
@@ -92,14 +92,14 @@ export function PredictionTimeline({ predictions = defaultPredictions, onHoverHo
           </div>
           <div>
             <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
-              多周期技术分析
+              多周期技术分�?
             </h3>
-            <p className="text-[9px] sm:text-[10px] text-slate-500 font-mono mt-0.5">AI技术指标模型</p>
+            <p className="text-[9px] sm:text-[10px] text-slate-500 font-mono mt-0.5">AI技术指标模�?/p>
           </div>
         </div>
       </div>
 
-      {/* Grid Layout - 响应式 */}
+      {/* Grid Layout - 响应�?*/}
       <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
         {predictions.map((prediction, index) => {
           const isBullish = prediction.trend === 'bullish';
@@ -123,10 +123,8 @@ export function PredictionTimeline({ predictions = defaultPredictions, onHoverHo
             : 'bg-slate-500/20 text-slate-400 border-slate-500/30';
 
           return (
-            <motion.div
+            <div
               key={prediction.period}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.06, duration: 0.4 }}
               className="relative group"
               onMouseEnter={() => onHoverHorizon?.(horizonMap[prediction.period] || null)}
@@ -144,7 +142,7 @@ export function PredictionTimeline({ predictions = defaultPredictions, onHoverHo
                 <div className={`absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r ${glowClass}`} />
                 
                 <div className="p-2 sm:p-3 md:p-4 relative z-10">
-                  {/* Header - 响应式 */}
+                  {/* Header - 响应�?*/}
                   <div className="flex justify-between items-center mb-1.5 sm:mb-3">
                     <span className="text-[10px] sm:text-xs font-bold text-white font-mono tracking-wider">
                       {prediction.period}
@@ -156,20 +154,20 @@ export function PredictionTimeline({ predictions = defaultPredictions, onHoverHo
                     </div>
                   </div>
 
-                  {/* Target Percentage - 响应式 */}
+                  {/* Target Percentage - 响应�?*/}
                   <div className={`text-base sm:text-xl md:text-2xl lg:text-3xl font-bold font-mono tracking-tighter ${textClass} mb-1.5 sm:mb-3`}
                     style={{ textShadow: `0 0 30px ${color}40` }}
                   >
                     {prediction.target}
                   </div>
 
-                  {/* Footer Info - 响应式 */}
+                  {/* Footer Info - 响应�?*/}
                   <div className="flex justify-between items-end gap-1">
                     <span className="text-[8px] sm:text-[10px] text-slate-400 font-medium truncate">
                       {prediction.label}
                     </span>
                     <div className={`text-[7px] sm:text-[8px] font-mono px-1 sm:px-1.5 py-0.5 rounded border shrink-0 ${confColor}`}>
-                      {prediction.confidence === 'high' ? '高' : prediction.confidence === 'medium' ? '中' : '低'}
+                      {prediction.confidence === 'high' ? '�? : prediction.confidence === 'medium' ? '�? : '�?}
                     </div>
                   </div>
                 </div>
@@ -177,7 +175,7 @@ export function PredictionTimeline({ predictions = defaultPredictions, onHoverHo
                 {/* Sparkline Chart */}
                 <Sparkline trend={prediction.trend} color={color} id={`sparkline-${prediction.period}`} />
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>

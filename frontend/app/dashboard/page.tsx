@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+// framer-motion removed - using CSS animations for better performance
 import {
   Bot,
   Plus,
@@ -43,7 +43,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 import { API_BASE } from "@/lib/config";
 
-// 判断是否是美股，返回对应的货币符号
+// 判断是否是美股，返回对应的货币符�?
 const getCurrencySymbol = (symbol: string): string => {
   if (!symbol) return "¥";
   // 移除可能的后缀
@@ -82,7 +82,7 @@ interface WatchlistItem {
   last_alert_at?: string;
   holding_period?: string;
   from_ai_pick?: number;
-  // 多周期价位字段
+  // 多周期价位字�?
   short_support?: number;
   short_resistance?: number;
   short_risk?: number;
@@ -92,7 +92,7 @@ interface WatchlistItem {
   long_support?: number;
   long_resistance?: number;
   long_risk?: number;
-  // 多周期信号类型字段
+  // 多周期信号类型字�?
   short_signal?: string;
   swing_signal?: string;
   long_signal?: string;
@@ -149,7 +149,7 @@ export default function DashboardPage() {
   const [addCostPrice, setAddCostPrice] = useState<string>("");
 
   const [currentPage, setCurrentPage] = useState(1);
-  // 移动端默认10条，桌面端默认50条
+  // 移动端默�?0条，桌面端默�?0�?
   const [pageSize, setPageSize] = useState(10);
   const [isMobile, setIsMobile] = useState(true);
 
@@ -165,15 +165,15 @@ export default function DashboardPage() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">('desc');
   
-  // 搜索状态
+  // 搜索状�?
   const [searchQuery, setSearchQuery] = useState('');
-  // 周期筛选状态
+  // 周期筛选状�?
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   
-  // 信号类型筛选状态
+  // 信号类型筛选状�?
   const [ratingFilter, setRatingFilter] = useState<string>('all');
   
-  // 客户端挂载后从 localStorage 读取初始状态
+  // 客户端挂载后�?localStorage 读取初始状�?
   useEffect(() => {
     if (typeof window !== 'undefined') {
       // 读取用户信息
@@ -189,7 +189,7 @@ export default function DashboardPage() {
       if (localStorage.getItem("token") && localStorage.getItem("user")) {
         setAuthChecked(true);
       }
-      // 读取筛选状态
+      // 读取筛选状�?
       const savedSortField = localStorage.getItem('dashboard_sortField');
       if (savedSortField) setSortField(savedSortField);
       
@@ -246,7 +246,7 @@ export default function DashboardPage() {
     }
   }, [ratingFilter]);
   
-  // 移动端操作菜单
+  // 移动端操作菜�?
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
 
   // 用户设置相关
@@ -264,7 +264,7 @@ export default function DashboardPage() {
   // 错误弹窗控制 - 避免重复弹窗
   const [shownErrorTasks, setShownErrorTasks] = useState<Set<string>>(new Set());
 
-  // 确认弹窗状态
+  // 确认弹窗状�?
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
     title: "",
@@ -273,14 +273,14 @@ export default function DashboardPage() {
     onConfirm: () => {},
   });
 
-  // 持有周期选择弹窗状态
+  // 持有周期选择弹窗状�?
   const [showHoldingPeriodModal, setShowHoldingPeriodModal] = useState(false);
   const [holdingPeriod, setHoldingPeriod] = useState<string>("short");
 
-  // 每个标的的显示周期选择（用于切换显示不同周期的支撑位/阻力位/风险位）
+  // 每个标的的显示周期选择（用于切换显示不同周期的支撑�?阻力�?风险位）
   const [itemDisplayPeriods, setItemDisplayPeriods] = useState<Record<string, string>>({});
   
-  // 实时价位数据缓存（按周期缓存）
+  // 实时价位数据缓存（按周期缓存�?
   const [realtimePricesCache, setRealtimePricesCache] = useState<Record<string, Record<string, {
     support: number;
     resistance: number;
@@ -288,18 +288,18 @@ export default function DashboardPage() {
     updated_at: string;
   }>>>({});
   
-  // 正在加载价位的标的
+  // 正在加载价位的标�?
   const [loadingPrices, setLoadingPrices] = useState<Set<string>>(new Set());
 
   // 获取token（提前定义，供后续函数使用）
   const getToken = useCallback(() => localStorage.getItem("token"), []);
 
-  // 获取标的当前显示周期（默认使用标的的holding_period）
+  // 获取标的当前显示周期（默认使用标的的holding_period�?
   const getItemDisplayPeriod = useCallback((item: WatchlistItem) => {
     return itemDisplayPeriods[item.symbol] || item.holding_period || 'swing';
   }, [itemDisplayPeriods]);
 
-  // 从接口实时获取价位数据
+  // 从接口实时获取价位数�?
   const fetchRealtimePrices = useCallback(async (symbols: string[], period: string) => {
     const token = getToken();
     if (!token || symbols.length === 0) return;
@@ -362,7 +362,7 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("获取实时价位失败:", error);
     } finally {
-      // 移除加载状态
+      // 移除加载状�?
       setLoadingPrices(prev => {
         const next = new Set(prev);
         symbols.forEach(s => next.delete(s));
@@ -378,7 +378,7 @@ export default function DashboardPage() {
     const nextPeriod = periods[(currentIndex + 1) % periods.length];
     setItemDisplayPeriods(prev => ({ ...prev, [symbol]: nextPeriod }));
     
-    // 检查缓存中是否有该周期的数据，如果没有则实时获取
+    // 检查缓存中是否有该周期的数据，如果没有则实时获�?
     const cachedData = realtimePricesCache[symbol]?.[nextPeriod];
     const item = watchlist.find(w => w.symbol === symbol);
     
@@ -395,7 +395,7 @@ export default function DashboardPage() {
     }
   }, [realtimePricesCache, watchlist, loadingPrices, fetchRealtimePrices]);
 
-  // 根据周期获取对应的价位数据（优先使用缓存，其次使用数据库数据）
+  // 根据周期获取对应的价位数据（优先使用缓存，其次使用数据库数据�?
   const getPeriodPrices = useCallback((item: WatchlistItem, period: string) => {
     // 优先使用实时缓存数据
     const cachedData = realtimePricesCache[item.symbol]?.[period];
@@ -407,7 +407,7 @@ export default function DashboardPage() {
       };
     }
     
-    // 其次使用数据库中的数据
+    // 其次使用数据库中的数�?
     switch (period) {
       case 'short':
         return {
@@ -431,8 +431,8 @@ export default function DashboardPage() {
     }
   }, [realtimePricesCache]);
 
-  // 计算价格与当前价的差异（支撑位/阻力位/风险位）
-  // 正数用红色，负数用绿色，触达用黄色
+  // 计算价格与当前价的差异（支撑�?阻力�?风险位）
+  // 正数用红色，负数用绿色，触达用黄�?
   const getPriceDiff = useCallback((currentPrice: number | undefined, targetPrice: number | undefined, type: 'support' | 'resistance' | 'risk') => {
     if (!currentPrice || !targetPrice || currentPrice <= 0 || targetPrice <= 0) {
       return null;
@@ -441,12 +441,12 @@ export default function DashboardPage() {
     const diff = currentPrice - targetPrice;
     const diffPercent = (diff / targetPrice) * 100;
     
-    // 触达判断（差异小于0.1%）
+    // 触达判断（差异小�?.1%�?
     if (Math.abs(diffPercent) < 0.1) {
       return { status: 'touch', text: '触达', color: 'text-amber-400 font-semibold' };
     }
     
-    // 简化格式：正数红色，负数绿色，不带"差:"前缀
+    // 简化格式：正数红色，负数绿色，不带"�?"前缀
     if (diff > 0) {
       return { 
         status: 'positive', 
@@ -462,8 +462,8 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 获取支撑位/阻力位/风险位数值的颜色（与涨跌幅逻辑一致）
-  // 当前价高于目标价（正数）用红色，当前价低于目标价（负数）用绿色
+  // 获取支撑�?阻力�?风险位数值的颜色（与涨跌幅逻辑一致）
+  // 当前价高于目标价（正数）用红色，当前价低于目标价（负数）用绿�?
   const getPriceValueColor = useCallback((currentPrice: number | undefined, targetPrice: number | undefined, type: 'support' | 'resistance' | 'risk') => {
     // 默认颜色
     const defaultColors = {
@@ -479,20 +479,20 @@ export default function DashboardPage() {
     const diff = currentPrice - targetPrice;
     const diffPercent = (diff / targetPrice) * 100;
     
-    // 触达判断（差异小于0.5%）- 用黄色
+    // 触达判断（差异小�?.5%�? 用黄�?
     if (Math.abs(diffPercent) < 0.5) {
       return 'text-amber-400 font-bold';
     }
     
-    // 当前价高于目标价 - 红色（涨）
+    // 当前价高于目标价 - 红色（涨�?
     if (diff > 0) {
       return 'text-rose-400';
     }
-    // 当前价低于目标价 - 绿色（跌）
+    // 当前价低于目标价 - 绿色（跌�?
     return 'text-emerald-400';
   }, []);
 
-  // 获取技术评级的颜色样式（强势红色深浅，弱势绿色深浅）
+  // 获取技术评级的颜色样式（强势红色深浅，弱势绿色深浅�?
   // 样式参考周期按钮，使用圆角和背景色
   const getRatingStyle = useCallback((rating: string | undefined) => {
     if (!rating) return 'bg-slate-600/30 text-slate-400';
@@ -513,15 +513,15 @@ export default function DashboardPage() {
     if (r.includes('偏弱') || r === '偏弱') {
       return 'bg-emerald-500/25 text-emerald-400 font-semibold';
     }
-    // 中性/震荡 - 蓝灰色
-    if (r.includes('中性') || r.includes('震荡') || r === '中性' || r === '震荡') {
+    // 中�?震荡 - 蓝灰�?
+    if (r.includes('中�?) || r.includes('震荡') || r === '中�? || r === '震荡') {
       return 'bg-slate-500/30 text-slate-300 font-medium';
     }
     
     return 'bg-slate-600/30 text-slate-400';
   }, []);
 
-  // 根据周期获取对应的信号类型
+  // 根据周期获取对应的信号类�?
   const getPeriodSignal = useCallback((item: WatchlistItem, period: string) => {
     switch (period) {
       case 'short':
@@ -536,7 +536,7 @@ export default function DashboardPage() {
 
   // 获取信号类型的显示样式和文本
   const getSignalDisplay = useCallback((signal: string | undefined) => {
-    if (!signal) return { icon: '⚪', text: '观望', style: 'bg-slate-500/20 text-slate-400 border border-slate-500/30' };
+    if (!signal) return { icon: '�?, text: '观望', style: 'bg-slate-500/20 text-slate-400 border border-slate-500/30' };
     
     const s = signal.toLowerCase();
     if (s === 'buy' || s === '买入') {
@@ -545,25 +545,25 @@ export default function DashboardPage() {
     if (s === 'sell' || s === '卖出') {
       return { icon: '🔴', text: '卖出', style: 'bg-rose-500/20 text-rose-400 border border-rose-500/40 font-semibold' };
     }
-    return { icon: '⚪', text: '观望', style: 'bg-slate-500/20 text-slate-400 border border-slate-500/30' };
+    return { icon: '�?, text: '观望', style: 'bg-slate-500/20 text-slate-400 border border-slate-500/30' };
   }, []);
 
   const [pendingAnalysisSymbols, setPendingAnalysisSymbols] = useState<string[]>([]);
   const [isBatchAnalysis, setIsBatchAnalysis] = useState(false);
 
-  // 编辑持仓弹窗状态
+  // 编辑持仓弹窗状�?
   const [showEditPositionModal, setShowEditPositionModal] = useState(false);
   const [editingItem, setEditingItem] = useState<WatchlistItem | null>(null);
   const [editPosition, setEditPosition] = useState<string>("");
   const [editCostPrice, setEditCostPrice] = useState<string>("");
   const [editHoldingPeriod, setEditHoldingPeriod] = useState<string>("swing");
 
-  // 研究列表相关状态
+  // 研究列表相关状�?
   const [showAiPicksModal, setShowAiPicksModal] = useState(false);
   const [aiPicks, setAiPicks] = useState<Array<{ symbol: string; name: string; type: string; added_by: string; added_at: string }>>([]);
   const [aiPicksLoading, setAiPicksLoading] = useState(false);
   const [selectedAiPicks, setSelectedAiPicks] = useState<Set<string>>(new Set());
-  const [addAsAiPick, setAddAsAiPick] = useState(false);  // 添加自选时是否同时添加到研究列表
+  const [addAsAiPick, setAddAsAiPick] = useState(false);  // 添加自选时是否同时添加到研究列�?
 
   // 计算用户还没有添加到自选的研究列表标的
   const availableAiPicks = useMemo(() => {
@@ -571,7 +571,7 @@ export default function DashboardPage() {
     return aiPicks.filter(pick => !watchlistSymbols.has(pick.symbol.toUpperCase()));
   }, [aiPicks, watchlist]);
 
-  // 新增的研究列表数量（用于角标显示）
+  // 新增的研究列表数量（用于角标显示�?
   const newAiPicksCount = availableAiPicks.length;
 
   const tasksRef = useRef(tasks);
@@ -589,7 +589,7 @@ export default function DashboardPage() {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      // 只在首次加载时设置默认分页大小
+      // 只在首次加载时设置默认分页大�?
       if (mobile && pageSize === 50) {
         setPageSize(10);
       } else if (!mobile && pageSize === 10) {
@@ -638,7 +638,7 @@ export default function DashboardPage() {
         el.showPicker();
       }
     } catch (err) {
-      // 忽略 showPicker 错误，让浏览器使用默认行为
+      // 忽略 showPicker 错误，让浏览器使用默认行�?
     }
   }, []);
 
@@ -652,8 +652,8 @@ export default function DashboardPage() {
         return;
       }
 
-      // 已经从 localStorage 初始化了用户信息，页面可以立即显示
-      // 后台静默验证 token 有效性
+      // 已经�?localStorage 初始化了用户信息，页面可以立即显�?
+      // 后台静默验证 token 有效�?
       try {
         const response = await fetch(`${API_BASE}/api/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -667,7 +667,7 @@ export default function DashboardPage() {
           return;
         }
 
-        // 更新用户信息（可能有变化）
+        // 更新用户信息（可能有变化�?
         const data = await response.json();
         localStorage.setItem("user", JSON.stringify(data.user));
         setUser(data.user);
@@ -694,7 +694,7 @@ export default function DashboardPage() {
         setWatchlist(data.watchlist || []);
       }
     } catch (error) {
-      console.error("获取自选列表失败:", error);
+      console.error("获取自选列表失�?", error);
     }
   }, [getToken]);
 
@@ -757,16 +757,16 @@ export default function DashboardPage() {
         const data = await response.json();
         const newTasks = data.tasks || {};
         
-        // 检查是否有新变成失败的任务（之前是 running，现在是 failed）
+        // 检查是否有新变成失败的任务（之前是 running，现在是 failed�?
         const failedTasks: string[] = [];
         const failedErrors: string[] = [];
-        // 检查是否有新完成的任务，需要刷新报告
+        // 检查是否有新完成的任务，需要刷新报�?
         let hasNewCompleted = false;
         
         Object.entries(newTasks).forEach(([symbol, task]: [string, any]) => {
           const prevTask = tasksRef.current[symbol];
-          // 只有从 running/pending 变成 failed 才弹窗
-          // 必须有 prevTask 且之前是 running/pending 状态，才说明是刚刚失败的
+          // 只有�?running/pending 变成 failed 才弹�?
+          // 必须�?prevTask 且之前是 running/pending 状态，才说明是刚刚失败�?
           // 额外检查：如果该标的已有报告，不弹失败提示（可能是旧任务状态）
           const hasReport = reportsRef.current.some(r => r.symbol?.toUpperCase() === symbol.toUpperCase());
           if (task.status === "failed" && 
@@ -781,9 +781,9 @@ export default function DashboardPage() {
               }
             }
           }
-          // 检查是否有新完成的任务（两种情况都触发刷新）
-          // 1. 从 running/pending 变成 completed
-          // 2. 任务状态为 completed 且 progress 为 100，但之前的 progress 不是 100
+          // 检查是否有新完成的任务（两种情况都触发刷新�?
+          // 1. �?running/pending 变成 completed
+          // 2. 任务状态为 completed �?progress �?100，但之前�?progress 不是 100
           if (task.status === "completed") {
             if (prevTask && (prevTask.status === "running" || prevTask.status === "pending")) {
               hasNewCompleted = true;
@@ -814,22 +814,22 @@ export default function DashboardPage() {
         
         setTasks(newTasks);
         
-        // 如果有新完成的任务，立即刷新报告列表和自选列表（获取最新的AI建议价格）
+        // 如果有新完成的任务，立即刷新报告列表和自选列表（获取最新的AI建议价格�?
         if (hasNewCompleted) {
           fetchReports();
           fetchWatchlist();
         }
       }
     } catch (error) {
-      console.error("获取任务状态失败:", error);
+      console.error("获取任务状态失�?", error);
     }
   }, [getToken, shownErrorTasks, showAlertModal, fetchReports, fetchWatchlist]);
 
-  // 判断是否为交易时间（A股: 9:30-11:30, 13:00-15:00，周一到周五）
+  // 判断是否为交易时间（A�? 9:30-11:30, 13:00-15:00，周一到周五）
   const isTradingTime = useCallback(() => {
     const now = new Date();
     const day = now.getDay();
-    // 周末不交易
+    // 周末不交�?
     if (day === 0 || day === 6) return false;
     
     const hours = now.getHours();
@@ -860,15 +860,15 @@ export default function DashboardPage() {
     }
   }, [getToken, watchlist]);
 
-  // 信号刷新状态
+  // 信号刷新状�?
   const [signalRefreshing, setSignalRefreshing] = useState(false);
   const [lastSignalUpdate, setLastSignalUpdate] = useState<string | null>(null);
   
-  // 价位刷新状态
+  // 价位刷新状�?
   const [pricesRefreshing, setPricesRefreshing] = useState(false);
   const [lastPricesUpdate, setLastPricesUpdate] = useState<string | null>(null);
 
-  // 获取实时行情和缓存的价位数据（轻量级，适合高频轮询）
+  // 获取实时行情和缓存的价位数据（轻量级，适合高频轮询�?
   const fetchRealtimeData = useCallback(async () => {
     const token = getToken();
     if (!token || watchlist.length === 0) return;
@@ -946,10 +946,10 @@ export default function DashboardPage() {
         const data = await response.json();
         
         if (data.async) {
-          // 异步处理，显示提示
-          showAlertModal("计算中", `正在后台计算 ${symbols.length} 个标的的价位，请稍后刷新查看`, "info");
+          // 异步处理，显示提�?
+          showAlertModal("计算�?, `正在后台计算 ${symbols.length} 个标的的价位，请稍后刷新查看`, "info");
         } else if (data.results) {
-          // 同步处理完成，更新本地状态
+          // 同步处理完成，更新本地状�?
           setWatchlist(prev => prev.map(item => {
             const result = data.results[item.symbol];
             if (result && !result.error && result.prices) {
@@ -973,12 +973,12 @@ export default function DashboardPage() {
             setLastPricesUpdate(data.timestamp);
           }
           
-          showAlertModal("刷新完成", `已更新 ${Object.keys(data.results).length} 个标的的价位数据`, "success");
+          showAlertModal("刷新完成", `已更�?${Object.keys(data.results).length} 个标的的价位数据`, "success");
         }
       }
     } catch (error) {
       console.error("刷新价位失败:", error);
-      showAlertModal("刷新失败", "请稍后重试", "error");
+      showAlertModal("刷新失败", "请稍后重�?, "error");
     } finally {
       setPricesRefreshing(false);
     }
@@ -1003,7 +1003,7 @@ export default function DashboardPage() {
         setSignalRefreshing(true);
       }
       
-      // 分批获取，每批最多10个
+      // 分批获取，每批最�?0�?
       const batchSize = 10;
       for (let i = 0; i < symbolsToUpdate.length; i += batchSize) {
         const batch = symbolsToUpdate.slice(i, i + batchSize);
@@ -1016,7 +1016,7 @@ export default function DashboardPage() {
         if (response.ok) {
           const data = await response.json();
           if (data.signals) {
-            // 更新本地状态
+            // 更新本地状�?
             setWatchlist(prev => prev.map(item => {
               const signal = data.signals[item.symbol];
               if (signal && !signal.error) {
@@ -1029,7 +1029,7 @@ export default function DashboardPage() {
               }
               return item;
             }));
-            // 更新最后刷新时间
+            // 更新最后刷新时�?
             if (data.timestamp) {
               setLastSignalUpdate(data.timestamp);
             }
@@ -1074,11 +1074,11 @@ export default function DashboardPage() {
       });
       
       if (response.ok) {
-        showAlertModal("保存成功", "微信 OpenID 已保存，您将收到价格提醒推送", "success");
+        showAlertModal("保存成功", "微信 OpenID 已保存，您将收到价格提醒推�?, "success");
         fetchUserSettings();
       } else {
         const data = await response.json();
-        showAlertModal("保存失败", data.detail || "请检查 OpenID 是否正确", "error");
+        showAlertModal("保存失败", data.detail || "请检�?OpenID 是否正确", "error");
       }
     } catch (error) {
       showAlertModal("保存失败", "网络错误，请稍后重试", "error");
@@ -1087,10 +1087,10 @@ export default function DashboardPage() {
     }
   }, [getToken, wechatOpenId, showAlertModal, fetchUserSettings]);
 
-  // 测试推送
+  // 测试推�?
   const handleTestPush = useCallback(async () => {
     if (!wechatOpenId.trim()) {
-      showAlertModal("请输入 OpenID", "请先输入您的微信 OpenID 再测试", "warning");
+      showAlertModal("请输�?OpenID", "请先输入您的微信 OpenID 再测�?, "warning");
       return;
     }
     
@@ -1106,7 +1106,7 @@ export default function DashboardPage() {
         showAlertModal("测试成功", "测试消息已发送，请查看微信公众号消息", "success");
         fetchUserSettings();
       } else {
-        showAlertModal("测试失败", data.detail || "推送失败，请检查 OpenID 是否正确", "error");
+        showAlertModal("测试失败", data.detail || "推送失败，请检�?OpenID 是否正确", "error");
       }
     } catch (error) {
       showAlertModal("测试失败", "网络错误，请稍后重试", "error");
@@ -1128,7 +1128,7 @@ export default function DashboardPage() {
         setAiPicks(data.picks || []);
         setAiPicksPermissionDenied(false);
       } else if (response.status === 403) {
-        // 无权限
+        // 无权�?
         setAiPicks([]);
         setAiPicksPermissionDenied(true);
       }
@@ -1139,10 +1139,10 @@ export default function DashboardPage() {
     }
   }, [getToken]);
 
-  // 打开研究列表弹窗 - 定义在后面（需要 canUseFeatures）
+  // 打开研究列表弹窗 - 定义在后面（需�?canUseFeatures�?
   const handleOpenAiPicksRef = useRef<() => void>(() => {});
 
-  // 切换研究列表选中状态
+  // 切换研究列表选中状�?
   const toggleAiPickSelect = useCallback((symbol: string) => {
     setSelectedAiPicks(prev => {
       const next = new Set(prev);
@@ -1155,7 +1155,7 @@ export default function DashboardPage() {
     });
   }, []);
 
-  // 全选/取消全选研究列表（只针对可用的，即用户还没添加到自选的）
+  // 全�?取消全选研究列表（只针对可用的，即用户还没添加到自选的�?
   const toggleSelectAllAiPicks = useCallback(() => {
     setSelectedAiPicks(prev => {
       if (prev.size === availableAiPicks.length) {
@@ -1165,10 +1165,10 @@ export default function DashboardPage() {
     });
   }, [availableAiPicks]);
 
-  // 添加选中的研究列表到自选
+  // 添加选中的研究列表到自�?
   const handleAddAiPicksToWatchlist = useCallback(async () => {
     if (selectedAiPicks.size === 0) {
-      showAlertModal("请选择标的", "请至少选择一个标的添加到自选", "warning");
+      showAlertModal("请选择标的", "请至少选择一个标的添加到自�?, "warning");
       return;
     }
 
@@ -1208,8 +1208,8 @@ export default function DashboardPage() {
         
         if (data.skipped && data.skipped.length > 0) {
           showAlertModal(
-            "部分标的已存在",
-            `已跳过 ${data.skipped.length} 个已存在的标的，成功添加 ${data.added?.length || 0} 个`,
+            "部分标的已存�?,
+            `已跳�?${data.skipped.length} 个已存在的标的，成功添加 ${data.added?.length || 0} 个`,
             "info"
           );
         } else {
@@ -1246,7 +1246,7 @@ export default function DashboardPage() {
     }
   }, [getToken, showAlertModal]);
 
-  // 从研究列表移除（管理员 - 全局删除）
+  // 从研究列表移除（管理�?- 全局删除�?
   const handleRemoveFromAiPicks = useCallback(async (symbol: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/ai-picks/${encodeURIComponent(symbol)}`, {
@@ -1289,10 +1289,10 @@ export default function DashboardPage() {
     }
   }, [getToken, showAlertModal, fetchAiPicks]);
 
-  // 用户批量移除选中的研究列表
+  // 用户批量移除选中的研究列�?
   const handleDismissSelectedAiPicks = useCallback(async () => {
     if (selectedAiPicks.size === 0) {
-      showAlertModal("请选择标的", "请至少选择一个标的", "warning");
+      showAlertModal("请选择标的", "请至少选择一个标�?, "warning");
       return;
     }
 
@@ -1311,7 +1311,7 @@ export default function DashboardPage() {
         const data = await response.json();
         setSelectedAiPicks(new Set());
         fetchAiPicks();
-        showAlertModal("移除成功", `已移除 ${data.count || selectedAiPicks.size} 个标的`, "success");
+        showAlertModal("移除成功", `已移�?${data.count || selectedAiPicks.size} 个标的`, "success");
       } else {
         const data = await response.json();
         showAlertModal("移除失败", data.detail || "移除失败", "error");
@@ -1323,7 +1323,7 @@ export default function DashboardPage() {
     }
   }, [selectedAiPicks, getToken, showAlertModal, fetchAiPicks]);
 
-  // 用户清空所有研究列表
+  // 用户清空所有研究列�?
   const handleDismissAllAiPicks = useCallback(async () => {
     setLoading(true);
     try {
@@ -1336,7 +1336,7 @@ export default function DashboardPage() {
         const data = await response.json();
         setSelectedAiPicks(new Set());
         fetchAiPicks();
-        showAlertModal("清空成功", `已清空 ${data.count || 0} 个标的`, "success");
+        showAlertModal("清空成功", `已清�?${data.count || 0} 个标的`, "success");
       } else {
         const data = await response.json();
         showAlertModal("清空失败", data.detail || "清空失败", "error");
@@ -1354,13 +1354,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authChecked) {
-      // 初始加载 - 一次性获取所有数据
+      // 初始加载 - 一次性获取所有数�?
       fetchDashboardInit();
       // 获取研究列表（用于显示角标）
       fetchAiPicks();
 
-      // 根据是否有活跃任务调整轮询频率
-      // 有活跃任务时3秒轮询，无活跃任务时30秒轮询
+      // 根据是否有活跃任务调整轮询频�?
+      // 有活跃任务时3秒轮询，无活跃任务时30秒轮�?
       const intervalMs = hasActiveTasks ? 3000 : 30000;
       const interval = setInterval(() => {
         if (document.visibilityState !== "visible") return;
@@ -1374,14 +1374,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authChecked && watchlist.length > 0) {
-      // 立即获取一次实时数据（行情+价位）
+      // 立即获取一次实时数据（行情+价位�?
       fetchRealtimeData();
-      // 获取实时信号（首次加载时）
+      // 获取实时信号（首次加载时�?
       fetchRealtimeSignals();
       
-      // 根据是否交易时间动态调整刷新频率
-      // 交易时间: 1秒刷新一次行情
-      // 非交易时间: 30秒刷新一次
+      // 根据是否交易时间动态调整刷新频�?
+      // 交易时间: 1秒刷新一次行�?
+      // 非交易时�? 30秒刷新一�?
       let quoteInterval: NodeJS.Timeout;
       let signalInterval: NodeJS.Timeout;
       
@@ -1392,7 +1392,7 @@ export default function DashboardPage() {
           fetchRealtimeData();
         }, interval);
         
-        // 信号更新频率：交易时间5分钟，非交易时间30分钟
+        // 信号更新频率：交易时�?分钟，非交易时间30分钟
         const signalIntervalMs = isTradingTime() ? 300000 : 1800000;
         signalInterval = setInterval(() => {
           if (document.visibilityState !== "visible") return;
@@ -1402,7 +1402,7 @@ export default function DashboardPage() {
       
       setupInterval();
       
-      // 每分钟检查一次是否需要调整刷新频率
+      // 每分钟检查一次是否需要调整刷新频�?
       const checkInterval = setInterval(() => {
         clearInterval(quoteInterval);
         clearInterval(signalInterval);
@@ -1451,13 +1451,13 @@ export default function DashboardPage() {
 
   const showPendingAlert = useCallback(() => {
     showAlertModal(
-      "账户待审核",
-      "您的账户正在等待管理员审核，审核通过后即可使用所有功能。",
+      "账户待审�?,
+      "您的账户正在等待管理员审核，审核通过后即可使用所有功能�?,
       "warning"
     );
   }, [showAlertModal]);
 
-  // 手动刷新所有信号
+  // 手动刷新所有信�?
   const handleRefreshSignals = useCallback(() => {
     if (!canUseFeatures()) {
       showPendingAlert();
@@ -1499,14 +1499,14 @@ export default function DashboardPage() {
     }
   }, [sortField, sortOrder]);
 
-  // 报告映射表 - 需要在 sortedWatchlist 之前定义，因为排序需要用到
+  // 报告映射�?- 需要在 sortedWatchlist 之前定义，因为排序需要用�?
   const reportsBySymbol = useMemo(() => {
     const map: Record<string, ReportSummary> = {};
     for (const r of reports) {
       // 原始 symbol 作为 key
       map[r.symbol] = r;
       // 同时添加点号和下划线两种格式的映射，确保能匹配到
-      // 例如：SPAX_PVT 和 SPAX.PVT 都能找到同一个报告
+      // 例如：SPAX_PVT �?SPAX.PVT 都能找到同一个报�?
       const symbolWithDot = r.symbol.replace(/_/g, '.');
       const symbolWithUnderscore = r.symbol.replace(/\./g, '_');
       if (symbolWithDot !== r.symbol) {
@@ -1531,7 +1531,7 @@ export default function DashboardPage() {
       );
     }
     
-    // 周期筛选
+    // 周期筛�?
     if (periodFilter !== "all") {
       sorted = sorted.filter(item => item.holding_period === periodFilter);
     }
@@ -1539,7 +1539,7 @@ export default function DashboardPage() {
     // 信号类型筛选（根据当前显示周期筛选）
     if (ratingFilter !== "all") {
       sorted = sorted.filter(item => {
-        // 获取当前显示周期的信号
+        // 获取当前显示周期的信�?
         const displayPeriod = itemDisplayPeriods[item.symbol] || item.holding_period || 'swing';
         const signal = (displayPeriod === 'short' ? item.short_signal : 
                        displayPeriod === 'long' ? item.long_signal : 
@@ -1577,7 +1577,7 @@ export default function DashboardPage() {
           aVal = a.position || 0;
           bVal = b.position || 0;
         } else if (sortField === "ai_buy_price") {
-          // 支撑位排序：按距离当前价的百分比绝对值排序（由近到远）
+          // 支撑位排序：按距离当前价的百分比绝对值排序（由近到远�?
           const aPrice = aQuote?.current_price || 0;
           const bPrice = bQuote?.current_price || 0;
           // 获取当前显示周期的支撑位
@@ -1589,11 +1589,11 @@ export default function DashboardPage() {
           const bSupport = (bDisplayPeriod === 'short' ? b.short_support : 
                            bDisplayPeriod === 'long' ? b.long_support : 
                            b.swing_support) || b.ai_buy_price || 0;
-          // 计算距离百分比绝对值：|当前价 - 支撑位| / 当前价 * 100
+          // 计算距离百分比绝对值：|当前�?- 支撑位| / 当前�?* 100
           aVal = aSupport > 0 && aPrice > 0 ? Math.abs((aPrice - aSupport) / aPrice * 100) : Infinity;
           bVal = bSupport > 0 && bPrice > 0 ? Math.abs((bPrice - bSupport) / bPrice * 100) : Infinity;
         } else if (sortField === "ai_sell_price") {
-          // 阻力位排序：按距离当前价的百分比绝对值排序（由近到远）
+          // 阻力位排序：按距离当前价的百分比绝对值排序（由近到远�?
           const aPrice = aQuote?.current_price || 0;
           const bPrice = bQuote?.current_price || 0;
           // 获取当前显示周期的阻力位
@@ -1605,7 +1605,7 @@ export default function DashboardPage() {
           const bResistance = (bDisplayPeriod === 'short' ? b.short_resistance : 
                               bDisplayPeriod === 'long' ? b.long_resistance : 
                               b.swing_resistance) || b.ai_sell_price || 0;
-          // 计算距离百分比绝对值：|阻力位 - 当前价| / 当前价 * 100
+          // 计算距离百分比绝对值：|阻力�?- 当前价| / 当前�?* 100
           aVal = aResistance > 0 && aPrice > 0 ? Math.abs((aResistance - aPrice) / aPrice * 100) : Infinity;
           bVal = bResistance > 0 && bPrice > 0 ? Math.abs((bResistance - bPrice) / bPrice * 100) : Infinity;
         } else if (sortField === "report_time") {
@@ -1659,24 +1659,24 @@ export default function DashboardPage() {
     const positionVal = addPosition && parseFloat(addPosition) > 0 ? parseFloat(addPosition) : undefined;
     const costPriceVal = addCostPrice && parseFloat(addCostPrice) > 0 ? parseFloat(addCostPrice) : undefined;
 
-    // 保存当前的研究列表状态
+    // 保存当前的研究列表状�?
     const shouldAddAsAiPick = addAsAiPick && user?.role === 'admin';
 
-    // 检查是否已存在于自选列表
+    // 检查是否已存在于自选列�?
     const existsInWatchlist = watchlist.some(item => item.symbol === symbolToAdd);
-    // 检查是否已存在于研究列表
+    // 检查是否已存在于研究列�?
     const existsInAiPicks = aiPicks.some(item => item.symbol === symbolToAdd);
 
-    // 如果勾选了研究列表，需要检查两个列表
+    // 如果勾选了研究列表，需要检查两个列�?
     if (shouldAddAsAiPick) {
       if (existsInWatchlist && existsInAiPicks) {
-        showAlertModal("已存在", `${symbolToAdd} 已在自选列表和研究列表中，不能重复添加`, "warning");
+        showAlertModal("已存�?, `${symbolToAdd} 已在自选列表和研究列表中，不能重复添加`, "warning");
         return;
       }
     } else {
-      // 没勾选研究列表，只检查自选列表
+      // 没勾选研究列表，只检查自选列�?
       if (existsInWatchlist) {
-        showAlertModal("已存在", `${symbolToAdd} 已在自选列表中`, "warning");
+        showAlertModal("已存�?, `${symbolToAdd} 已在自选列表中`, "warning");
         return;
       }
     }
@@ -1731,16 +1731,16 @@ export default function DashboardPage() {
           addedName = data.name || symbolToAdd;
           fetchWatchlist();
         } else {
-          // 添加失败，回滚
+          // 添加失败，回�?
           setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
         }
       } catch (error) {
-        // 网络错误，回滚
+        // 网络错误，回�?
         setWatchlist(prev => prev.filter(item => item.symbol !== symbolToAdd));
       }
     }
 
-    // 添加到研究列表（如果勾选了且不存在）
+    // 添加到研究列表（如果勾选了且不存在�?
     if (shouldAddAsAiPick && !existsInAiPicks) {
       try {
         const response = await fetch(`${API_BASE}/api/ai-picks`, {
@@ -1778,7 +1778,7 @@ export default function DashboardPage() {
         showAlertModal("添加失败", "网络错误，请稍后重试", "error");
       }
     } else {
-      // 没勾选研究列表，只提示自选结果
+      // 没勾选研究列表，只提示自选结�?
       if (!closeAfterAdd) {
         if (watchlistAdded) {
           showAlertModal("添加成功", `${symbolToAdd} 已添加到自选，可继续添加下一个`, "success");
@@ -1800,7 +1800,7 @@ export default function DashboardPage() {
     }
 
     if (files.length > 10) {
-      alert("最多只能上传10张图片");
+      alert("最多只能上�?0张图�?);
       e.target.value = "";
       return;
     }
@@ -1833,7 +1833,7 @@ export default function DashboardPage() {
           setShowAddModal(false);
           setShowOcrModal(true);
         } else {
-          alert(`已分析 ${data.image_count || files.length} 张图片，未识别到任何股票代码`);
+          alert(`已分�?${data.image_count || files.length} 张图片，未识别到任何股票代码`);
         }
       } else {
         const errData = await response.json().catch(() => ({}));
@@ -1866,7 +1866,7 @@ export default function DashboardPage() {
       }));
 
     if (selectedSymbols.length === 0) {
-      alert("请选择至少一个标的");
+      alert("请选择至少一个标�?);
       return;
     }
 
@@ -1887,11 +1887,11 @@ export default function DashboardPage() {
         setOcrResults([]);
         fetchWatchlist();
         
-        // 如果有重复的标的，显示提示
+        // 如果有重复的标的，显示提�?
         if (data.skipped && data.skipped.length > 0) {
           showAlertModal(
-            "部分标的已存在",
-            `以下标的已在自选列表中，已跳过：\n${data.skipped.join("、")}\n\n成功添加 ${data.added?.length || 0} 个标的`
+            "部分标的已存�?,
+            `以下标的已在自选列表中，已跳过：\n${data.skipped.join("�?)}\n\n成功添加 ${data.added?.length || 0} 个标的`
           );
         }
       }
@@ -1921,7 +1921,7 @@ export default function DashboardPage() {
       return;
     }
     
-    // 使用 flushSync 强制同步更新 UI，确保立即响应
+    // 使用 flushSync 强制同步更新 UI，确保立即响�?
     flushSync(() => {
       setWatchlist(prev => prev.filter(item => item.symbol !== symbol));
       setSelectedItems(prev => {
@@ -1957,7 +1957,7 @@ export default function DashboardPage() {
     if (analyzingSymbols.length > 0) {
       showAlertModal(
         "无法删除",
-        `以下标的正在分析中：${analyzingSymbols.join("、")}，请等待分析完成后再删除`,
+        `以下标的正在分析中：${analyzingSymbols.join("�?)}，请等待分析完成后再删除`,
         "warning"
       );
       return;
@@ -1992,7 +1992,7 @@ export default function DashboardPage() {
     // 检查是否正在分析中
     const task = tasksRef.current[symbol];
     if (task && (task.status === "running" || task.status === "pending")) {
-      showAlertModal("正在分析中", `${symbol} 正在分析中，请等待分析完成`, "warning");
+      showAlertModal("正在分析�?, `${symbol} 正在分析中，请等待分析完成`, "warning");
       return;
     }
 
@@ -2005,7 +2005,7 @@ export default function DashboardPage() {
 
   // 实际执行单个分析
   const executeAnalyzeSingle = useCallback(async (symbol: string, period: string) => {
-    // 重置该标的的错误状态
+    // 重置该标的的错误状�?
     setShownErrorTasks(prev => {
       const next = new Set(prev);
       next.delete(symbol);
@@ -2021,7 +2021,7 @@ export default function DashboardPage() {
         symbol,
         status: "running",
         progress: 0,
-        current_step: "分析中",
+        current_step: "分析�?,
         updated_at: new Date().toISOString(),
       },
     }));
@@ -2060,7 +2060,7 @@ export default function DashboardPage() {
             symbol: data.symbol || symbol,
             status: "running",
             progress: 0,
-            current_step: "分析中",
+            current_step: "分析�?,
             updated_at: new Date().toISOString(),
           },
         }));
@@ -2090,7 +2090,7 @@ export default function DashboardPage() {
       return;
     }
     
-    // 过滤掉正在分析中的标的
+    // 过滤掉正在分析中的标�?
     const symbolsToAnalyze = Array.from(selectedItems).filter(symbol => {
       const task = tasksRef.current[symbol];
       return !(task && (task.status === "running" || task.status === "pending"));
@@ -2103,7 +2103,7 @@ export default function DashboardPage() {
     
     const skippedCount = selectedItems.size - symbolsToAnalyze.length;
     if (skippedCount > 0) {
-      showAlertModal("部分跳过", `已跳过 ${skippedCount} 个正在分析中的标的，将分析剩余 ${symbolsToAnalyze.length} 个`, "info");
+      showAlertModal("部分跳过", `已跳�?${skippedCount} 个正在分析中的标的，将分析剩�?${symbolsToAnalyze.length} 个`, "info");
     }
     
     // 弹窗选择持有周期
@@ -2115,7 +2115,7 @@ export default function DashboardPage() {
 
   // 实际执行批量分析
   const executeBatchAnalyze = useCallback(async (symbols: string[], period: string) => {
-    // 重置错误状态
+    // 重置错误状�?
     setShownErrorTasks(new Set());
     
     const prevTasks: Record<string, TaskStatus | undefined> = {};
@@ -2132,7 +2132,7 @@ export default function DashboardPage() {
           symbol: sym,
           status: "running",
           progress: 0,
-          current_step: "分析中",
+          current_step: "分析�?,
           updated_at: new Date().toISOString(),
         };
       }
@@ -2178,7 +2178,7 @@ export default function DashboardPage() {
               symbol: t.symbol,
               status: "running",
               progress: 0,
-              current_step: "分析中",
+              current_step: "分析�?,
               updated_at: new Date().toISOString(),
             };
           }
@@ -2205,7 +2205,7 @@ export default function DashboardPage() {
     }
   }, [fetchTasks, getErrorMessageFromResponse, getToken, showAlertModal]);
 
-  // 确认持有周期后执行分析
+  // 确认持有周期后执行分�?
   const handleConfirmHoldingPeriod = useCallback(() => {
     setShowHoldingPeriodModal(false);
     if (isBatchAnalysis) {
@@ -2221,12 +2221,12 @@ export default function DashboardPage() {
       showPendingAlert();
       return;
     }
-    // 将点号替换为下划线，避免URL解析问题（如 SPAX.PVT -> SPAX_PVT）
+    // 将点号替换为下划线，避免URL解析问题（如 SPAX.PVT -> SPAX_PVT�?
     const urlSymbol = symbol.replace(/\./g, '_');
     router.push(`/report/${encodeURIComponent(urlSymbol)}`);
   }, [canUseFeatures, router, showPendingAlert]);
 
-  // 预加载报告页面
+  // 预加载报告页�?
   const prefetchReport = useCallback((symbol: string) => {
     const urlSymbol = symbol.replace(/\./g, '_');
     router.prefetch(`/report/${encodeURIComponent(urlSymbol)}`);
@@ -2254,7 +2254,7 @@ export default function DashboardPage() {
     switch (period) {
       case "short": return "短线";
       case "swing": return "波段";
-      case "long": return "中长线";
+      case "long": return "中长�?;
       default: return "波段";
     }
   };
@@ -2268,7 +2268,7 @@ export default function DashboardPage() {
     setShowEditPositionModal(true);
   }, []);
 
-  // 保存编辑的持仓信息
+  // 保存编辑的持仓信�?
   const handleSavePosition = useCallback(async () => {
     if (!editingItem) return;
     
@@ -2290,10 +2290,10 @@ export default function DashboardPage() {
       if (response.ok) {
         setShowEditPositionModal(false);
         fetchWatchlist();
-        showAlertModal("保存成功", "持仓信息已更新", "success");
+        showAlertModal("保存成功", "持仓信息已更�?, "success");
       } else {
         const data = await response.json();
-        showAlertModal("保存失败", data.detail || "请稍后重试", "error");
+        showAlertModal("保存失败", data.detail || "请稍后重�?, "error");
       }
     } catch (error) {
       showAlertModal("保存失败", "网络错误，请稍后重试", "error");
@@ -2302,8 +2302,8 @@ export default function DashboardPage() {
     }
   }, [editingItem, editPosition, editCostPrice, editHoldingPeriod, getToken, fetchWatchlist, showAlertModal]);
 
-  // 只有在没有缓存用户信息时才显示加载动画
-  // 有缓存时直接显示页面，后台静默验证
+  // 只有在没有缓存用户信息时才显示加载动�?
+  // 有缓存时直接显示页面，后台静默验�?
   if (!authChecked && !user) {
     return (
       <main className="min-h-screen bg-[#020617] flex items-center justify-center">
@@ -2322,7 +2322,7 @@ export default function DashboardPage() {
         <div className="absolute bottom-0 -right-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-violet-500/5 rounded-full blur-[80px] sm:blur-[120px]" />
       </div>
 
-      {/* Header - 移动端优化 */}
+      {/* Header - 移动端优�?*/}
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#020617]/80 backdrop-blur-xl safe-area-top">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
@@ -2333,7 +2333,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-bold text-slate-100">数据研究工具</h1>
-              <p className="text-[10px] sm:text-xs text-slate-500 hidden sm:block">个人学习研究用</p>
+              <p className="text-[10px] sm:text-xs text-slate-500 hidden sm:block">个人学习研究�?/p>
             </div>
           </div>
 
@@ -2373,7 +2373,7 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <div className="relative z-10 px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
-        {/* 未审核用户提示 */}
+        {/* 未审核用户提�?*/}
         {user && user.status !== 'approved' && user.role !== 'admin' && (
           <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg sm:rounded-xl">
             <div className="flex items-center gap-2 sm:gap-3">
@@ -2381,23 +2381,23 @@ export default function DashboardPage() {
                 <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
               </div>
               <div className="min-w-0">
-                <h3 className="text-xs sm:text-sm font-medium text-amber-400">账户待审核</h3>
+                <h3 className="text-xs sm:text-sm font-medium text-amber-400">账户待审�?/h3>
                 <p className="text-[10px] sm:text-xs text-amber-400/70 mt-0.5 truncate">
-                  您的账户正在等待管理员审核
+                  您的账户正在等待管理员审�?
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Toolbar - 移动端优化 */}
+        {/* Toolbar - 移动端优�?*/}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <h2 className="text-lg sm:text-xl font-semibold text-slate-100">我的自选</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-slate-100">我的自�?/h2>
             <span className="text-xs sm:text-sm text-slate-500">
               ({(searchQuery || periodFilter !== "all") ? `${sortedWatchlist.length}/${watchlist.length}` : watchlist.length})
             </span>
-            {/* 搜索框 */}
+            {/* 搜索�?*/}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
@@ -2405,7 +2405,7 @@ export default function DashboardPage() {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  setCurrentPage(1); // 搜索时重置到第一页
+                  setCurrentPage(1); // 搜索时重置到第一�?
                 }}
                 placeholder="搜索代码/名称"
                 className="w-32 sm:w-40 pl-8 pr-8 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs sm:text-sm"
@@ -2419,33 +2419,33 @@ export default function DashboardPage() {
                 </button>
               )}
             </div>
-            {/* 周期筛选 */}
+            {/* 周期筛�?*/}
             <select
               value={periodFilter}
               onChange={(e) => {
                 setPeriodFilter(e.target.value);
-                setCurrentPage(1); // 筛选时重置到第一页
+                setCurrentPage(1); // 筛选时重置到第一�?
               }}
               className="px-2 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs sm:text-sm cursor-pointer"
             >
               <option value="all" className="bg-slate-800">全部周期</option>
               <option value="short" className="bg-slate-800">短线</option>
               <option value="swing" className="bg-slate-800">波段</option>
-              <option value="long" className="bg-slate-800">中长线</option>
+              <option value="long" className="bg-slate-800">中长�?/option>
             </select>
-            {/* 信号类型筛选 */}
+            {/* 信号类型筛�?*/}
             <select
               value={ratingFilter}
               onChange={(e) => {
                 setRatingFilter(e.target.value);
-                setCurrentPage(1); // 筛选时重置到第一页
+                setCurrentPage(1); // 筛选时重置到第一�?
               }}
               className="px-2 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs sm:text-sm cursor-pointer"
             >
               <option value="all" className="bg-slate-800">全部信号</option>
               <option value="buy" className="bg-slate-800">🟢 买入</option>
               <option value="sell" className="bg-slate-800">🔴 卖出</option>
-              <option value="hold" className="bg-slate-800">⚪ 观望</option>
+              <option value="hold" className="bg-slate-800">�?观望</option>
             </select>
             {/* 信号刷新按钮 */}
             <button
@@ -2455,7 +2455,7 @@ export default function DashboardPage() {
               title={lastSignalUpdate ? `上次更新: ${new Date(lastSignalUpdate).toLocaleTimeString('zh-CN')}` : '刷新信号'}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${signalRefreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{signalRefreshing ? '刷新中...' : '刷新信号'}</span>
+              <span className="hidden sm:inline">{signalRefreshing ? '刷新�?..' : '刷新信号'}</span>
             </button>
             {/* 价位刷新按钮 */}
             <button
@@ -2465,7 +2465,7 @@ export default function DashboardPage() {
               title={lastPricesUpdate ? `上次更新: ${new Date(lastPricesUpdate).toLocaleTimeString('zh-CN')}` : '刷新价位'}
             >
               <TrendingUp className={`w-3.5 h-3.5 ${pricesRefreshing ? 'animate-pulse' : ''}`} />
-              <span className="hidden sm:inline">{pricesRefreshing ? '刷新中...' : '刷新价位'}</span>
+              <span className="hidden sm:inline">{pricesRefreshing ? '刷新�?..' : '刷新价位'}</span>
             </button>
             {/* 排序选择 */}
             <select
@@ -2489,12 +2489,12 @@ export default function DashboardPage() {
               <option value="default" className="bg-slate-800">默认排序</option>
               <option value="change_percent:desc" className="bg-slate-800">涨跌幅↓</option>
               <option value="change_percent:asc" className="bg-slate-800">涨跌幅↑</option>
-              <option value="ai_buy_price:asc" className="bg-slate-800">支撑位(近→远)</option>
-              <option value="ai_buy_price:desc" className="bg-slate-800">支撑位(远→近)</option>
-              <option value="ai_sell_price:asc" className="bg-slate-800">阻力位(近→远)</option>
-              <option value="ai_sell_price:desc" className="bg-slate-800">阻力位(远→近)</option>
-              <option value="report_time:desc" className="bg-slate-800">报告时间(新→旧)</option>
-              <option value="report_time:asc" className="bg-slate-800">报告时间(旧→新)</option>
+              <option value="ai_buy_price:asc" className="bg-slate-800">支撑�?近→�?</option>
+              <option value="ai_buy_price:desc" className="bg-slate-800">支撑�?远→�?</option>
+              <option value="ai_sell_price:asc" className="bg-slate-800">阻力�?近→�?</option>
+              <option value="ai_sell_price:desc" className="bg-slate-800">阻力�?远→�?</option>
+              <option value="report_time:desc" className="bg-slate-800">报告时间(新→�?</option>
+              <option value="report_time:asc" className="bg-slate-800">报告时间(旧→�?</option>
             </select>
           </div>
 
@@ -2547,9 +2547,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Watchlist - 移动端卡片视图 */}
+        {/* Watchlist - 移动端卡片视�?*/}
         <div className="glass-card rounded-xl sm:rounded-2xl border border-white/[0.06] overflow-hidden">
-          {/* 桌面端表头 */}
+          {/* 桌面端表�?*/}
           <div className="hidden md:block">
             <div className="flex items-center gap-5 px-6 py-4 border-b border-white/[0.06] bg-white/[0.02]">
               <div className="w-8 flex-shrink-0">
@@ -2563,12 +2563,12 @@ export default function DashboardPage() {
               </div>
               <div className="w-40 flex-shrink-0 text-sm font-semibold text-slate-300">代码 / 名称</div>
               <div className="w-16 flex-shrink-0 text-sm font-semibold text-slate-300">类型</div>
-              <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">当前价</div>
+              <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">当前�?/div>
               <div 
                 className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-200"
                 onClick={() => handleSort("change_percent")}
               >
-                涨跌幅
+                涨跌�?
                 {sortField === "change_percent" ? (
                   sortOrder === "asc" ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
                 ) : (
@@ -2576,7 +2576,7 @@ export default function DashboardPage() {
                 )}
               </div>
               <div className="w-20 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">持仓</div>
-              <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">成本价</div>
+              <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">成本�?/div>
               <div className="w-24 flex-shrink-0 text-sm font-semibold text-slate-300 text-right">持仓盈亏</div>
               <div className="w-16 flex-shrink-0 text-sm font-semibold text-slate-300">周期</div>
               <div className="w-20 flex-shrink-0 text-sm font-semibold text-indigo-400">信号类型</div>
@@ -2585,7 +2585,7 @@ export default function DashboardPage() {
                 onClick={() => handleSort("ai_buy_price")}
                 title="按与当前价的差距排序"
               >
-                支撑位
+                支撑�?
                 {sortField === "ai_buy_price" ? (
                   sortOrder === "asc" ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
                 ) : (
@@ -2597,15 +2597,15 @@ export default function DashboardPage() {
                 onClick={() => handleSort("ai_sell_price")}
                 title="按与当前价的差距排序"
               >
-                阻力位
+                阻力�?
                 {sortField === "ai_sell_price" ? (
                   sortOrder === "asc" ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
                 ) : (
                   <ArrowUpDown className="w-3.5 h-3.5 opacity-50" />
                 )}
               </div>
-              <div className="w-28 flex-shrink-0 text-sm font-semibold text-orange-400 text-right">风险位</div>
-              <div className="w-20 flex-shrink-0 text-sm font-semibold text-slate-300">状态</div>
+              <div className="w-28 flex-shrink-0 text-sm font-semibold text-orange-400 text-right">风险�?/div>
+              <div className="w-20 flex-shrink-0 text-sm font-semibold text-slate-300">状�?/div>
               <div className="flex-1 min-w-[220px] text-sm font-semibold text-slate-300 text-right">操作</div>
             </div>
           </div>
@@ -2614,12 +2614,12 @@ export default function DashboardPage() {
           {watchlist.length === 0 ? (
             <div className="py-12 sm:py-16 text-center">
               <Bot className="w-12 h-12 sm:w-16 sm:h-16 text-slate-700 mx-auto mb-3 sm:mb-4" />
-              <p className="text-slate-500 mb-2 text-sm sm:text-base">暂无自选标的</p>
+              <p className="text-slate-500 mb-2 text-sm sm:text-base">暂无自选标�?/p>
               <button
                 onClick={() => setShowAddModal(true)}
                 className="text-indigo-400 hover:text-indigo-300 text-xs sm:text-sm"
               >
-                点击添加自选
+                点击添加自�?
               </button>
             </div>
           ) : (
@@ -2630,10 +2630,10 @@ export default function DashboardPage() {
                 const isSelected = selectedItems.has(item.symbol);
                 const quote = quotes[item.symbol];
                 
-                // 改进状态判断逻辑：
-                // 1. 如果任务正在运行且超过10分钟没更新，视为超时失败
-                // 2. 如果任务显示running但报告更新时间比任务更新时间新，说明已完成
-                // 3. 如果任务显示completed，以任务状态为准
+                // 改进状态判断逻辑�?
+                // 1. 如果任务正在运行且超�?0分钟没更新，视为超时失败
+                // 2. 如果任务显示running但报告更新时间比任务更新时间新，说明已完�?
+                // 3. 如果任务显示completed，以任务状态为�?
                 const taskUpdatedAt = task?.updated_at ? new Date(task.updated_at).getTime() : 0;
                 const reportCreatedAt = report?.created_at ? new Date(report.created_at).getTime() : 0;
                 const isTaskTimeout = task?.status === "running" && task?.updated_at && 
@@ -2642,13 +2642,13 @@ export default function DashboardPage() {
                 // 如果报告比任务更新时间新，说明分析已完成（任务状态可能还没同步）
                 const isReportNewer = report && reportCreatedAt > taskUpdatedAt;
                 
-                // 最终状态判断
+                // 最终状态判�?
                 const isFailed = (task?.status === "failed" || isTaskTimeout) && !isReportNewer;
                 const isRunning = task?.status === "running" && !isTaskTimeout && !isReportNewer;
                 const isPending = task?.status === "pending" && !isReportNewer;
                 const isCompleted = task?.status === "completed" || isReportNewer;
                 
-                // 是否正在分析中（用于禁用分析按钮）
+                // 是否正在分析中（用于禁用分析按钮�?
                 const isAnalyzing = isRunning || isPending;
 
                 return (
@@ -2701,7 +2701,7 @@ export default function DashboardPage() {
                           {/* 价格信息 */}
                           <div className="flex flex-wrap items-center gap-4 mb-3">
                             <div className="min-w-[60px]">
-                              <div className="text-[10px] text-slate-500 mb-0.5">当前价</div>
+                              <div className="text-[10px] text-slate-500 mb-0.5">当前�?/div>
                               <span 
                                 className="font-mono text-sm font-semibold"
                                 style={{
@@ -2712,7 +2712,7 @@ export default function DashboardPage() {
                               </span>
                             </div>
                             <div className="min-w-[60px]">
-                              <div className="text-[10px] text-slate-500 mb-0.5">涨跌幅</div>
+                              <div className="text-[10px] text-slate-500 mb-0.5">涨跌�?/div>
                               <span 
                                 className="font-mono text-sm font-semibold"
                                 style={{
@@ -2765,12 +2765,12 @@ export default function DashboardPage() {
                                   <Loader2 className="w-2.5 h-2.5 animate-spin" />
                                 )}
                                 {getItemDisplayPeriod(item) === 'short' ? '短线' : 
-                                 getItemDisplayPeriod(item) === 'long' ? '中长线' : '波段'}
+                                 getItemDisplayPeriod(item) === 'long' ? '中长�? : '波段'}
                               </button>
                             </div>
                           </div>
                           
-                          {/* 技术指标参考价位 - 移动端（始终显示预留空间） */}
+                          {/* 技术指标参考价�?- 移动端（始终显示预留空间�?*/}
                           <div className="flex flex-wrap items-start gap-4 mb-3 pt-2 border-t border-white/[0.05]">
                             <div className="min-w-[70px]">
                               <div className="text-xs text-indigo-400/80 mb-1">信号类型</div>
@@ -2786,7 +2786,7 @@ export default function DashboardPage() {
                               })()}
                             </div>
                             <div className="min-w-[95px]">
-                              <div className="text-xs text-emerald-400/80 mb-1">支撑位</div>
+                              <div className="text-xs text-emerald-400/80 mb-1">支撑�?/div>
                               <div className="flex flex-col">
                                 <span className={`font-mono text-base font-semibold ${(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
@@ -2807,7 +2807,7 @@ export default function DashboardPage() {
                               </div>
                             </div>
                             <div className="min-w-[95px]">
-                              <div className="text-xs text-rose-400/80 mb-1">阻力位</div>
+                              <div className="text-xs text-rose-400/80 mb-1">阻力�?/div>
                               <div className="flex flex-col">
                                 <span className={`font-mono text-base font-semibold ${(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
@@ -2828,7 +2828,7 @@ export default function DashboardPage() {
                               </div>
                             </div>
                             <div className="min-w-[95px]">
-                              <div className="text-xs text-orange-400/80 mb-1">风险位</div>
+                              <div className="text-xs text-orange-400/80 mb-1">风险�?/div>
                               <div className="flex flex-col">
                                 <span className={`font-mono text-base font-semibold ${(() => {
                                     const prices = getPeriodPrices(item, getItemDisplayPeriod(item));
@@ -2850,7 +2850,7 @@ export default function DashboardPage() {
                             </div>
                           </div>
                           
-                          {/* 操作按钮 - 移动端竖向排列 */}
+                          {/* 操作按钮 - 移动端竖向排�?*/}
                           <div className="flex flex-col gap-2">
                             <div className="flex items-center gap-2">
                               <button
@@ -2869,7 +2869,7 @@ export default function DashboardPage() {
                                 ) : (
                                   <Play className="w-4 h-4" />
                                 )}
-                                {isRunning ? `${task?.progress}%` : isPending ? "排队中" : isFailed ? "重新分析" : "AI分析"}
+                                {isRunning ? `${task?.progress}%` : isPending ? "排队�? : isFailed ? "重新分析" : "AI分析"}
                               </button>
                               
                               {report && (
@@ -3001,7 +3001,7 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      {/* 持有周期 - 可点击切换 */}
+                      {/* 持有周期 - 可点击切�?*/}
                       <div className="w-16 flex-shrink-0">
                         <button
                           onClick={() => toggleItemDisplayPeriod(item.symbol, getItemDisplayPeriod(item))}
@@ -3017,7 +3017,7 @@ export default function DashboardPage() {
                             <Loader2 className="w-3 h-3 animate-spin" />
                           )}
                           {getItemDisplayPeriod(item) === 'short' ? '短线' : 
-                           getItemDisplayPeriod(item) === 'long' ? '中长线' : '波段'}
+                           getItemDisplayPeriod(item) === 'long' ? '中长�? : '波段'}
                         </button>
                       </div>
 
@@ -3035,7 +3035,7 @@ export default function DashboardPage() {
                         })()}
                       </div>
 
-                      {/* 支撑位 - 根据选择的周期显示 */}
+                      {/* 支撑�?- 根据选择的周期显�?*/}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
                           <span className={`font-mono text-base font-semibold ${(() => {
@@ -3057,7 +3057,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* 阻力位 - 根据选择的周期显示 */}
+                      {/* 阻力�?- 根据选择的周期显�?*/}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
                           <span className={`font-mono text-base font-semibold ${(() => {
@@ -3079,7 +3079,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* 风险位 - 根据选择的周期显示 */}
+                      {/* 风险�?- 根据选择的周期显�?*/}
                       <div className="w-28 flex-shrink-0 text-right">
                         <div className="flex flex-col">
                           <span className={`font-mono text-base font-semibold ${(() => {
@@ -3115,7 +3115,7 @@ export default function DashboardPage() {
                         ) : isPending ? (
                           <div className="flex items-center gap-1.5 text-amber-400">
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            <span className="text-sm font-medium">分析中</span>
+                            <span className="text-sm font-medium">分析�?/span>
                           </div>
                         ) : report ? (
                           <div className="flex items-center gap-1.5 text-emerald-400">
@@ -3123,7 +3123,7 @@ export default function DashboardPage() {
                             <span className="text-sm font-medium">完成</span>
                           </div>
                         ) : (
-                          <span className="text-sm text-slate-500">未分析</span>
+                          <span className="text-sm text-slate-500">未分�?/span>
                         )}
                       </div>
 
@@ -3190,16 +3190,16 @@ export default function DashboardPage() {
           {watchlist.length > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3 sm:px-6 py-3 sm:py-4 border-t border-white/[0.06] bg-white/[0.02]">
               <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-slate-500">
-                <span>共 {watchlist.length} 条</span>
+                <span>�?{watchlist.length} �?/span>
                 <select
                   value={pageSize}
                   onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
                   className="px-2 py-1 bg-white/[0.05] border border-white/[0.1] rounded text-slate-300 focus:outline-none text-xs sm:text-sm"
                 >
-                  <option value={10} className="bg-slate-800">10条/页</option>
-                  <option value={20} className="bg-slate-800">20条/页</option>
-                  <option value={50} className="bg-slate-800">50条/页</option>
-                  <option value={100} className="bg-slate-800">100条/页</option>
+                  <option value={10} className="bg-slate-800">10�?�?/option>
+                  <option value={20} className="bg-slate-800">20�?�?/option>
+                  <option value={50} className="bg-slate-800">50�?�?/option>
+                  <option value={100} className="bg-slate-800">100�?�?/option>
                 </select>
               </div>
               <div className="flex items-center gap-2">
@@ -3208,7 +3208,7 @@ export default function DashboardPage() {
                   disabled={currentPage === 1}
                   className="px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 rounded text-xs sm:text-sm disabled:opacity-50"
                 >
-                  上一页
+                  上一�?
                 </button>
                 <span className="text-xs sm:text-sm text-slate-500">{currentPage}/{Math.ceil(watchlist.length / pageSize) || 1}</span>
                 <button
@@ -3216,7 +3216,7 @@ export default function DashboardPage() {
                   disabled={currentPage >= Math.ceil(watchlist.length / pageSize)}
                   className="px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 rounded text-xs sm:text-sm disabled:opacity-50"
                 >
-                  下一页
+                  下一�?
                 </button>
               </div>
             </div>
@@ -3224,25 +3224,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 添加自选弹窗 */}
-      <AnimatePresence>
-        {showAddModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {/* 添加自选弹�?*/}
+      {showAddModal && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
             onClick={() => setShowAddModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            <div class="modal-overlay"
               className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 max-h-[85vh] overflow-y-auto safe-area-bottom"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base sm:text-lg font-semibold text-white">添加自选</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-white">添加自�?/h3>
                 <button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
                   <X className="w-5 h-5 text-slate-400" />
                 </button>
@@ -3297,7 +3290,7 @@ export default function DashboardPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-amber-400" />
-                        <span className="text-sm font-medium text-amber-400">同时添加到研究列表</span>
+                        <span className="text-sm font-medium text-amber-400">同时添加到研究列�?/span>
                       </div>
                       <p className="text-[10px] text-slate-500 mt-0.5">共享给所有已审核用户查看</p>
                     </div>
@@ -3311,14 +3304,14 @@ export default function DashboardPage() {
                   disabled={loading || !addSymbol.trim()}
                   className="flex-1 py-2.5 sm:py-3 bg-white/[0.05] border border-white/[0.08] text-slate-300 rounded-xl hover:bg-white/[0.08] disabled:opacity-50 text-sm sm:text-base"
                 >
-                  {loading ? "添加中..." : "添加"}
+                  {loading ? "添加�?.." : "添加"}
                 </button>
                 <button
                   onClick={() => handleAddSymbol(false)}
                   disabled={loading || !addSymbol.trim()}
                   className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-50 text-sm sm:text-base"
                 >
-                  {loading ? "添加中..." : "继续添加"}
+                  {loading ? "添加�?.." : "继续添加"}
                 </button>
               </div>
 
@@ -3327,7 +3320,7 @@ export default function DashboardPage() {
                   <div className="w-full border-t border-white/[0.06]"></div>
                 </div>
                 <div className="relative flex justify-center text-xs sm:text-sm">
-                  <span className="px-3 bg-[#0f172a] text-slate-500">或者</span>
+                  <span className="px-3 bg-[#0f172a] text-slate-500">或�?/span>
                 </div>
               </div>
 
@@ -3336,37 +3329,29 @@ export default function DashboardPage() {
                   {ocrLoading ? (
                     <div className="flex flex-col items-center">
                       <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400 animate-spin mb-2" />
-                      <p className="text-slate-400 text-sm">AI 识别中...</p>
+                      <p className="text-slate-400 text-sm">AI 识别�?..</p>
                     </div>
                   ) : (
                     <>
                       <Camera className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400/60 mx-auto mb-2" />
                       <p className="text-slate-400 mb-1 text-sm">上传截图自动识别</p>
-                      <p className="text-slate-600 text-[10px] sm:text-xs">支持多选，最多10张图片</p>
+                      <p className="text-slate-600 text-[10px] sm:text-xs">支持多选，最�?0张图�?/p>
                     </>
                   )}
                 </div>
                 <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" disabled={ocrLoading} />
               </label>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* OCR 结果弹窗 */}
-      <AnimatePresence>
-        {showOcrModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showOcrModal && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
             onClick={() => setShowOcrModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            <div class="modal-overlay"
               className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-lg sm:mx-4 max-h-[85vh] overflow-hidden flex flex-col safe-area-bottom"
               onClick={(e) => e.stopPropagation()}
             >
@@ -3384,8 +3369,8 @@ export default function DashboardPage() {
               {/* 免责提示 */}
               <div className="mb-4 p-2.5 bg-amber-500/5 border border-amber-500/20 rounded-lg">
                 <p className="text-amber-400/80 text-[10px] sm:text-xs leading-relaxed">
-                  ⚠️ 本功能仅用于从图片中提取证券代码，便于添加到研究列表。识别结果不代表任何投资建议或推荐。
-                  <span className="text-rose-400"> 🚫 严禁转发、截图保存或分享。</span>
+                  ⚠️ 本功能仅用于从图片中提取证券代码，便于添加到研究列表。识别结果不代表任何投资建议或推荐�?
+                  <span className="text-rose-400"> 🚫 严禁转发、截图保存或分享�?/span>
                 </p>
               </div>
 
@@ -3424,7 +3409,7 @@ export default function DashboardPage() {
                         <input
                           type="number"
                           step="0.01"
-                          placeholder="成本价"
+                          placeholder="成本�?
                           value={item.cost_price || ""}
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) => updateOcrPosition(index, 'cost_price', e.target.value)}
@@ -3448,49 +3433,41 @@ export default function DashboardPage() {
                   disabled={loading || ocrResults.filter(r => r.selected).length === 0}
                   className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl disabled:opacity-50 text-sm sm:text-base"
                 >
-                  {loading ? "添加中..." : `添加 ${ocrResults.filter(r => r.selected).length} 个`}
+                  {loading ? "添加�?.." : `添加 ${ocrResults.filter(r => r.selected).length} 个`}
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* 设置弹窗 */}
-      <AnimatePresence>
-        {showSettingsModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showSettingsModal && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
             onClick={() => setShowSettingsModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            <div class="modal-overlay"
               className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 max-h-[85vh] overflow-y-auto safe-area-bottom"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
                   <Settings className="w-5 h-5 text-indigo-400" />
-                  推送设置
+                  推送设�?
                 </h3>
                 <button onClick={() => setShowSettingsModal(false)} className="p-1 hover:bg-white/[0.05] rounded-lg">
                   <X className="w-5 h-5 text-slate-400" />
                 </button>
               </div>
 
-              {/* 微信公众号说明 */}
+              {/* 微信公众号说�?*/}
               <div className="mb-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
                 <div className="flex items-start gap-2">
                   <MessageSquare className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-sm font-medium text-indigo-400 mb-1">微信公众号推送</h4>
+                    <h4 className="text-sm font-medium text-indigo-400 mb-1">微信公众号推�?/h4>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      本系统使用微信测试公众号实现消息推送，每天可推送 10 万条消息，完全免费。
+                      本系统使用微信测试公众号实现消息推送，每天可推�?10 万条消息，完全免费�?
                     </p>
                   </div>
                 </div>
@@ -3506,7 +3483,7 @@ export default function DashboardPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">2</span>
-                    <span>关注后自动回复您的 OpenID（或发送任意消息获取）</span>
+                    <span>关注后自动回复您�?OpenID（或发送任意消息获取）</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-[10px]">3</span>
@@ -3533,18 +3510,18 @@ export default function DashboardPage() {
                   type="text"
                   value={wechatOpenId}
                   onChange={(e) => setWechatOpenId(e.target.value)}
-                  placeholder="请输入您的微信 OpenID（关注公众号后获取）"
+                  placeholder="请输入您的微�?OpenID（关注公众号后获取）"
                   className="w-full px-3 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-mono"
                 />
                 <p className="text-[10px] text-slate-500 mt-1">OpenID 格式类似：oZqdM3GW6B******************</p>
               </div>
 
-              {/* 状态显示 */}
+              {/* 状态显�?*/}
               {userSettings?.wechat_configured && (
                 <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-400" />
-                    <span className="text-sm text-emerald-400">已配置微信推送</span>
+                    <span className="text-sm text-emerald-400">已配置微信推�?/span>
                   </div>
                 </div>
               )}
@@ -3561,7 +3538,7 @@ export default function DashboardPage() {
                   ) : (
                     <MessageSquare className="w-4 h-4" />
                   )}
-                  测试推送
+                  测试推�?
                 </button>
                 <button
                   onClick={handleSaveSettings}
@@ -3576,25 +3553,17 @@ export default function DashboardPage() {
                   保存设置
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* 持有周期选择弹窗 */}
-      <AnimatePresence>
-        {showHoldingPeriodModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showHoldingPeriodModal && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
             onClick={() => setShowHoldingPeriodModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            <div class="modal-overlay"
               className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 safe-area-bottom"
               onClick={(e) => e.stopPropagation()}
             >
@@ -3617,9 +3586,9 @@ export default function DashboardPage() {
 
               <div className="space-y-3 mb-6">
                 {[
-                  { v: "short", l: "短线", desc: "1-5天", detail: "适合快进快出，关注日内波动和短期技术指标" },
-                  { v: "swing", l: "波段", desc: "1-4周", detail: "适合波段操作，关注周线趋势和中期支撑阻力" },
-                  { v: "long", l: "中长线", desc: "1月以上", detail: "适合价值投资，关注基本面和长期趋势" }
+                  { v: "short", l: "短线", desc: "1-5�?, detail: "适合快进快出，关注日内波动和短期技术指�? },
+                  { v: "swing", l: "波段", desc: "1-4�?, detail: "适合波段操作，关注周线趋势和中期支撑阻力" },
+                  { v: "long", l: "中长�?, desc: "1月以�?, detail: "适合价值投资，关注基本面和长期趋势" }
                 ].map(({ v, l, desc, detail }) => (
                   <button
                     key={v}
@@ -3655,28 +3624,20 @@ export default function DashboardPage() {
                   className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl text-sm sm:text-base flex items-center justify-center gap-2"
                 >
                   <Play className="w-4 h-4" />
-                  开始分析
+                  开始分�?
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* 编辑持仓弹窗 */}
-      <AnimatePresence>
-        {showEditPositionModal && editingItem && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showEditPositionModal && editingItem && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
             onClick={() => setShowEditPositionModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            <div class="modal-overlay"
               className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-md sm:mx-4 safe-area-bottom"
               onClick={(e) => e.stopPropagation()}
             >
@@ -3703,7 +3664,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-slate-400 mb-1.5 block">成本价</label>
+                  <label className="text-xs text-slate-400 mb-1.5 block">成本�?/label>
                   <input
                     type="number"
                     step="0.01"
@@ -3718,9 +3679,9 @@ export default function DashboardPage() {
                   <label className="text-xs text-slate-400 mb-1.5 block">持有周期</label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { v: "short", l: "短线", desc: "1-5天" },
-                      { v: "swing", l: "波段", desc: "1-4周" },
-                      { v: "long", l: "中长线", desc: "1月以上" }
+                      { v: "short", l: "短线", desc: "1-5�? },
+                      { v: "swing", l: "波段", desc: "1-4�? },
+                      { v: "long", l: "中长�?, desc: "1月以�? }
                     ].map(({ v, l, desc }) => (
                       <button
                         key={v}
@@ -3755,10 +3716,9 @@ export default function DashboardPage() {
                   保存
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* Alert Modal */}
       <AlertModal
@@ -3782,19 +3742,12 @@ export default function DashboardPage() {
       />
 
       {/* 研究列表弹窗 */}
-      <AnimatePresence>
-        {showAiPicksModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showAiPicksModal && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
             onClick={() => setShowAiPicksModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            <div class="modal-overlay"
               className="glass-card rounded-t-2xl sm:rounded-2xl border border-white/[0.08] p-4 sm:p-6 w-full sm:max-w-lg sm:mx-4 max-h-[85vh] overflow-hidden flex flex-col safe-area-bottom"
               onClick={(e) => e.stopPropagation()}
             >
@@ -3820,11 +3773,11 @@ export default function DashboardPage() {
                 <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-500">
                   <Sparkles className="w-12 h-12 mb-3 opacity-30" />
                   <p>暂无新的研究标的</p>
-                  <p className="text-xs mt-1">您已添加所有标的到自选</p>
+                  <p className="text-xs mt-1">您已添加所有标的到自�?/p>
                 </div>
               ) : (
                 <>
-                  {/* 全选/已选数量 */}
+                  {/* 全�?已选数�?*/}
                   <div className="flex items-center justify-between mb-3 pb-3 border-b border-white/[0.06]">
                     <button
                       onClick={toggleSelectAllAiPicks}
@@ -3835,10 +3788,10 @@ export default function DashboardPage() {
                       ) : (
                         <Square className="w-4 h-4" />
                       )}
-                      全选
+                      全�?
                     </button>
                     <span className="text-xs text-slate-500">
-                      已选 {selectedAiPicks.size}/{availableAiPicks.length}
+                      已�?{selectedAiPicks.size}/{availableAiPicks.length}
                     </span>
                   </div>
 
@@ -3904,7 +3857,7 @@ export default function DashboardPage() {
 
                   {/* 操作按钮区域 */}
                   <div className="space-y-2">
-                    {/* 添加到自选按钮 */}
+                    {/* 添加到自选按�?*/}
                     <button
                       onClick={handleAddAiPicksToWatchlist}
                       disabled={loading || selectedAiPicks.size === 0}
@@ -3915,10 +3868,10 @@ export default function DashboardPage() {
                       ) : (
                         <Plus className="w-4 h-4" />
                       )}
-                      添加到自选 ({selectedAiPicks.size})
+                      添加到自�?({selectedAiPicks.size})
                     </button>
                     
-                    {/* 批量删除和清空按钮 */}
+                    {/* 批量删除和清空按�?*/}
                     <div className="flex gap-2">
                       <button
                         onClick={handleDismissSelectedAiPicks}
@@ -3931,10 +3884,10 @@ export default function DashboardPage() {
                       <button
                         onClick={() => {
                           showConfirmModal(
-                            user?.role === 'admin' ? "确认清空全部？" : "确认清空？",
+                            user?.role === 'admin' ? "确认清空全部�? : "确认清空�?,
                             user?.role === 'admin' 
                               ? "此操作将删除所有研究列表标的（全局生效），确定继续吗？" 
-                              : "清空后这些标的将不再显示，除非管理员重新添加。确定继续吗？",
+                              : "清空后这些标的将不再显示，除非管理员重新添加。确定继续吗�?,
                             handleDismissAllAiPicks,
                             "warning"
                           );
@@ -3949,10 +3902,9 @@ export default function DashboardPage() {
                   </div>
                 </>
               )}
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
     </main>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+// framer-motion removed
 
 interface HarmonyLoaderProps {
   size?: "sm" | "md" | "lg";
@@ -21,7 +21,7 @@ export default function HarmonyLoader({
 
   const config = sizeConfig[size];
   
-  // 鸿蒙风格：3个点围绕中心旋转，带有脉冲和流动效果
+  // 鸿蒙风格�?个点围绕中心旋转，带有脉冲和流动效果
   const dots = [0, 1, 2, 3];
   
   const containerVariants = {
@@ -62,17 +62,17 @@ export default function HarmonyLoader({
 
   const loader = (
     <div className="flex flex-col items-center justify-center gap-4">
-      {/* 主加载动画 */}
+      {/* 主加载动�?*/}
       <div className="relative" style={{ width: config.container, height: config.container }}>
         {/* 外层脉冲光环 */}
-        <motion.div
+        <div
           className="absolute inset-0 rounded-full bg-gradient-to-r from-indigo-500/30 to-violet-500/30"
           variants={pulseVariants}
           animate="animate"
         />
         
         {/* 旋转容器 */}
-        <motion.div
+        <div
           className="absolute inset-0"
           variants={containerVariants}
           animate="animate"
@@ -84,7 +84,7 @@ export default function HarmonyLoader({
             const y = Math.sin((angle * Math.PI) / 180) * radius;
             
             return (
-              <motion.div
+              <div
                 key={i}
                 className="absolute rounded-full bg-gradient-to-br from-indigo-400 to-violet-500"
                 style={{
@@ -100,20 +100,16 @@ export default function HarmonyLoader({
               />
             );
           })}
-        </motion.div>
+        </div>
 
-        {/* 中心点 */}
-        <motion.div
+        {/* 中心�?*/}
+        <div
           className="absolute rounded-full bg-gradient-to-br from-indigo-300 to-violet-400"
           style={{
             width: config.dot * 0.8,
             height: config.dot * 0.8,
             left: config.container / 2 - (config.dot * 0.8) / 2,
             top: config.container / 2 - (config.dot * 0.8) / 2,
-          }}
-          animate={{
-            scale: [1, 1.2, 1],
-            opacity: [0.8, 1, 0.8],
           }}
           transition={{
             duration: 1,
@@ -127,9 +123,6 @@ export default function HarmonyLoader({
       {text && (
         <motion.span
           className="text-sm text-slate-400 font-medium"
-          animate={{
-            opacity: [0.5, 1, 0.5],
-          }}
           transition={{
             duration: 1.5,
             repeat: Infinity,
@@ -153,7 +146,7 @@ export default function HarmonyLoader({
   return loader;
 }
 
-// 按钮内嵌的简化版加载器
+// 按钮内嵌的简化版加载�?
 export function ButtonLoader() {
   return (
     <div className="flex items-center gap-1.5">
@@ -161,10 +154,6 @@ export function ButtonLoader() {
         <motion.span
           key={i}
           className="w-1.5 h-1.5 rounded-full bg-white"
-          animate={{
-            y: [-2, 2, -2],
-            opacity: [0.5, 1, 0.5],
-          }}
           transition={{
             duration: 0.6,
             repeat: Infinity,
@@ -177,17 +166,13 @@ export function ButtonLoader() {
   );
 }
 
-// 线性进度条加载器
+// 线性进度条加载�?
 export function LinearLoader() {
   return (
     <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-      <motion.div
+      <div
         className="h-full bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500 rounded-full"
         style={{ backgroundSize: "200% 100%" }}
-        animate={{
-          x: ["-100%", "100%"],
-          backgroundPosition: ["0% 0%", "100% 0%"],
-        }}
         transition={{
           duration: 1.5,
           repeat: Infinity,

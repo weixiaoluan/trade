@@ -8,7 +8,7 @@ import {
   Database, Download, Upload, Settings, Save, RotateCcw, Layers, Plus, Search, Import,
   AlertCircle, CheckCircle
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+// framer-motion removed for performance
 
 import { API_BASE } from "@/lib/config";
 
@@ -84,7 +84,7 @@ export default function AdminPage() {
   const [aiPicks, setAiPicks] = useState<AiPick[]>([]);
   const [aiPicksLoading, setAiPicksLoading] = useState(false);
 
-  // 数据库管理
+  // 数据库管�?
   const [activeTab, setActiveTab] = useState<'users' | 'database' | 'assets'>('users');
   const [backups, setBackups] = useState<any[]>([]);
   const [backupsLoading, setBackupsLoading] = useState(false);
@@ -97,7 +97,7 @@ export default function AdminPage() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [backupOperating, setBackupOperating] = useState<string | null>(null);
 
-  // 策略标的池管理
+  // 策略标的池管�?
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [strategiesLoading, setStrategiesLoading] = useState(false);
   const [selectedStrategy, setSelectedStrategy] = useState<string>('');
@@ -124,7 +124,7 @@ export default function AdminPage() {
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
 
-  // 复制到其他策略
+  // 复制到其他策�?
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyTargetStrategies, setCopyTargetStrategies] = useState<Set<string>>(new Set());
   const [copying, setCopying] = useState(false);
@@ -145,7 +145,7 @@ export default function AdminPage() {
     return null;
   };
 
-  // 检查权限
+  // 检查权�?
   useEffect(() => {
     const token = getToken();
     const userStr = localStorage.getItem("user");
@@ -222,7 +222,7 @@ export default function AdminPage() {
       };
       loadAssetsData();
       
-      // 加载自选列表
+      // 加载自选列�?
       const loadWatchlist = async () => {
         const token = getToken();
         if (!token) return;
@@ -238,7 +238,7 @@ export default function AdminPage() {
             setWatchlist(data.watchlist || []);
           }
         } catch (error) {
-          console.error("加载自选列表失败:", error);
+          console.error("加载自选列表失�?", error);
         } finally {
           setWatchlistLoading(false);
         }
@@ -247,7 +247,7 @@ export default function AdminPage() {
     }
   }, [currentUser, activeTab, selectedStrategy]);
 
-  // 切换到数据库管理时加载数据
+  // 切换到数据库管理时加载数�?
   useEffect(() => {
     if (currentUser && activeTab === 'database') {
       const loadDatabaseData = async () => {
@@ -279,7 +279,7 @@ export default function AdminPage() {
             });
           }
         } catch (error) {
-          console.error("加载数据库管理数据失败:", error);
+          console.error("加载数据库管理数据失�?", error);
         } finally {
           setBackupsLoading(false);
         }
@@ -383,7 +383,7 @@ export default function AdminPage() {
     const token = getToken();
     if (!token) return;
 
-    if (!confirm(`确定要恢复备份 ${backupName} 吗？当前数据将被覆盖！`)) return;
+    if (!confirm(`确定要恢复备�?${backupName} 吗？当前数据将被覆盖！`)) return;
 
     setBackupOperating(backupName);
     try {
@@ -393,7 +393,7 @@ export default function AdminPage() {
       });
 
       if (response.ok) {
-        showToast('success', '备份恢复成功！');
+        showToast('success', '备份恢复成功�?);
         fetchBackups();
       }
     } catch (error) {
@@ -408,7 +408,7 @@ export default function AdminPage() {
     const token = getToken();
     if (!token) return;
 
-    if (!confirm(`确定要删除备份 ${backupName} 吗？`)) return;
+    if (!confirm(`确定要删除备�?${backupName} 吗？`)) return;
 
     setBackupOperating(backupName);
     try {
@@ -444,7 +444,7 @@ export default function AdminPage() {
       });
 
       if (response.ok) {
-        showToast('success', '设置保存成功！');
+        showToast('success', '设置保存成功�?);
       }
     } catch (error) {
       console.error("保存设置失败:", error);
@@ -550,7 +550,7 @@ export default function AdminPage() {
   const validateAddUserForm = () => {
     const newErrors: Record<string, string> = {};
 
-    // 验证用户名：必须是中文或英文，2-20位
+    // 验证用户名：必须是中文或英文�?-20�?
     const usernameRegex = /^[\u4e00-\u9fa5a-zA-Z]{2,20}$/;
     if (!usernameRegex.test(addUserForm.username)) {
       newErrors.username = "用户名必须为2-20位中文或英文字母";
@@ -558,15 +558,15 @@ export default function AdminPage() {
 
     // 验证密码长度
     if (addUserForm.password.length < 6 || addUserForm.password.length > 20) {
-      newErrors.password = "密码长度必须为6-20位";
+      newErrors.password = "密码长度必须�?-20�?;
     }
 
     // 验证确认密码
     if (addUserForm.password !== addUserForm.confirm_password) {
-      newErrors.confirm_password = "两次输入的密码不一致";
+      newErrors.confirm_password = "两次输入的密码不一�?;
     }
 
-    // 验证手机号
+    // 验证手机�?
     const phoneRegex = /^1[3-9]\d{9}$/;
     if (!phoneRegex.test(addUserForm.phone)) {
       newErrors.phone = "请输入有效的手机号码";
@@ -683,10 +683,10 @@ export default function AdminPage() {
     }
   };
 
-  // 从自选列表导入标的
+  // 从自选列表导入标�?
   const handleImportFromWatchlist = async (symbols: string[]) => {
     if (!selectedStrategy || symbols.length === 0) {
-      showToast('error', '请先选择策略，且自选列表不能为空');
+      showToast('error', '请先选择策略，且自选列表不能为�?);
       return;
     }
     
@@ -724,7 +724,7 @@ export default function AdminPage() {
       }
     } catch (error) {
       console.error("导入标的失败:", error);
-      showToast('error', '导入标的失败，请检查网络连接');
+      showToast('error', '导入标的失败，请检查网络连�?);
     } finally {
       setAssetOperating(null);
     }
@@ -753,7 +753,7 @@ export default function AdminPage() {
       }
     } catch (error) {
       console.error("搜索市场标的失败:", error);
-      showToast('error', '搜索失败，请检查网络');
+      showToast('error', '搜索失败，请检查网�?);
     } finally {
       setMarketLoading(false);
     }
@@ -811,7 +811,7 @@ export default function AdminPage() {
     const token = getToken();
     if (!token) return;
     
-    if (!confirm(`确定删除选中的 ${selectedAssets.size} 个标的吗？`)) return;
+    if (!confirm(`确定删除选中�?${selectedAssets.size} 个标的吗？`)) return;
     
     setBatchDeleting(true);
     let successCount = 0;
@@ -842,7 +842,7 @@ export default function AdminPage() {
     showToast('success', `成功删除 ${successCount} 个标的`);
   };
 
-  // 复制标的到其他策略
+  // 复制标的到其他策�?
   const handleCopyToStrategies = async () => {
     if (copyTargetStrategies.size === 0 || currentStrategyAssets.length === 0) return;
     
@@ -896,10 +896,10 @@ export default function AdminPage() {
     showToast('success', `成功复制 ${totalAdded} 个标的到 ${copyTargetStrategies.size} 个策略`);
   };
 
-  // 获取当前选中策略的标的列表
+  // 获取当前选中策略的标的列�?
   const currentStrategyAssets = strategies.find(s => s.id === selectedStrategy)?.assets || [];
   
-  // 当前策略已有的标的代码集合（用于市场搜索时判断是否已添加）
+  // 当前策略已有的标的代码集合（用于市场搜索时判断是否已添加�?
   const existingSymbols = new Set(currentStrategyAssets.map(a => a.symbol));
 
   const getStatusBadge = (status: string) => {
@@ -908,14 +908,14 @@ export default function AdminPage() {
         return (
           <span className="px-2 py-1 text-xs bg-emerald-500/20 text-emerald-400 rounded-full flex items-center gap-1">
             <UserCheck className="w-3 h-3" />
-            已审核
+            已审�?
           </span>
         );
       case "rejected":
         return (
           <span className="px-2 py-1 text-xs bg-rose-500/20 text-rose-400 rounded-full flex items-center gap-1">
             <UserX className="w-3 h-3" />
-            已拒绝
+            已拒�?
           </span>
         );
       case "deleted":
@@ -929,7 +929,7 @@ export default function AdminPage() {
         return (
           <span className="px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded-full flex items-center gap-1">
             <Clock className="w-3 h-3" />
-            待审核
+            待审�?
           </span>
         );
     }
@@ -940,14 +940,14 @@ export default function AdminPage() {
       return (
         <span className="px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded-full flex items-center gap-1">
           <Shield className="w-3 h-3" />
-          管理员
+          管理�?
         </span>
       );
     }
     return (
       <span className="px-2 py-1 text-xs bg-slate-500/20 text-slate-400 rounded-full flex items-center gap-1">
         <Users className="w-3 h-3" />
-        普通用户
+        普通用�?
       </span>
     );
   };
@@ -963,12 +963,8 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-[#020617] text-white">
       {/* Toast通知 */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: -50, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -50, x: '-50%' }}
+      {toast && (
+          <div class="modal-overlay"
             className={`fixed top-4 left-1/2 z-[100] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 ${
               toast.type === 'success' 
                 ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400' 
@@ -980,9 +976,8 @@ export default function AdminPage() {
             <button onClick={() => setToast(null)} className="ml-2 hover:opacity-70">
               <X className="w-4 h-4" />
             </button>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -1008,7 +1003,7 @@ export default function AdminPage() {
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-white">管理员控制台</h1>
-                <p className="text-xs text-slate-500">用户管理 / 数据库管理 / 标的管理</p>
+                <p className="text-xs text-slate-500">用户管理 / 数据库管�?/ 标的管理</p>
               </div>
             </div>
           </div>
@@ -1048,7 +1043,7 @@ export default function AdminPage() {
             }`}
           >
             <Database className="w-4 h-4" />
-            数据库管理
+            数据库管�?
           </button>
           <button
             onClick={() => setActiveTab('assets')}
@@ -1087,7 +1082,7 @@ export default function AdminPage() {
                 <p className="text-2xl font-bold text-white">
                   {users.filter(u => u.status === "pending").length}
                 </p>
-                <p className="text-xs text-slate-500">待审核</p>
+                <p className="text-xs text-slate-500">待审�?/p>
               </div>
             </div>
           </div>
@@ -1100,7 +1095,7 @@ export default function AdminPage() {
                 <p className="text-2xl font-bold text-white">
                   {users.filter(u => u.status === "approved").length}
                 </p>
-                <p className="text-xs text-slate-500">已审核</p>
+                <p className="text-xs text-slate-500">已审�?/p>
               </div>
             </div>
           </div>
@@ -1128,10 +1123,10 @@ export default function AdminPage() {
             <table className="w-full">
               <thead className="bg-white/[0.02]">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">用户名</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">手机号</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">用户�?/th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">手机�?/th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">角色</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">状态</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">状�?/th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">注册时间</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase">操作</th>
                 </tr>
@@ -1234,7 +1229,7 @@ export default function AdminPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">代码</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">名称</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">类型</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">添加人</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">添加�?/th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">添加时间</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase">操作</th>
                   </tr>
@@ -1310,7 +1305,7 @@ export default function AdminPage() {
                           : 'bg-white/[0.03] border-white/[0.08] text-slate-400'
                       }`}
                     >
-                      {backupSettings.auto_backup_enabled ? '已启用' : '已禁用'}
+                      {backupSettings.auto_backup_enabled ? '已启�? : '已禁�?}
                     </button>
                   </div>
                   <div>
@@ -1333,7 +1328,7 @@ export default function AdminPage() {
                       placeholder="0表示禁用"
                       className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                     />
-                    <p className="text-xs text-slate-500 mt-1">0表示禁用，建议60-240分钟</p>
+                    <p className="text-xs text-slate-500 mt-1">0表示禁用，建�?0-240分钟</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-2">保留天数</label>
@@ -1413,7 +1408,7 @@ export default function AdminPage() {
                                 onClick={() => handleRestoreBackup(backup.backup_name)}
                                 disabled={backupOperating === backup.backup_name}
                                 className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-all disabled:opacity-50"
-                                title="恢复此备份"
+                                title="恢复此备�?
                               >
                                 {backupOperating === backup.backup_name ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
                               </button>
@@ -1474,7 +1469,7 @@ export default function AdminPage() {
                       }`}
                     >
                       <div className="text-sm font-medium">{strategy.name}</div>
-                      <div className="text-xs opacity-60">{strategy.assets.length} 个标的</div>
+                      <div className="text-xs opacity-60">{strategy.assets.length} 个标�?/div>
                     </button>
                   ))}
                 </div>
@@ -1487,7 +1482,7 @@ export default function AdminPage() {
                 <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold text-white">
-                      {strategies.find(s => s.id === selectedStrategy)?.name} - 标的池
+                      {strategies.find(s => s.id === selectedStrategy)?.name} - 标的�?
                     </h2>
                     <span className="text-xs text-slate-500">（共 {currentStrategyAssets.length} 个）</span>
                   </div>
@@ -1508,7 +1503,7 @@ export default function AdminPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-all"
                       >
                         <Layers className="w-4 h-4" />
-                        复制到其他策略
+                        复制到其他策�?
                       </button>
                     )}
                     <button
@@ -1517,7 +1512,7 @@ export default function AdminPage() {
                       className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-all disabled:opacity-50"
                     >
                       <Search className="w-4 h-4" />
-                      从市场搜索
+                      从市场搜�?
                     </button>
                     <button
                       onClick={() => {
@@ -1530,7 +1525,7 @@ export default function AdminPage() {
                       className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-all disabled:opacity-50"
                     >
                       {assetOperating === 'import' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Import className="w-4 h-4" />}
-                      从自选导入 ({watchlist.length})
+                      从自选导�?({watchlist.length})
                     </button>
                   </div>
                 </div>
@@ -1538,7 +1533,7 @@ export default function AdminPage() {
                 {currentStrategyAssets.length === 0 ? (
                   <div className="text-center py-12 text-slate-500">
                     <Layers className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p>暂无标的，点击"添加标的"或"从自选导入"</p>
+                    <p>暂无标的，点�?添加标的"�?从自选导�?</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1630,19 +1625,12 @@ export default function AdminPage() {
       </main>
 
       {/* 注销确认弹窗 */}
-      <AnimatePresence>
-        {showDeleteConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showDeleteConfirm && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={() => setShowDeleteConfirm(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+            <div class="modal-overlay"
               className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-md mx-4"
               onClick={(e) => e.stopPropagation()}
             >
@@ -1654,7 +1642,7 @@ export default function AdminPage() {
               </div>
               <p className="text-slate-400 mb-6">
                 确定要注销用户 <span className="text-white font-medium">{deleteUsername}</span> 吗？
-                此操作将删除该用户的所有数据，包括自选列表和分析报告，且无法恢复。
+                此操作将删除该用户的所有数据，包括自选列表和分析报告，且无法恢复�?
               </p>
               <div className="flex gap-3">
                 <button
@@ -1672,25 +1660,17 @@ export default function AdminPage() {
                   确认注销
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* 新增用户弹窗 */}
-      <AnimatePresence>
-        {showAddUserModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showAddUserModal && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={() => setShowAddUserModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+            <div class="modal-overlay"
               className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4"
               onClick={(e) => e.stopPropagation()}
             >
@@ -1702,16 +1682,16 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-4">
-                {/* 用户名 */}
+                {/* 用户�?*/}
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-2">
-                    用户名 <span className="text-rose-400">*</span>
+                    用户�?<span className="text-rose-400">*</span>
                   </label>
                   <input
                     type="text"
                     value={addUserForm.username}
                     onChange={(e) => setAddUserForm({ ...addUserForm, username: e.target.value })}
-                    placeholder="请输入中文或英文用户名"
+                    placeholder="请输入中文或英文用户�?
                     className={`w-full px-4 py-3 bg-white/[0.03] border rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all ${
                       addUserErrors.username ? "border-rose-500/50" : "border-white/[0.08]"
                     }`}
@@ -1731,7 +1711,7 @@ export default function AdminPage() {
                     type="password"
                     value={addUserForm.password}
                     onChange={(e) => setAddUserForm({ ...addUserForm, password: e.target.value })}
-                    placeholder="请输入密码"
+                    placeholder="请输入密�?
                     className={`w-full px-4 py-3 bg-white/[0.03] border rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all ${
                       addUserErrors.password ? "border-rose-500/50" : "border-white/[0.08]"
                     }`}
@@ -1739,7 +1719,7 @@ export default function AdminPage() {
                   {addUserErrors.password && (
                     <p className="text-rose-400 text-sm mt-1">{addUserErrors.password}</p>
                   )}
-                  <p className="text-slate-600 text-xs mt-1">6-20位字符</p>
+                  <p className="text-slate-600 text-xs mt-1">6-20位字�?/p>
                 </div>
 
                 {/* 确认密码 */}
@@ -1751,7 +1731,7 @@ export default function AdminPage() {
                     type="password"
                     value={addUserForm.confirm_password}
                     onChange={(e) => setAddUserForm({ ...addUserForm, confirm_password: e.target.value })}
-                    placeholder="请再次输入密码"
+                    placeholder="请再次输入密�?
                     className={`w-full px-4 py-3 bg-white/[0.03] border rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all ${
                       addUserErrors.confirm_password ? "border-rose-500/50" : "border-white/[0.08]"
                     }`}
@@ -1761,10 +1741,10 @@ export default function AdminPage() {
                   )}
                 </div>
 
-                {/* 手机号 */}
+                {/* 手机�?*/}
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-2">
-                    手机号 <span className="text-rose-400">*</span>
+                    手机�?<span className="text-rose-400">*</span>
                   </label>
                   <input
                     type="tel"
@@ -1808,25 +1788,17 @@ export default function AdminPage() {
                   创建用户
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* 添加标的弹窗 */}
-      <AnimatePresence>
-        {showAddAssetModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showAddAssetModal && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={() => setShowAddAssetModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+            <div class="modal-overlay"
               className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4"
               onClick={(e) => e.stopPropagation()}
             >
@@ -1846,7 +1818,7 @@ export default function AdminPage() {
                     type="text"
                     value={newAsset.symbol}
                     onChange={(e) => setNewAsset({ ...newAsset, symbol: e.target.value })}
-                    placeholder="如: 510300.SH"
+                    placeholder="�? 510300.SH"
                     className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
                   />
                 </div>
@@ -1857,7 +1829,7 @@ export default function AdminPage() {
                     type="text"
                     value={newAsset.name}
                     onChange={(e) => setNewAsset({ ...newAsset, name: e.target.value })}
-                    placeholder="如: 沪深300ETF"
+                    placeholder="�? 沪深300ETF"
                     className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
                   />
                 </div>
@@ -1918,25 +1890,17 @@ export default function AdminPage() {
                   添加
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* 市场标的搜索弹窗 */}
-      <AnimatePresence>
-        {showMarketModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showMarketModal && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={() => setShowMarketModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+            <div class="modal-overlay"
               className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
@@ -1944,7 +1908,7 @@ export default function AdminPage() {
                 <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
                   <Search className="w-5 h-5 text-indigo-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-white">从市场搜索标的</h3>
+                <h3 className="text-lg font-semibold text-white">从市场搜索标�?/h3>
               </div>
 
               <div className="flex gap-4 mb-4">
@@ -1954,7 +1918,7 @@ export default function AdminPage() {
                       key={t}
                       onClick={() => {
                         setMarketType(t);
-                        // 切换类型时自动搜索
+                        // 切换类型时自动搜�?
                         setTimeout(() => {
                           const token = getToken();
                           if (!token) return;
@@ -1973,7 +1937,7 @@ export default function AdminPage() {
                           : 'bg-white/[0.03] text-slate-400 border border-white/[0.06]'
                       }`}
                     >
-                      {t === 'etf' ? 'ETF' : t === 'stock' ? '股票' : '可转债'}
+                      {t === 'etf' ? 'ETF' : t === 'stock' ? '股票' : '可转�?}
                     </button>
                   ))}
                 </div>
@@ -1982,7 +1946,7 @@ export default function AdminPage() {
                     type="text"
                     value={marketKeyword}
                     onChange={(e) => setMarketKeyword(e.target.value)}
-                    placeholder="输入关键字搜索..."
+                    placeholder="输入关键字搜�?.."
                     className="flex-1 px-4 py-2 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                     onKeyDown={(e) => e.key === 'Enter' && handleSearchMarketSymbols()}
                   />
@@ -2021,7 +1985,7 @@ export default function AdminPage() {
                         {existingSymbols.has(item.symbol) ? (
                           <span className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg text-sm flex items-center gap-1">
                             <Check className="w-3 h-3" />
-                            已添加
+                            已添�?
                           </span>
                         ) : (
                           <button
@@ -2046,25 +2010,17 @@ export default function AdminPage() {
                   关闭
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
-      {/* 复制到其他策略弹窗 */}
-      <AnimatePresence>
-        {showCopyModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {/* 复制到其他策略弹�?*/}
+      {showCopyModal && (
+          <div class="modal-overlay"
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={() => setShowCopyModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+            <div class="modal-overlay"
               className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4"
               onClick={(e) => e.stopPropagation()}
             >
@@ -2073,8 +2029,8 @@ export default function AdminPage() {
                   <Layers className="w-5 h-5 text-violet-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-white">复制标的到其他策略</h3>
-                  <p className="text-xs text-slate-500">将当前 {currentStrategyAssets.length} 个标的复制到选中的策略</p>
+                  <h3 className="text-lg font-semibold text-white">复制标的到其他策�?/h3>
+                  <p className="text-xs text-slate-500">将当�?{currentStrategyAssets.length} 个标的复制到选中的策�?/p>
                 </div>
               </div>
 
@@ -2100,7 +2056,7 @@ export default function AdminPage() {
                     />
                     <div className="flex-1">
                       <span className="text-sm text-white">{strategy.name}</span>
-                      <span className="text-xs text-slate-500 ml-2">({strategy.assets?.length || 0} 个标的)</span>
+                      <span className="text-xs text-slate-500 ml-2">({strategy.assets?.length || 0} 个标�?</span>
                     </div>
                   </label>
                 ))}
@@ -2119,13 +2075,12 @@ export default function AdminPage() {
                   className="flex-1 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 hover:from-violet-600 hover:to-purple-700 transition-all"
                 >
                   {copying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
-                  复制到 {copyTargetStrategies.size} 个策略
+                  复制�?{copyTargetStrategies.size} 个策�?
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
     </div>
   );
 }

@@ -49,7 +49,6 @@ export function TypewriterText() {
       <span className="text-electric-blue text-lg md:text-xl font-medium ml-2">
         {displayText}
         <motion.span
-          animate={{ opacity: [1, 0] }}
           transition={{ duration: 0.5, repeat: Infinity }}
           className="inline-block w-0.5 h-5 bg-electric-blue ml-1 align-middle"
         />

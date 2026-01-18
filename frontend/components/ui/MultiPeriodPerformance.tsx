@@ -14,31 +14,29 @@ interface MultiPeriodPerformanceProps {
 }
 
 const defaultData: PeriodData[] = [
-  { period: '1d', label: '周期 | 涨跌幅', return: -4.5 },
-  { period: '5d', label: '5日', return: -4.5 },
-  { period: '10d', label: '10日', return: -1.63 },
-  { period: '20d', label: '20日', return: -7.64 },
-  { period: '60d', label: '60日', return: 3.69 },
-  { period: '120d', label: '120日', return: 44.75 },
-  { period: '250d', label: '250日', return: 13.09 },
+  { period: '1d', label: '周期 | 涨跌�?, return: -4.5 },
+  { period: '5d', label: '5�?, return: -4.5 },
+  { period: '10d', label: '10�?, return: -1.63 },
+  { period: '20d', label: '20�?, return: -7.64 },
+  { period: '60d', label: '60�?, return: 3.69 },
+  { period: '120d', label: '120�?, return: 44.75 },
+  { period: '250d', label: '250�?, return: 13.09 },
 ];
 
 export function MultiPeriodPerformance({ data = defaultData }: MultiPeriodPerformanceProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+    <div
       transition={{ delay: 0.2 }}
       className="glass-card rounded-xl border border-white/[0.06] p-3 sm:p-5"
     >
-      {/* Header - 响应式 */}
+      {/* Header - 响应�?*/}
       <div className="flex items-center gap-1.5 sm:gap-2 mb-3 sm:mb-4 flex-wrap">
         <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
-        <h3 className="text-xs sm:text-sm font-bold text-slate-300 tracking-wide">多周期趋势分析</h3>
+        <h3 className="text-xs sm:text-sm font-bold text-slate-300 tracking-wide">多周期趋势分�?/h3>
         <span className="hidden sm:inline text-xs text-slate-500 uppercase">MULTI-PERIOD TREND ANALYSIS</span>
       </div>
 
-      {/* Performance Grid - 响应式 */}
+      {/* Performance Grid - 响应�?*/}
       <div className="space-y-1.5 sm:space-y-2">
         {data.map((item, index) => {
           const isPositive = item.return > 0;
@@ -63,10 +61,8 @@ export function MultiPeriodPerformance({ data = defaultData }: MultiPeriodPerfor
             : 'border-emerald-500/20';
 
           return (
-            <motion.div
+            <div
               key={item.period}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.05 }}
               className={`flex items-center justify-between px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg border ${bgColor} ${borderColor} hover:border-white/10 transition-all`}
             >
@@ -100,26 +96,26 @@ export function MultiPeriodPerformance({ data = defaultData }: MultiPeriodPerfor
                   {isPositive && '+'}{item.return.toFixed(2)}%
                 </span>
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>
 
-      {/* Footer Stats - 响应式 */}
+      {/* Footer Stats - 响应�?*/}
       <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-white/[0.05] grid grid-cols-2 gap-2 sm:gap-3">
         <div className="text-center">
-          <div className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider mb-1">最佳表现</div>
+          <div className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider mb-1">最佳表�?/div>
           <div className="text-xs sm:text-sm font-mono font-bold text-rose-400">
             +{Math.max(...data.map(d => d.return)).toFixed(2)}%
           </div>
         </div>
         <div className="text-center">
-          <div className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider mb-1">最差表现</div>
+          <div className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider mb-1">最差表�?/div>
           <div className="text-xs sm:text-sm font-mono font-bold text-emerald-400">
             {Math.min(...data.map(d => d.return)).toFixed(2)}%
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

@@ -24,7 +24,7 @@ interface AIRecommendationCardProps {
   riskLevel?: 'low' | 'medium' | 'high';
 }
 
-// 技术面评级配置 - 仅表示技术指标状态，不构成投资建议
+// 技术面评级配置 - 仅表示技术指标状态，不构成投资建�?
 const recommendationConfig = {
   strong_buy: {
     label: '强势',
@@ -45,7 +45,7 @@ const recommendationConfig = {
     badgeColor: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
   },
   hold: {
-    label: '中性',
+    label: '中�?,
     labelEn: 'NEUTRAL',
     icon: Minus,
     accentColor: 'bg-gradient-to-b from-amber-500 to-amber-600',
@@ -94,9 +94,7 @@ export function AIRecommendationCard({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+    <div
       className="glass-card rounded-xl overflow-hidden"
     >
       {/* Left Accent Border */}
@@ -104,7 +102,7 @@ export function AIRecommendationCard({
         <div className={`w-1 ${config.accentColor} flex-shrink-0`} />
         
         <div className="flex-1 p-3 sm:p-5">
-          {/* Header - 移动端优化 */}
+          {/* Header - 移动端优�?*/}
           <div className="flex items-start justify-between mb-3 sm:mb-5 gap-2">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               {/* Icon */}
@@ -139,12 +137,11 @@ export function AIRecommendationCard({
           {/* Confidence Meter */}
           <div className="mb-3 sm:mb-4">
             <div className="flex items-center justify-between mb-1 sm:mb-1.5">
-              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500">AI 置信度</span>
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500">AI 置信�?/span>
               <span className={`text-xs sm:text-sm font-mono font-bold ${config.textColor}`}>{confidence}%</span>
             </div>
             <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
+              <div
                 animate={{ width: `${confidence}%` }}
                 transition={{ duration: 1, delay: 0.3 }}
                 className={`h-full ${config.accentColor}`}
@@ -159,7 +156,7 @@ export function AIRecommendationCard({
             </div>
           )}
 
-          {/* Risk Level - 移动端优化 */}
+          {/* Risk Level - 移动端优�?*/}
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 sm:pt-3 border-t border-white/[0.06]">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500" />
@@ -171,7 +168,7 @@ export function AIRecommendationCard({
                   ? 'bg-amber-500/10 text-amber-400' 
                   : 'bg-rose-500/10 text-rose-400'
               }`}>
-                {riskLevel === 'low' ? '低' : riskLevel === 'medium' ? '中' : '高'}
+                {riskLevel === 'low' ? '�? : riskLevel === 'medium' ? '�? : '�?}
               </div>
               {/* Risk Dots */}
               <div className="flex items-center gap-0.5">
@@ -190,11 +187,11 @@ export function AIRecommendationCard({
             
             <div className="flex items-center gap-1 text-[9px] sm:text-[10px] text-slate-600">
               <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-              <span>仅供参考</span>
+              <span>仅供参�?/span>
             </div>
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

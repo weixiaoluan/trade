@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+// framer-motion removed
 import { AlertTriangle, Info, CheckCircle, XCircle, HelpCircle } from "lucide-react";
 
 interface ConfirmModalProps {
@@ -77,19 +77,12 @@ export const ConfirmModal = memo(function ConfirmModal({
   };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+    {isOpen && (
+        <div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[1000] p-4"
           onClick={onClose}
         >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+          <div
             transition={{ type: "spring", duration: 0.3 }}
             className={`w-full max-w-sm ${colors.bg} border ${colors.border} rounded-2xl shadow-2xl overflow-hidden`}
             onClick={(e) => e.stopPropagation()}
@@ -134,9 +127,8 @@ export const ConfirmModal = memo(function ConfirmModal({
                 {confirmText}
               </button>
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       )}
-    </AnimatePresence>
   );
 });

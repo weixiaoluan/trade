@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+// framer-motion removed
 import {
   TrendingUp,
   TrendingDown,
@@ -129,9 +129,9 @@ const categoryLabels: Record<string, string> = {
 };
 
 const riskLabels: Record<string, { label: string; color: string }> = {
-  low: { label: "低风险", color: "text-green-400" },
-  medium: { label: "中风险", color: "text-yellow-400" },
-  high: { label: "高风险", color: "text-red-400" },
+  low: { label: "低风�?, color: "text-green-400" },
+  medium: { label: "中风�?, color: "text-yellow-400" },
+  high: { label: "高风�?, color: "text-red-400" },
 };
 
 export default function StrategiesPage() {
@@ -266,7 +266,7 @@ export default function StrategiesPage() {
       const data = await response.json();
       if (response.ok) {
         if (data.orders > 0) {
-          setSuccessMsg(`策略执行成功: ${data.executed}/${data.orders} 笔交易, 目标: ${data.target || '-'}`);
+          setSuccessMsg(`策略执行成功: ${data.executed}/${data.orders} 笔交�? 目标: ${data.target || '-'}`);
         } else {
           setSuccessMsg(data.message || "策略执行完成，无需交易");
         }
@@ -325,7 +325,7 @@ export default function StrategiesPage() {
       const isAuth = checkAuth();
       if (!isAuth) return;
       
-      // 优先加载策略列表，快速显示页面
+      // 优先加载策略列表，快速显示页�?
       await fetchStrategies();
       setLoading(false);
       
@@ -402,7 +402,7 @@ export default function StrategiesPage() {
 
     const strategy = strategies.find((s) => s.id === strategyId);
     if (strategy && editCapital < strategy.min_capital) {
-      setError(`分配资金不能低于最低要求 ¥${strategy.min_capital.toLocaleString()}`);
+      setError(`分配资金不能低于最低要�?¥${strategy.min_capital.toLocaleString()}`);
       return;
     }
 
@@ -447,7 +447,7 @@ export default function StrategiesPage() {
       await fetchUserConfigs();
       await fetchAccountInfo();
       setEditingConfig(null);
-      setSuccessMsg("资金分配已保存");
+      setSuccessMsg("资金分配已保�?);
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -505,8 +505,8 @@ export default function StrategiesPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-400" />
               </button>
               <div>
-                <h1 className="text-xl font-bold text-white">策略池</h1>
-                <p className="text-sm text-gray-400">选择和配置交易策略</p>
+                <h1 className="text-xl font-bold text-white">策略�?/h1>
+                <p className="text-sm text-gray-400">选择和配置交易策�?/p>
               </div>
             </div>
             <button
@@ -540,13 +540,13 @@ export default function StrategiesPage() {
               </p>
             </div>
             <div className="text-center">
-              <p className="text-sm text-gray-400">已分配</p>
+              <p className="text-sm text-gray-400">已分�?/p>
               <p className="text-xl font-bold text-yellow-400">
                 ¥{totalAllocated.toLocaleString()}
               </p>
             </div>
             <div className="text-center">
-              <p className="text-sm text-gray-400">剩余可分配</p>
+              <p className="text-sm text-gray-400">剩余可分�?/p>
               <p className="text-xl font-bold text-green-400">
                 ¥{Math.max(0, availableCapital - totalAllocated).toLocaleString()}
               </p>
@@ -555,18 +555,14 @@ export default function StrategiesPage() {
           {totalAllocated > availableCapital && (
             <div className="mt-3 p-2 bg-red-500/20 rounded-lg flex items-center gap-2 text-red-400 text-sm">
               <AlertCircle className="w-4 h-4" />
-              已分配资金超过可用资金
+              已分配资金超过可用资�?
             </div>
           )}
         </div>
 
         {/* 错误提示 */}
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+        {error && (
+            <div
               className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center gap-2 text-red-400"
             >
               <AlertCircle className="w-4 h-4" />
@@ -574,17 +570,12 @@ export default function StrategiesPage() {
               <button onClick={() => setError(null)} className="ml-auto">
                 <X className="w-4 h-4" />
               </button>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
 
         {/* 成功提示 */}
-        <AnimatePresence>
-          {successMsg && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+        {successMsg && (
+            <div
               className="p-3 bg-green-500/20 border border-green-500/50 rounded-lg flex items-center gap-2 text-green-400"
             >
               <Check className="w-4 h-4" />
@@ -592,11 +583,10 @@ export default function StrategiesPage() {
               <button onClick={() => setSuccessMsg(null)} className="ml-auto">
                 <X className="w-4 h-4" />
               </button>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
 
-        {/* 分类筛选 */}
+        {/* 分类筛�?*/}
         <div className="flex gap-2">
           {[
             { value: "all", label: "全部" },
@@ -629,7 +619,7 @@ export default function StrategiesPage() {
             const risk = riskLabels[strategy.risk_level] || riskLabels.medium;
 
             return (
-              <motion.div
+              <div
                 key={strategy.id}
                 layout
                 className="bg-gray-800/50 rounded-xl border border-gray-700/50 overflow-hidden"
@@ -689,7 +679,7 @@ export default function StrategiesPage() {
                             ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
                             : "bg-gray-700/50 text-gray-400 hover:bg-gray-700"
                         }`}
-                        title={isEnabled ? "已启用自动交易" : "未启用"}
+                        title={isEnabled ? "已启用自动交�? : "未启�?}
                       >
                         {isEnabled ? (
                           <Play className="w-5 h-5" />
@@ -715,10 +705,10 @@ export default function StrategiesPage() {
                     </div>
                   </div>
 
-                  {/* 简要信息 */}
+                  {/* 简要信�?*/}
                   <div className="mt-3 grid grid-cols-4 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-500">最低资金</p>
+                      <p className="text-gray-500">最低资�?/p>
                       <p className="text-white font-medium">
                         ¥{strategy.min_capital.toLocaleString()}
                       </p>
@@ -738,7 +728,7 @@ export default function StrategiesPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-500">已分配</p>
+                      <p className="text-gray-500">已分�?/p>
                       <p className="text-white font-medium">
                         {config
                           ? `¥${config.allocated_capital.toLocaleString()}`
@@ -763,12 +753,8 @@ export default function StrategiesPage() {
                 </div>
 
                 {/* 展开详情 */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
+                {isExpanded && (
+                    <div
                       className="border-t border-gray-700/50"
                     >
                       <div className="p-4 space-y-4">
@@ -820,7 +806,7 @@ export default function StrategiesPage() {
                             </p>
                           </div>
                           <div className="bg-gray-700/30 rounded-lg p-3 text-center">
-                            <p className="text-xs text-gray-500 mb-1">最大回撤</p>
+                            <p className="text-xs text-gray-500 mb-1">最大回�?/p>
                             <p className="text-lg font-bold text-red-400">
                               {strategy.backtest_max_drawdown
                                 ? `-${strategy.backtest_max_drawdown}%`
@@ -837,7 +823,7 @@ export default function StrategiesPage() {
                           </div>
                         </div>
 
-                        {/* 自定义回测结果 */}
+                        {/* 自定义回测结�?*/}
                         {backtestResults[strategy.id] && (
                           <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
                             <h4 className="text-sm font-medium text-purple-400 mb-2 flex items-center justify-between">
@@ -847,7 +833,7 @@ export default function StrategiesPage() {
                               </span>
                               {backtestResults[strategy.id].execution_time && (
                                 <span className="text-xs text-gray-500">
-                                  耗时: {backtestResults[strategy.id].execution_time}秒
+                                  耗时: {backtestResults[strategy.id].execution_time}�?
                                 </span>
                               )}
                             </h4>
@@ -864,13 +850,13 @@ export default function StrategiesPage() {
                                 </p>
                               </div>
                               <div>
-                                <p className="text-xs text-gray-500">总收益</p>
+                                <p className="text-xs text-gray-500">总收�?/p>
                                 <p className={`font-bold ${backtestResults[strategy.id].total_return >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                   {backtestResults[strategy.id].total_return > 0 ? '+' : ''}{backtestResults[strategy.id].total_return}%
                                 </p>
                               </div>
                               <div>
-                                <p className="text-xs text-gray-500">最大回撤</p>
+                                <p className="text-xs text-gray-500">最大回�?/p>
                                 <p className="font-bold text-red-400">
                                   -{backtestResults[strategy.id].max_drawdown}%
                                 </p>
@@ -884,12 +870,12 @@ export default function StrategiesPage() {
                               <div>
                                 <p className="text-xs text-gray-500">胜率/交易</p>
                                 <p className="font-bold text-white">
-                                  {backtestResults[strategy.id].win_rate}% / {backtestResults[strategy.id].trade_count}笔
+                                  {backtestResults[strategy.id].win_rate}% / {backtestResults[strategy.id].trade_count}�?
                                 </p>
                               </div>
                             </div>
                             <div className="mt-2 text-xs text-gray-500 text-center">
-                              初始资金: ¥{backtestResults[strategy.id].initial_capital.toLocaleString()} → 最终资产: ¥{backtestResults[strategy.id].final_value.toLocaleString()}
+                              初始资金: ¥{backtestResults[strategy.id].initial_capital.toLocaleString()} �?最终资�? ¥{backtestResults[strategy.id].final_value.toLocaleString()}
                             </div>
                           </div>
                         )}
@@ -988,9 +974,9 @@ export default function StrategiesPage() {
                             </h4>
                             <div className="grid grid-cols-4 gap-4 text-center mb-3">
                               <div>
-                                <p className="text-xs text-gray-500">总交易</p>
+                                <p className="text-xs text-gray-500">总交�?/p>
                                 <p className="font-bold text-white">
-                                  {tradeStats[strategy.id].total_trades}笔
+                                  {tradeStats[strategy.id].total_trades}�?
                                 </p>
                               </div>
                               <div>
@@ -1006,7 +992,7 @@ export default function StrategiesPage() {
                                 </p>
                               </div>
                               <div>
-                                <p className="text-xs text-gray-500">总盈亏</p>
+                                <p className="text-xs text-gray-500">总盈�?/p>
                                 <p className={`font-bold ${tradeStats[strategy.id].total_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                   {tradeStats[strategy.id].total_profit >= 0 ? '+' : ''}¥{tradeStats[strategy.id].total_profit.toLocaleString()}
                                 </p>
@@ -1020,13 +1006,13 @@ export default function StrategiesPage() {
                                 </p>
                               </div>
                               <div>
-                                <p className="text-xs text-gray-500">最大盈利</p>
+                                <p className="text-xs text-gray-500">最大盈�?/p>
                                 <p className="font-bold text-green-400">
                                   +{tradeStats[strategy.id].max_profit_pct.toFixed(2)}%
                                 </p>
                               </div>
                               <div>
-                                <p className="text-xs text-gray-500">最大亏损</p>
+                                <p className="text-xs text-gray-500">最大亏�?/p>
                                 <p className="font-bold text-red-400">
                                   {tradeStats[strategy.id].min_profit_pct.toFixed(2)}%
                                 </p>
@@ -1034,14 +1020,14 @@ export default function StrategiesPage() {
                               <div>
                                 <p className="text-xs text-gray-500">平均持仓</p>
                                 <p className="font-bold text-white">
-                                  {tradeStats[strategy.id].avg_holding_days.toFixed(1)}天
+                                  {tradeStats[strategy.id].avg_holding_days.toFixed(1)}�?
                                 </p>
                               </div>
                             </div>
                           </div>
                         )}
 
-                        {/* 实盘性能（如果有） */}
+                        {/* 实盘性能（如果有�?*/}
                         {perf && (
                           <div className="bg-gray-700/30 rounded-lg p-3">
                             <h4 className="text-sm font-medium text-gray-400 mb-3">
@@ -1068,7 +1054,7 @@ export default function StrategiesPage() {
                                 </p>
                               </div>
                               <div>
-                                <p className="text-xs text-gray-500">最大回撤</p>
+                                <p className="text-xs text-gray-500">最大回�?/p>
                                 <p className="font-bold text-red-400">
                                   -{perf.max_drawdown.toFixed(2)}%
                                 </p>
@@ -1083,10 +1069,9 @@ export default function StrategiesPage() {
                           </div>
                         )}
                       </div>
-                    </motion.div>
+                    </div>
                   )}
-                </AnimatePresence>
-              </motion.div>
+              </div>
             );
           })}
         </div>

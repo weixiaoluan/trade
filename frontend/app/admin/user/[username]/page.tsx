@@ -7,7 +7,7 @@ import {
   FileText, Star, Trash2, Save, X, Loader2,
   AlertCircle, Edit3, Activity
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+// framer-motion removed
 import { API_BASE } from "@/lib/config";
 
 interface UserDetail {
@@ -497,19 +497,19 @@ export default function UserDetailPage() {
       </main>
 
       {/* 删除确认弹窗 */}
-      <AnimatePresence>
+      
         {showDeleteConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+          <div
+            
+            
+            
             className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={() => setShowDeleteConfirm(false)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+            <div
+              
+              
+              
               className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-md mx-4"
               onClick={(e) => e.stopPropagation()}
             >
@@ -539,10 +539,10 @@ export default function UserDetailPage() {
                   确认注销
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
+      
     </div>
   );
 }
