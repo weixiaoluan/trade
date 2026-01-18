@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp,
   TrendingDown,
@@ -1254,59 +1253,51 @@ export default function SimTradePage() {
       <ConfirmModal isOpen={showConfirm} onClose={() => setShowConfirm(false)} onConfirm={() => { confirmConfig.onConfirm(); setShowConfirm(false); }} title={confirmConfig.title} message={confirmConfig.message} type={confirmConfig.type} />
       
       {/* 编辑初始资金弹窗 */}
-      <AnimatePresence>
-        {showEditCapital && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => setShowEditCapital(false)}
+      {showEditCapital && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowEditCapital(false)}
+        >
+          <div
+            className="bg-slate-800 rounded-xl border border-slate-700 p-6 w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-slate-800 rounded-xl border border-slate-700 p-6 w-full max-w-sm"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-white">修改初始资金</h3>
-                <button onClick={() => setShowEditCapital(false)} className="text-slate-400 hover:text-white">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm text-slate-400 mb-2">初始资金金额 (元)</label>
-                <input
-                  type="number"
-                  value={editCapitalValue}
-                  onChange={(e) => setEditCapitalValue(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
-                  placeholder="请输入金额"
-                  min="1"
-                  max="100000000"
-                />
-                <p className="text-xs text-slate-500 mt-2">修改后可用资金将自动调整</p>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowEditCapital(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={updateCapital}
-                  className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
-                >
-                  确认修改
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-white">修改初始资金</h3>
+              <button onClick={() => setShowEditCapital(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm text-slate-400 mb-2">初始资金金额 (元)</label>
+              <input
+                type="number"
+                value={editCapitalValue}
+                onChange={(e) => setEditCapitalValue(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
+                placeholder="请输入金额"
+                min="1"
+                max="100000000"
+              />
+              <p className="text-xs text-slate-500 mt-2">修改后可用资金将自动调整</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEditCapital(false)}
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={updateCapital}
+                className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
+              >
+                确认修改
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
