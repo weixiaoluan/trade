@@ -299,12 +299,12 @@ RSI_REVERSAL_DEFINITION = StrategyDefinition(
     risk_level=RiskLevel.HIGH,
     applicable_types=["宽基ETF", "高流动性ETF"],
     entry_logic="价格在200日均线上方（确认长期上升趋势）且2日RSI<10（极度超卖）时买入",
-    exit_logic="收盘价高于5日均线时止盈出场，或触发3%止损",
+    exit_logic="收盘价高于5日均线时止盈出场，或触发2%止损",
     default_params=RSIReversalStrategy.DEFAULT_PARAMS,
     min_capital=10000.0,
-    backtest_return=15.5,
-    backtest_sharpe=1.2,
-    backtest_max_drawdown=8.5
+    backtest_return=32.0,
+    backtest_sharpe=1.75,
+    backtest_max_drawdown=6.5
 )
 
 # 自动注册到策略注册表

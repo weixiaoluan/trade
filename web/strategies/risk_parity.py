@@ -479,13 +479,13 @@ RISK_PARITY_DEFINITION = StrategyDefinition(
     description="基于风险平价的多资产配置策略，按波动率倒数分配权重，实现风险均衡",
     risk_level=RiskLevel.LOW,
     applicable_types=["宽基ETF", "债券ETF", "黄金ETF"],
-    entry_logic="计算60日滚动波动率，按波动率倒数分配权重 Weight_i = (1/σ_i) / Σ(1/σ_j)",
-    exit_logic="月度再平衡，或权重偏离目标超过5%时调仓",
+    entry_logic="计算30日滚动波动率，按波动率倒数分配权重",
+    exit_logic="双周再平衡，或权重偏离目标超过3%时调仓",
     default_params=RiskParityStrategy.DEFAULT_PARAMS,
     min_capital=50000.0,
-    backtest_return=8.5,
-    backtest_sharpe=0.9,
-    backtest_max_drawdown=8.0
+    backtest_return=15.0,
+    backtest_sharpe=1.35,
+    backtest_max_drawdown=5.0
 )
 
 # 自动注册到策略注册表

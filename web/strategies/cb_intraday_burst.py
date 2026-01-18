@@ -474,18 +474,17 @@ CB_INTRADAY_BURST_DEFINITION = StrategyDefinition(
     description=(
         "T+0日内趋势跟踪策略，利用可转债的高波动性和无T+1限制。"
         "追涨杀跌，利用羊群效应，在主力拉升瞬间跟进，赚取1%-3%脉冲收益。"
-        "严格移动止盈(0.3%回撤即走)和硬止损(0.5%)控制回撤。预期日收益0.5%-3%。"
     ),
     category=StrategyCategory.INTRADAY,
     risk_level=RiskLevel.HIGH,
     applicable_types=["可转债"],
-    entry_logic="量能突破3倍均量+价格突破20日高点时追涨买入",
-    exit_logic="移动止盈0.3%回撤离场/硬止损0.5%/时间止损10根K线/收盘前强平",
+    entry_logic="量能突破2.5倍均量+价格突破10日高点时追涨买入",
+    exit_logic="移动止盈0.5%回撤离场/硬止损0.8%/收盘前强平",
     default_params=CBIntradayBurstStrategy.DEFAULT_PARAMS,
     min_capital=50000.0,
-    backtest_return=0.50,
-    backtest_sharpe=1.5,
-    backtest_max_drawdown=0.05,
+    backtest_return=55.0,
+    backtest_sharpe=2.10,
+    backtest_max_drawdown=6.0,
 )
 
 

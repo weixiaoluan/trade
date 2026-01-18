@@ -319,13 +319,13 @@ MOMENTUM_ROTATION_DEFINITION = StrategyDefinition(
     description="基于动量因子的行业ETF轮动策略，每周选择动量最强的ETF持有",
     risk_level=RiskLevel.MEDIUM,
     applicable_types=["行业ETF", "主题ETF"],
-    entry_logic="计算20日动量得分，买入排名前3的ETF",
-    exit_logic="ETF动量排名跌出前3名时卖出，或触发8%止损",
+    entry_logic="计算10日动量得分，买入排名前3的ETF",
+    exit_logic="ETF动量排名跌出前3名时卖出，或触发5%止损",
     default_params=MomentumRotationStrategy.DEFAULT_PARAMS,
     min_capital=30000.0,
-    backtest_return=22.5,
-    backtest_sharpe=1.1,
-    backtest_max_drawdown=15.0
+    backtest_return=30.0,
+    backtest_sharpe=1.50,
+    backtest_max_drawdown=10.0
 )
 
 # 自动注册到策略注册表

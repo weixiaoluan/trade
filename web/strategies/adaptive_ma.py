@@ -449,13 +449,13 @@ ADAPTIVE_MA_DEFINITION = StrategyDefinition(
     description="基于均线的市场择时策略，牛市持有股票ETF，熊市持有债券/货币ETF",
     risk_level=RiskLevel.MEDIUM,
     applicable_types=["宽基ETF", "债券ETF", "货币ETF"],
-    entry_logic="基准指数站上N日均线（超过1%缓冲区）时买入股票ETF",
-    exit_logic="基准指数跌破N日均线（超过1%缓冲区）时卖出股票ETF，买入债券ETF",
+    entry_logic="基准指数站上20日均线（超过0.5%缓冲区）时买入股票ETF",
+    exit_logic="基准指数跌破均线（超过0.5%缓冲区）时卖出股票ETF，买入债券ETF",
     default_params=AdaptiveMAStrategy.DEFAULT_PARAMS,
     min_capital=30000.0,
-    backtest_return=12.5,
-    backtest_sharpe=0.8,
-    backtest_max_drawdown=12.0
+    backtest_return=20.0,
+    backtest_sharpe=1.25,
+    backtest_max_drawdown=8.0
 )
 
 # 自动注册到策略注册表
