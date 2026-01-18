@@ -117,6 +117,9 @@ interface BacktestResult {
   sharpe_ratio: number;
   win_rate: number;
   trade_count: number;
+  execution_time?: number;
+  data_days?: number;
+  backtest_period?: string;
 }
 
 const categoryLabels: Record<string, string> = {
@@ -837,10 +840,22 @@ export default function StrategiesPage() {
                         {/* 自定义回测结果 */}
                         {backtestResults[strategy.id] && (
                           <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
-                            <h4 className="text-sm font-medium text-purple-400 mb-3 flex items-center gap-2">
-                              <FlaskConical className="w-4 h-4" />
-                              自定义回测结果 (10万本金, 2年)
+                            <h4 className="text-sm font-medium text-purple-400 mb-2 flex items-center justify-between">
+                              <span className="flex items-center gap-2">
+                                <FlaskConical className="w-4 h-4" />
+                                真实回测结果
+                              </span>
+                              {backtestResults[strategy.id].execution_time && (
+                                <span className="text-xs text-gray-500">
+                                  耗时: {backtestResults[strategy.id].execution_time}秒
+                                </span>
+                              )}
                             </h4>
+                            {backtestResults[strategy.id].backtest_period && (
+                              <p className="text-xs text-gray-500 mb-3 text-center">
+                                📊 回测区间: {backtestResults[strategy.id].backtest_period} ({backtestResults[strategy.id].data_days}个交易日)
+                              </p>
+                            )}
                             <div className="grid grid-cols-5 gap-3 text-center">
                               <div>
                                 <p className="text-xs text-gray-500">年化收益</p>
@@ -874,7 +889,7 @@ export default function StrategiesPage() {
                               </div>
                             </div>
                             <div className="mt-2 text-xs text-gray-500 text-center">
-                              最终资产: ¥{backtestResults[strategy.id].final_value.toLocaleString()}
+                              初始资金: ¥{backtestResults[strategy.id].initial_capital.toLocaleString()} → 最终资产: ¥{backtestResults[strategy.id].final_value.toLocaleString()}
                             </div>
                           </div>
                         )}

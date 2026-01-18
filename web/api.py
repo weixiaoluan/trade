@@ -7707,8 +7707,9 @@ async def execute_etf_strategy_api(strategy_id: str, authorization: str = Header
 
 @app.post("/api/strategies/{strategy_id}/backtest")
 async def run_strategy_backtest(strategy_id: str, request: Request, authorization: str = Header(None)):
-    """运行策略回测"""
-    import random
+    """运行策略回测 - 使用真实历史数据"""
+    import time
+    from datetime import datetime, timedelta
     
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
@@ -7725,40 +7726,89 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
     initial_capital = body.get("initial_capital", 100000)
     days = body.get("days", 504)
     
-    # 根据策略类型生成模拟回测结果
-    strategy_returns = {
-        "etf_momentum_rotation": {"annual": 18.5, "max_dd": 12.0, "sharpe": 1.35, "win": 62},
-        "binary_rotation": {"annual": 15.2, "max_dd": 8.5, "sharpe": 1.52, "win": 68},
-        "industry_momentum": {"annual": 22.0, "max_dd": 15.0, "sharpe": 1.28, "win": 58},
-        "etf_short_term": {"annual": 35.0, "max_dd": 8.0, "sharpe": 1.85, "win": 72},
-    }
+    start_time = time.time()
     
-    base = strategy_returns.get(strategy_id, {"annual": 12.0, "max_dd": 10.0, "sharpe": 1.0, "win": 55})
-    
-    # 添加随机波动模拟真实回测
-    annual_return = round(base["annual"] + random.uniform(-3, 3), 1)
-    max_drawdown = round(base["max_dd"] + random.uniform(-2, 2), 1)
-    sharpe_ratio = round(base["sharpe"] + random.uniform(-0.2, 0.2), 2)
-    win_rate = round(base["win"] + random.uniform(-5, 5), 1)
-    
-    # 计算总收益和最终资产
-    years = days / 252
-    total_return = round(((1 + annual_return/100) ** years - 1) * 100, 1)
-    final_value = round(initial_capital * (1 + total_return/100))
-    trade_count = int(days / 10 + random.randint(-5, 10))
-    
-    return {
-        "success": True,
-        "strategy_id": strategy_id,
-        "initial_capital": initial_capital,
-        "final_value": final_value,
-        "total_return": total_return,
-        "annual_return": annual_return,
-        "max_drawdown": max_drawdown,
-        "sharpe_ratio": sharpe_ratio,
-        "win_rate": win_rate,
-        "trade_count": trade_count,
-    }
+    try:
+        from web.data import db_get_etf_daily
+        from web.strategies.etf_rotation import (
+            ETFMomentumRotationStrategy, BinaryRotationStrategy, 
+            IndustryMomentumStrategy, Backtester,
+            TICKER_POOL, BINARY_ROTATION_POOL, INDUSTRY_ETF_POOL
+        )
+        from web.strategies.etf_short_term import ShortTermMomentumStrategy, ShortTermBacktester, SHORT_TERM_ETF_POOL
+        
+        # 根据策略类型选择对应的策略和标的池
+        if strategy_id == "etf_momentum_rotation":
+            strategy = ETFMomentumRotationStrategy()
+            etf_pool = TICKER_POOL
+        elif strategy_id == "binary_rotation":
+            strategy = BinaryRotationStrategy()
+            etf_pool = BINARY_ROTATION_POOL
+        elif strategy_id == "industry_momentum":
+            strategy = IndustryMomentumStrategy()
+            etf_pool = INDUSTRY_ETF_POOL
+        elif strategy_id == "etf_short_term":
+            strategy = ShortTermMomentumStrategy()
+            etf_pool = SHORT_TERM_ETF_POOL
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的策略: {strategy_id}")
+        
+        # 获取历史价格数据
+        prices_dict = {}
+        for key, etf_info in etf_pool.items():
+            symbol = etf_info.symbol
+            df = db_get_etf_daily(symbol, limit=days + 50)
+            if not df.empty:
+                df = df.sort_values('date')
+                df.set_index('date', inplace=True)
+                prices_dict[symbol] = df['close']
+        
+        if not prices_dict:
+            raise HTTPException(status_code=400, detail="无法获取历史数据，请先同步ETF数据")
+        
+        # 构建价格DataFrame
+        prices_df = pd.DataFrame(prices_dict)
+        prices_df = prices_df.dropna(how='all')
+        
+        if len(prices_df) < 30:
+            raise HTTPException(status_code=400, detail=f"历史数据不足，仅有{len(prices_df)}条记录")
+        
+        # 运行回测
+        if strategy_id == "etf_short_term":
+            backtester = ShortTermBacktester(strategy, initial_capital=initial_capital)
+        else:
+            backtester = Backtester(strategy, initial_capital=initial_capital)
+        
+        result = backtester.run(prices_df)
+        
+        # 计算执行时间
+        execution_time = round(time.time() - start_time, 2)
+        
+        # 计算最终资产
+        final_value = round(initial_capital * (1 + result.total_return))
+        
+        return {
+            "success": True,
+            "strategy_id": strategy_id,
+            "initial_capital": initial_capital,
+            "final_value": final_value,
+            "total_return": round(result.total_return * 100, 2),
+            "annual_return": round(result.annual_return * 100, 2),
+            "max_drawdown": round(result.max_drawdown * 100, 2),
+            "sharpe_ratio": round(result.sharpe_ratio, 2),
+            "win_rate": round(result.win_rate * 100, 1),
+            "trade_count": result.trade_count,
+            "execution_time": execution_time,
+            "data_days": len(prices_df),
+            "backtest_period": f"{prices_df.index[0].strftime('%Y-%m-%d')} ~ {prices_df.index[-1].strftime('%Y-%m-%d')}",
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"回测执行失败: {str(e)}")
 
 
 @app.get("/api/etf/pool")
