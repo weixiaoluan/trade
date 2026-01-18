@@ -816,7 +816,7 @@ export default function AdminPage() {
     setBatchDeleting(true);
     let successCount = 0;
     
-    for (const symbol of selectedAssets) {
+    for (const symbol of Array.from(selectedAssets)) {
       try {
         const response = await fetch(`${API_BASE}/api/admin/strategy/assets/${selectedStrategy}/${encodeURIComponent(symbol)}`, {
           method: "DELETE",
