@@ -7729,6 +7729,7 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
     start_time = time.time()
     
     try:
+        import pandas as pd
         from web.data import db_get_etf_daily
         from web.strategies.etf_rotation import (
             ETFMomentumRotationStrategy, BinaryRotationStrategy, 
