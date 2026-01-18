@@ -7733,7 +7733,7 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
         from web.strategies.etf_rotation import (
             ETFMomentumRotationStrategy, BinaryRotationStrategy, 
             IndustryMomentumStrategy, Backtester,
-            TICKER_POOL, BINARY_ROTATION_POOL, INDUSTRY_ETF_POOL
+            TICKER_POOL, BINARY_ROTATION_POOL
         )
         from web.strategies.etf_short_term import ShortTermMomentumStrategy, ShortTermBacktester, SHORT_TERM_ETF_POOL
         
@@ -7746,7 +7746,7 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
             etf_pool = BINARY_ROTATION_POOL
         elif strategy_id == "industry_momentum":
             strategy = IndustryMomentumStrategy()
-            etf_pool = INDUSTRY_ETF_POOL
+            etf_pool = strategy.INDUSTRY_POOL  # 类属性
         elif strategy_id == "etf_short_term":
             strategy = ShortTermMomentumStrategy()
             etf_pool = SHORT_TERM_ETF_POOL
