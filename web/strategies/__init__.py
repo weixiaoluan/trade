@@ -55,6 +55,10 @@ from .etf_rotation import (
     TICKER_POOL, BINARY_ROTATION_POOL, ETFInfo, TradingRule,
     Backtester, BacktestResult, generate_mock_data, generate_mock_premium_data
 )
+from .etf_short_term import (
+    ETFShortTermStrategy, ETF_SHORT_TERM_DEFINITION,
+    SHORT_TERM_ETF_POOL, ShortTermBacktester, generate_short_term_mock_data
+)
 from .strategy_trader import (
     StrategyTrader, TradeOrder,
     execute_etf_strategy, get_etf_strategy_status,
@@ -134,6 +138,12 @@ __all__ = [
     'BacktestResult',
     'generate_mock_data',
     'generate_mock_premium_data',
+    # ETF Short Term
+    'ETFShortTermStrategy',
+    'ETF_SHORT_TERM_DEFINITION',
+    'SHORT_TERM_ETF_POOL',
+    'ShortTermBacktester',
+    'generate_short_term_mock_data',
     # Strategy Trader
     'StrategyTrader',
     'TradeOrder',
@@ -159,6 +169,7 @@ def _ensure_strategies_registered():
         INDUSTRY_MOMENTUM_DEFINITION,
         CB_INTRADAY_BURST_DEFINITION,
         RSRS_SECTOR_ROTATION_DEFINITION,
+        ETF_SHORT_TERM_DEFINITION,
     ]
     for strategy in strategies_to_register:
         if StrategyRegistry.get_by_id(strategy.id) is None:

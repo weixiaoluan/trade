@@ -20,6 +20,7 @@ from .etf_rotation import (
     ETFMomentumRotationStrategy, BinaryRotationStrategy, IndustryMomentumStrategy,
     TICKER_POOL, BINARY_ROTATION_POOL, ETFInfo
 )
+from .etf_short_term import ETFShortTermStrategy, SHORT_TERM_ETF_POOL
 from .registry import StrategyRegistry
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,7 @@ class StrategyTrader:
             'etf_momentum_rotation': ETFMomentumRotationStrategy(),
             'binary_rotation': BinaryRotationStrategy(),
             'industry_momentum': IndustryMomentumStrategy(),
+            'etf_short_term': ETFShortTermStrategy(),
         }
     
     def get_strategy_data(self, strategy_id: str) -> Tuple[object, Dict[str, ETFInfo]]:
@@ -72,6 +74,8 @@ class StrategyTrader:
             return self.strategies[strategy_id], self.strategies[strategy_id].ticker_pool
         elif strategy_id == 'industry_momentum':
             return self.strategies[strategy_id], self.strategies[strategy_id].ticker_pool
+        elif strategy_id == 'etf_short_term':
+            return self.strategies[strategy_id], SHORT_TERM_ETF_POOL
         else:
             return None, {}
     

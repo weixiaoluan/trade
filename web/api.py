@@ -7634,44 +7634,32 @@ async def get_etf_strategies():
     """获取所有ETF策略"""
     from web.strategies import (
         ETF_ROTATION_DEFINITION, BINARY_ROTATION_DEFINITION, 
-        INDUSTRY_MOMENTUM_DEFINITION
+        INDUSTRY_MOMENTUM_DEFINITION, ETF_SHORT_TERM_DEFINITION
     )
     
-    strategies = [
-        {
-            "id": ETF_ROTATION_DEFINITION.id,
-            "name": ETF_ROTATION_DEFINITION.name,
-            "description": ETF_ROTATION_DEFINITION.description,
-            "category": ETF_ROTATION_DEFINITION.category.value,
-            "risk_level": ETF_ROTATION_DEFINITION.risk_level.value,
-            "min_capital": ETF_ROTATION_DEFINITION.min_capital,
-            "backtest_return": ETF_ROTATION_DEFINITION.backtest_return,
-            "backtest_sharpe": ETF_ROTATION_DEFINITION.backtest_sharpe,
-            "backtest_max_drawdown": ETF_ROTATION_DEFINITION.backtest_max_drawdown,
-        },
-        {
-            "id": BINARY_ROTATION_DEFINITION.id,
-            "name": BINARY_ROTATION_DEFINITION.name,
-            "description": BINARY_ROTATION_DEFINITION.description,
-            "category": BINARY_ROTATION_DEFINITION.category.value,
-            "risk_level": BINARY_ROTATION_DEFINITION.risk_level.value,
-            "min_capital": BINARY_ROTATION_DEFINITION.min_capital,
-            "backtest_return": BINARY_ROTATION_DEFINITION.backtest_return,
-            "backtest_sharpe": BINARY_ROTATION_DEFINITION.backtest_sharpe,
-            "backtest_max_drawdown": BINARY_ROTATION_DEFINITION.backtest_max_drawdown,
-        },
-        {
-            "id": INDUSTRY_MOMENTUM_DEFINITION.id,
-            "name": INDUSTRY_MOMENTUM_DEFINITION.name,
-            "description": INDUSTRY_MOMENTUM_DEFINITION.description,
-            "category": INDUSTRY_MOMENTUM_DEFINITION.category.value,
-            "risk_level": INDUSTRY_MOMENTUM_DEFINITION.risk_level.value,
-            "min_capital": INDUSTRY_MOMENTUM_DEFINITION.min_capital,
-            "backtest_return": INDUSTRY_MOMENTUM_DEFINITION.backtest_return,
-            "backtest_sharpe": INDUSTRY_MOMENTUM_DEFINITION.backtest_sharpe,
-            "backtest_max_drawdown": INDUSTRY_MOMENTUM_DEFINITION.backtest_max_drawdown,
-        },
+    all_definitions = [
+        ETF_ROTATION_DEFINITION, 
+        BINARY_ROTATION_DEFINITION, 
+        INDUSTRY_MOMENTUM_DEFINITION,
+        ETF_SHORT_TERM_DEFINITION,
     ]
+    
+    strategies = []
+    for defn in all_definitions:
+        strategies.append({
+            "id": defn.id,
+            "name": defn.name,
+            "description": defn.description,
+            "category": defn.category.value,
+            "risk_level": defn.risk_level.value,
+            "min_capital": defn.min_capital,
+            "entry_logic": defn.entry_logic,
+            "exit_logic": defn.exit_logic,
+            "backtest_return": defn.backtest_return,
+            "backtest_sharpe": defn.backtest_sharpe,
+            "backtest_max_drawdown": defn.backtest_max_drawdown,
+            "default_params": defn.default_params,
+        })
     
     return {"strategies": strategies}
 
