@@ -224,30 +224,38 @@ class ETFShortTermStrategy(BaseStrategy):
             else:
                 vol_ratio = pd.Series(1.5, index=price.index)  # 默认满足
             
-            # 信号1: RSI超卖反弹
+            # 信号1: RSI超卖反弹（放宽条件）
             rsi_prev = rsi.shift(1)
             rsi_oversold_bounce = (
-                (rsi_prev < self.config.rsi_oversold) &  # 前一天超卖
-                (rsi > rsi_prev) &                        # RSI回升
-                (vol_ratio > 1.0)                         # 量能不萎缩
+                (rsi < 35) &                              # RSI偏低
+                (rsi > rsi_prev)                          # RSI回升
             )
             
-            # 信号2: 动量突破
+            # 信号2: 动量突破（放宽条件）
             momentum_breakout = (
-                (momentum > self.config.momentum_threshold) &  # 动量强
-                (price > high_5d.shift(1)) &                   # 突破前5日高点
-                (price > ma_long)                              # 站上长期均线
+                (momentum > 0.005) &                      # 有正向动量
+                (price > ma_short)                        # 站上短期均线
             )
             
-            # 综合信号：满足任一条件
-            # 信号强度：1=普通，2=强信号
+            # 信号3: 均线金叉
+            ma_cross = (
+                (ma_short > ma_long) &                    # 短均线在长均线之上
+                (ma_short.shift(1) <= ma_long.shift(1))   # 刚发生金叉
+            )
+            
+            # 信号4: 价格突破（新增）
+            price_breakout = (
+                (price > high_5d.shift(1)) &              # 突破前5日高点
+                (momentum > 0)                            # 动量为正
+            )
+            
+            # 综合信号：满足任一条件即可
             signal_strength = pd.Series(0, index=price.index)
             signal_strength[rsi_oversold_bounce] = 1
             signal_strength[momentum_breakout] = 1
-            signal_strength[rsi_oversold_bounce & momentum_breakout] = 2  # 双重确认
-            
-            # 过滤：必须在均线之上
-            signal_strength[price < ma_short] = 0
+            signal_strength[ma_cross] = 2                 # 金叉信号更强
+            signal_strength[price_breakout] = 2           # 突破信号更强
+            signal_strength[rsi_oversold_bounce & momentum_breakout] = 2
             
             signals[symbol] = signal_strength
         
@@ -317,28 +325,28 @@ class ETFShortTermStrategy(BaseStrategy):
         pnl_pct = (current_price - entry_price) / entry_price
         drawdown_from_high = (highest_price - current_price) / highest_price if highest_price > 0 else 0
         
-        # 1. 固定止盈
-        if pnl_pct >= self.config.take_profit_pct:
+        # 1. 固定止盈（提高止盈点）
+        if pnl_pct >= 0.06:  # 6%止盈
             return True, f"止盈: +{pnl_pct*100:.1f}%"
         
-        # 2. 移动止盈（盈利超过2%后启用）
-        if pnl_pct > 0.02 and drawdown_from_high >= self.config.trailing_stop_pct:
+        # 2. 移动止盈（盈利超过3%后启用，回撤2%止盈）
+        if pnl_pct > 0.03 and drawdown_from_high >= 0.02:
             return True, f"移动止盈: 从高点回落{drawdown_from_high*100:.1f}%"
         
-        # 3. 固定止损
-        if pnl_pct <= -self.config.stop_loss_pct:
+        # 3. 固定止损（严格控制在2%）
+        if pnl_pct <= -0.02:
             return True, f"止损: {pnl_pct*100:.1f}%"
         
-        # 4. RSI超买
-        if current_rsi > self.config.rsi_overbought:
-            return True, f"RSI超买: {current_rsi:.0f}"
+        # 4. RSI超买（更早退出锁定利润）
+        if current_rsi > 75 and pnl_pct > 0.01:
+            return True, f"RSI超买止盈: {current_rsi:.0f}"
         
-        # 5. 时间止损
+        # 5. 时间止损（缩短到5天，但只在亏损时）
         entry_date = position.get('entry_date')
         current_date = market_data.get('current_date')
         if entry_date and current_date:
             holding_days = (current_date - entry_date).days
-            if holding_days >= self.config.max_holding_days:
+            if holding_days >= 5 and pnl_pct < 0.02:  # 5天且没赚到2%就退出
                 return True, f"持仓超时: {holding_days}天"
         
         return False, ""

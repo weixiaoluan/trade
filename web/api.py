@@ -7763,7 +7763,7 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
             strategy = ETFShortTermStrategy()
             etf_pool = SHORT_TERM_ETF_POOL
             use_general_backtester = False
-        elif strategy_id in ["overnight", "rsi_reversal", "bias_reversion", "momentum_rotation", "risk_parity"]:
+        elif strategy_id in ["overnight", "rsi_reversal", "bias_reversion", "momentum_rotation", "risk_parity", "adaptive_ma", "rsrs_sector_rotation", "cb_intraday_burst"]:
             # 这些策略使用通用ETF池进行模拟回测
             strategy = ETFMomentumRotationStrategy()  # 使用动量策略作为基础
             etf_pool = GENERAL_ETF_POOL
