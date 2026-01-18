@@ -24,6 +24,7 @@ import {
   Check,
   X,
   Info,
+  FlaskConical,
 } from "lucide-react";
 import { API_BASE } from "@/lib/config";
 
@@ -105,6 +106,19 @@ interface TradeRecord {
   created_at: string;
 }
 
+interface BacktestResult {
+  success: boolean;
+  strategy_id: string;
+  initial_capital: number;
+  final_value: number;
+  total_return: number;
+  annual_return: number;
+  max_drawdown: number;
+  sharpe_ratio: number;
+  win_rate: number;
+  trade_count: number;
+}
+
 const categoryLabels: Record<string, string> = {
   short: "短线",
   swing: "波段",
@@ -135,6 +149,8 @@ export default function StrategiesPage() {
   const [tradeStats, setTradeStats] = useState<Record<string, StrategyTradeStats>>({});
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [backtesting, setBacktesting] = useState<string | null>(null);
+  const [backtestResults, setBacktestResults] = useState<Record<string, BacktestResult>>({});
 
   const getAuthHeader = useCallback((): Record<string, string> => {
     const token = localStorage.getItem("token");
@@ -267,6 +283,40 @@ export default function StrategiesPage() {
     }
   };
 
+  const handleBacktest = async (strategyId: string) => {
+    setBacktesting(strategyId);
+    setError(null);
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/strategies/${strategyId}/backtest`,
+        {
+          method: "POST",
+          headers: {
+            ...getAuthHeader(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            strategy_id: strategyId,
+            initial_capital: 100000,
+            days: 504,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setBacktestResults((prev) => ({ ...prev, [strategyId]: data }));
+        setSuccessMsg(`回测完成: 年化${data.annual_return}%, 回撤${data.max_drawdown}%`);
+      } else {
+        setError(data.detail || "回测失败");
+      }
+    } catch (err) {
+      console.error("回测失败:", err);
+      setError("回测请求失败，请稍后重试");
+    } finally {
+      setBacktesting(null);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       const isAuth = checkAuth();
@@ -333,6 +383,7 @@ export default function StrategiesPage() {
         }
       }
       await fetchUserConfigs();
+      await fetchAccountInfo();
     } catch (err) {
       setError(err instanceof Error ? err.message : "操作失败");
     } finally {
@@ -391,7 +442,9 @@ export default function StrategiesPage() {
         }
       }
       await fetchUserConfigs();
+      await fetchAccountInfo();
       setEditingConfig(null);
+      setSuccessMsg("资金分配已保存");
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -614,6 +667,18 @@ export default function StrategiesPage() {
                         </button>
                       )}
                       <button
+                        onClick={() => handleBacktest(strategy.id)}
+                        disabled={backtesting === strategy.id}
+                        className="p-2 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors"
+                        title="运行回测"
+                      >
+                        {backtesting === strategy.id ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <FlaskConical className="w-5 h-5" />
+                        )}
+                      </button>
+                      <button
                         onClick={() => handleToggleStrategy(strategy.id, isEnabled)}
                         disabled={saving}
                         className={`p-2 rounded-lg transition-colors ${
@@ -768,6 +833,51 @@ export default function StrategiesPage() {
                             </p>
                           </div>
                         </div>
+
+                        {/* 自定义回测结果 */}
+                        {backtestResults[strategy.id] && (
+                          <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+                            <h4 className="text-sm font-medium text-purple-400 mb-3 flex items-center gap-2">
+                              <FlaskConical className="w-4 h-4" />
+                              自定义回测结果 (10万本金, 2年)
+                            </h4>
+                            <div className="grid grid-cols-5 gap-3 text-center">
+                              <div>
+                                <p className="text-xs text-gray-500">年化收益</p>
+                                <p className={`font-bold ${backtestResults[strategy.id].annual_return >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {backtestResults[strategy.id].annual_return > 0 ? '+' : ''}{backtestResults[strategy.id].annual_return}%
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">总收益</p>
+                                <p className={`font-bold ${backtestResults[strategy.id].total_return >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {backtestResults[strategy.id].total_return > 0 ? '+' : ''}{backtestResults[strategy.id].total_return}%
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">最大回撤</p>
+                                <p className="font-bold text-red-400">
+                                  -{backtestResults[strategy.id].max_drawdown}%
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">夏普比率</p>
+                                <p className="font-bold text-white">
+                                  {backtestResults[strategy.id].sharpe_ratio}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">胜率/交易</p>
+                                <p className="font-bold text-white">
+                                  {backtestResults[strategy.id].win_rate}% / {backtestResults[strategy.id].trade_count}笔
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-2 text-xs text-gray-500 text-center">
+                              最终资产: ¥{backtestResults[strategy.id].final_value.toLocaleString()}
+                            </div>
+                          </div>
+                        )}
 
                         {/* 资金配置 */}
                         <div className="bg-gray-700/30 rounded-lg p-3">
