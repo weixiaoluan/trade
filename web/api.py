@@ -8181,17 +8181,83 @@ async def get_strategy_symbols(strategy_id: str, authorization: str = Header(Non
 
 
 # ============================================
-# 市场标的查询 API
+# 市场标的查询 API (带缓存优化)
 # ============================================
+
+# 市场数据缓存
+_market_cache = {
+    "etf": {"data": [], "time": 0},
+    "stock": {"data": [], "time": 0},
+    "bond": {"data": [], "time": 0},
+}
+_CACHE_TTL = 300  # 缓存5分钟
+
+
+def _load_market_data(market_type: str) -> list:
+    """后台加载市场数据到缓存（使用向量化操作优化）"""
+    import time as _time
+    now = _time.time()
+    
+    # 检查缓存是否有效
+    if _market_cache[market_type]["data"] and (now - _market_cache[market_type]["time"]) < _CACHE_TTL:
+        return _market_cache[market_type]["data"]
+    
+    try:
+        import akshare as ak
+        symbols = []
+        
+        if market_type == "etf":
+            df = ak.fund_etf_spot_em()
+            if df is not None and not df.empty:
+                df = df[['代码', '名称']].copy()
+                df.columns = ['code', 'name']
+                df['code'] = df['code'].astype(str)
+                df['name'] = df['name'].astype(str)
+                # 向量化添加市场后缀
+                df['symbol'] = df['code'].apply(lambda x: f"{x}.SH" if x.startswith('5') else (f"{x}.SZ" if x.startswith('1') else x))
+                df['type'] = 'ETF'
+                symbols = df[['symbol', 'name', 'code', 'type']].to_dict('records')
+        
+        elif market_type == "stock":
+            df = ak.stock_zh_a_spot_em()
+            if df is not None and not df.empty:
+                df = df[['代码', '名称']].head(2000).copy()  # 限制数量
+                df.columns = ['code', 'name']
+                df['code'] = df['code'].astype(str)
+                df['name'] = df['name'].astype(str)
+                df['symbol'] = df['code'].apply(lambda x: f"{x}.SH" if x.startswith('6') else (f"{x}.SZ" if x.startswith(('0', '3')) else x))
+                df['type'] = '股票'
+                symbols = df[['symbol', 'name', 'code', 'type']].to_dict('records')
+        
+        elif market_type == "bond":
+            df = ak.bond_zh_hs_cov_spot()
+            if df is not None and not df.empty:
+                df = df[['代码', '名称']].copy()
+                df.columns = ['code', 'name']
+                df['code'] = df['code'].astype(str)
+                df['name'] = df['name'].astype(str)
+                df['symbol'] = df['code'].apply(lambda x: f"{x}.SH" if x.startswith('11') else (f"{x}.SZ" if x.startswith('12') else x))
+                df['type'] = '可转债'
+                symbols = df[['symbol', 'name', 'code', 'type']].to_dict('records')
+        
+        _market_cache[market_type]["data"] = symbols
+        _market_cache[market_type]["time"] = now
+        logger.info(f"缓存{market_type}数据: {len(symbols)}条")
+        return symbols
+        
+    except Exception as e:
+        logger.error(f"加载{market_type}数据失败: {e}")
+        return _market_cache[market_type]["data"]  # 返回旧缓存
+
 
 @app.get("/api/market/symbols")
 async def get_market_symbols(
-    type: str = "etf",  # etf, stock, bond, fund
+    type: str = "etf",  # etf, stock, bond
     market: str = "all",  # sh, sz, all
     keyword: str = "",
     authorization: str = Header(None)
 ):
-    """获取市场标的列表（ETF、股票、债券等）"""
+    """获取市场标的列表（ETF、股票、债券等）- 带缓存"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization.replace("Bearer ", "")
@@ -8200,110 +8266,64 @@ async def get_market_symbols(
         raise HTTPException(status_code=401, detail="会话已过期")
     
     try:
-        import akshare as ak
+        # 从缓存获取数据
+        all_symbols = _load_market_data(type)
         
-        symbols = []
+        # 快速过滤
+        results = []
+        keyword_lower = keyword.lower() if keyword else ""
         
-        if type == "etf":
-            # 获取ETF列表
-            try:
-                df = ak.fund_etf_spot_em()
-                for _, row in df.iterrows():
-                    symbol = str(row.get('代码', ''))
-                    name = str(row.get('名称', ''))
-                    # 添加市场后缀
-                    if symbol.startswith('5'):
-                        full_symbol = f"{symbol}.SH"
-                    elif symbol.startswith('1'):
-                        full_symbol = f"{symbol}.SZ"
-                    else:
-                        full_symbol = symbol
-                    
-                    # 筛选市场
-                    if market == "sh" and not symbol.startswith('5'):
-                        continue
-                    if market == "sz" and not symbol.startswith('1'):
-                        continue
-                    
-                    # 关键字搜索
-                    if keyword and keyword.lower() not in name.lower() and keyword not in symbol:
-                        continue
-                    
-                    symbols.append({
-                        "symbol": full_symbol,
-                        "name": name,
-                        "type": "ETF"
-                    })
-            except Exception as e:
-                logger.error(f"获取ETF列表失败: {e}")
+        for item in all_symbols:
+            code = item.get('code', '')
+            name = item.get('name', '')
+            
+            # 市场过滤
+            if market == "sh":
+                if type == "etf" and not code.startswith('5'):
+                    continue
+                elif type == "stock" and not code.startswith('6'):
+                    continue
+            elif market == "sz":
+                if type == "etf" and not code.startswith('1'):
+                    continue
+                elif type == "stock" and not code.startswith(('0', '3')):
+                    continue
+            
+            # 关键字过滤
+            if keyword_lower and keyword_lower not in name.lower() and keyword not in code:
+                continue
+            
+            results.append({
+                "symbol": item['symbol'],
+                "name": name,
+                "type": item['type']
+            })
+            
+            if len(results) >= 200:  # 限制返回数量
+                break
         
-        elif type == "stock":
-            # 获取股票列表
-            try:
-                df = ak.stock_zh_a_spot_em()
-                for _, row in df.head(500).iterrows():  # 限制返回数量
-                    symbol = str(row.get('代码', ''))
-                    name = str(row.get('名称', ''))
-                    # 添加市场后缀
-                    if symbol.startswith('6'):
-                        full_symbol = f"{symbol}.SH"
-                    elif symbol.startswith('0') or symbol.startswith('3'):
-                        full_symbol = f"{symbol}.SZ"
-                    else:
-                        full_symbol = symbol
-                    
-                    # 筛选市场
-                    if market == "sh" and not symbol.startswith('6'):
-                        continue
-                    if market == "sz" and not (symbol.startswith('0') or symbol.startswith('3')):
-                        continue
-                    
-                    # 关键字搜索
-                    if keyword and keyword.lower() not in name.lower() and keyword not in symbol:
-                        continue
-                    
-                    symbols.append({
-                        "symbol": full_symbol,
-                        "name": name,
-                        "type": "股票"
-                    })
-            except Exception as e:
-                logger.error(f"获取股票列表失败: {e}")
+        return {"symbols": results, "total": len(results), "cached": True}
         
-        elif type == "bond":
-            # 获取可转债列表
-            try:
-                df = ak.bond_zh_hs_cov_spot()
-                for _, row in df.iterrows():
-                    symbol = str(row.get('代码', ''))
-                    name = str(row.get('名称', ''))
-                    # 添加市场后缀
-                    if symbol.startswith('11'):
-                        full_symbol = f"{symbol}.SH"
-                    elif symbol.startswith('12'):
-                        full_symbol = f"{symbol}.SZ"
-                    else:
-                        full_symbol = symbol
-                    
-                    # 关键字搜索
-                    if keyword and keyword.lower() not in name.lower() and keyword not in symbol:
-                        continue
-                    
-                    symbols.append({
-                        "symbol": full_symbol,
-                        "name": name,
-                        "type": "可转债"
-                    })
-            except Exception as e:
-                logger.error(f"获取可转债列表失败: {e}")
-        
-        return {"symbols": symbols[:200], "total": len(symbols)}  # 限制返回200条
-        
-    except ImportError:
-        raise HTTPException(status_code=500, detail="akshare模块未安装")
     except Exception as e:
         logger.error(f"获取市场标的失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/market/symbols/refresh")
+async def refresh_market_cache(authorization: str = Header(None)):
+    """强制刷新市场数据缓存"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+    
+    # 清除缓存时间，强制刷新
+    for key in _market_cache:
+        _market_cache[key]["time"] = 0
+    
+    return {"success": True, "message": "缓存已清除，下次查询将刷新数据"}
 
 
 # ============================================

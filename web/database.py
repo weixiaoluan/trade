@@ -2831,7 +2831,7 @@ def db_get_strategy_asset_symbols(strategy_id: str) -> List[str]:
 
 def db_import_from_watchlist(strategy_id: str, username: str, 
                              symbols: List[str] = None) -> int:
-    """从用户自选列表导入标的到策略
+    """从用户自选列表导入标的到策略（批量优化版）
     
     Args:
         strategy_id: 策略ID
@@ -2857,36 +2857,52 @@ def db_import_from_watchlist(strategy_id: str, username: str,
             ''', (username,))
         
         rows = cursor.fetchall()
+        if not rows:
+            return 0
         
-        count = 0
+        # 获取已存在的标的
+        cursor.execute('''
+            SELECT symbol FROM strategy_asset_pool WHERE strategy_id = ?
+        ''', (strategy_id,))
+        existing = {r['symbol'] for r in cursor.fetchall()}
+        
+        # 准备批量插入数据
+        now = datetime.now().isoformat()
+        insert_data = []
+        
         for row in rows:
-            # 根据代码判断交易规则
             symbol = row['symbol']
-            trading_rule = 'T+1'  # 默认T+1
+            if symbol in existing:
+                continue
+                
+            # 根据代码判断交易规则
+            trading_rule = 'T+1'
             is_qdii = False
-            
-            # 判断是否为T+0标的
             code = symbol.split('.')[0] if '.' in symbol else symbol
-            if (code.startswith('51') or  # 场内基金ETF
-                code.startswith('15') or  # 深圳ETF
-                code.startswith('11') or code.startswith('12')):  # 可转债
-                # 跨境ETF、债券ETF、货币ETF等为T+0
-                if code in ['513100', '513050', '518880', '511880', '159941']:
-                    trading_rule = 'T+0'
-                    if code in ['513100', '513050', '159941']:
-                        is_qdii = True
             
-            if db_add_strategy_asset(
-                strategy_id=strategy_id,
-                symbol=symbol,
-                name=row['name'],
-                asset_type=row['type'],
-                trading_rule=trading_rule,
-                is_qdii=is_qdii
-            ):
-                count += 1
+            # 跨境ETF、债券ETF、货币ETF等为T+0
+            if code in ['513100', '513050', '518880', '511880', '159941', '513500', '159920']:
+                trading_rule = 'T+0'
+                if code in ['513100', '513050', '159941', '513500', '159920']:
+                    is_qdii = True
+            
+            insert_data.append((
+                strategy_id, symbol, row['name'], row['type'],
+                'risk', trading_rule, 1 if is_qdii else 0, 0.03,
+                1, 0, now, now
+            ))
         
-        return count
+        if not insert_data:
+            return 0
+        
+        # 批量插入
+        cursor.executemany('''
+            INSERT INTO strategy_asset_pool 
+            (strategy_id, symbol, name, asset_type, category, trading_rule, is_qdii, max_premium_rate, enabled, sort_order, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', insert_data)
+        
+        return len(insert_data)
 
 
 # 初始化策略标的池表
