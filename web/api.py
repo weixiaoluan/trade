@@ -7911,6 +7911,7 @@ async def get_backup_settings(authorization: str = Header(None)):
 class BackupSettingsRequest(BaseModel):
     auto_backup_enabled: bool
     backup_time: str  # HH:MM 格式
+    backup_interval_minutes: int = 0  # 间隔备份(分钟)，0表示禁用
     keep_days: int = 7
 
 
@@ -7929,6 +7930,7 @@ async def update_backup_settings(request: BackupSettingsRequest, authorization: 
     result = update_backup_settings(
         auto_backup_enabled=request.auto_backup_enabled,
         backup_time=request.backup_time,
+        backup_interval_minutes=request.backup_interval_minutes,
         keep_days=request.keep_days
     )
     
@@ -8176,6 +8178,132 @@ async def get_strategy_symbols(strategy_id: str, authorization: str = Header(Non
                       [])
     
     return {"strategy_id": strategy_id, "symbols": db_symbols}
+
+
+# ============================================
+# 市场标的查询 API
+# ============================================
+
+@app.get("/api/market/symbols")
+async def get_market_symbols(
+    type: str = "etf",  # etf, stock, bond, fund
+    market: str = "all",  # sh, sz, all
+    keyword: str = "",
+    authorization: str = Header(None)
+):
+    """获取市场标的列表（ETF、股票、债券等）"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization.replace("Bearer ", "")
+    user = get_current_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+    
+    try:
+        import akshare as ak
+        
+        symbols = []
+        
+        if type == "etf":
+            # 获取ETF列表
+            try:
+                df = ak.fund_etf_spot_em()
+                for _, row in df.iterrows():
+                    symbol = str(row.get('代码', ''))
+                    name = str(row.get('名称', ''))
+                    # 添加市场后缀
+                    if symbol.startswith('5'):
+                        full_symbol = f"{symbol}.SH"
+                    elif symbol.startswith('1'):
+                        full_symbol = f"{symbol}.SZ"
+                    else:
+                        full_symbol = symbol
+                    
+                    # 筛选市场
+                    if market == "sh" and not symbol.startswith('5'):
+                        continue
+                    if market == "sz" and not symbol.startswith('1'):
+                        continue
+                    
+                    # 关键字搜索
+                    if keyword and keyword.lower() not in name.lower() and keyword not in symbol:
+                        continue
+                    
+                    symbols.append({
+                        "symbol": full_symbol,
+                        "name": name,
+                        "type": "ETF"
+                    })
+            except Exception as e:
+                logger.error(f"获取ETF列表失败: {e}")
+        
+        elif type == "stock":
+            # 获取股票列表
+            try:
+                df = ak.stock_zh_a_spot_em()
+                for _, row in df.head(500).iterrows():  # 限制返回数量
+                    symbol = str(row.get('代码', ''))
+                    name = str(row.get('名称', ''))
+                    # 添加市场后缀
+                    if symbol.startswith('6'):
+                        full_symbol = f"{symbol}.SH"
+                    elif symbol.startswith('0') or symbol.startswith('3'):
+                        full_symbol = f"{symbol}.SZ"
+                    else:
+                        full_symbol = symbol
+                    
+                    # 筛选市场
+                    if market == "sh" and not symbol.startswith('6'):
+                        continue
+                    if market == "sz" and not (symbol.startswith('0') or symbol.startswith('3')):
+                        continue
+                    
+                    # 关键字搜索
+                    if keyword and keyword.lower() not in name.lower() and keyword not in symbol:
+                        continue
+                    
+                    symbols.append({
+                        "symbol": full_symbol,
+                        "name": name,
+                        "type": "股票"
+                    })
+            except Exception as e:
+                logger.error(f"获取股票列表失败: {e}")
+        
+        elif type == "bond":
+            # 获取可转债列表
+            try:
+                df = ak.bond_zh_hs_cov_spot()
+                for _, row in df.iterrows():
+                    symbol = str(row.get('代码', ''))
+                    name = str(row.get('名称', ''))
+                    # 添加市场后缀
+                    if symbol.startswith('11'):
+                        full_symbol = f"{symbol}.SH"
+                    elif symbol.startswith('12'):
+                        full_symbol = f"{symbol}.SZ"
+                    else:
+                        full_symbol = symbol
+                    
+                    # 关键字搜索
+                    if keyword and keyword.lower() not in name.lower() and keyword not in symbol:
+                        continue
+                    
+                    symbols.append({
+                        "symbol": full_symbol,
+                        "name": name,
+                        "type": "可转债"
+                    })
+            except Exception as e:
+                logger.error(f"获取可转债列表失败: {e}")
+        
+        return {"symbols": symbols[:200], "total": len(symbols)}  # 限制返回200条
+        
+    except ImportError:
+        raise HTTPException(status_code=500, detail="akshare模块未安装")
+    except Exception as e:
+        logger.error(f"获取市场标的失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================

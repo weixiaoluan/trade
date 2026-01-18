@@ -31,8 +31,10 @@ SETTINGS_FILE = BACKUP_DIR / "backup_settings.json"
 DEFAULT_SETTINGS = {
     "auto_backup_enabled": True,
     "backup_time": "03:00",  # 每天凌晨3点
+    "backup_interval_minutes": 0,  # 间隔备份(分钟)，0表示禁用
     "keep_days": 7,  # 保留7天
-    "last_auto_backup": None
+    "last_auto_backup": None,
+    "last_interval_backup": None  # 上次间隔备份时间
 }
 
 
@@ -52,6 +54,7 @@ def get_backup_settings() -> Dict:
 def update_backup_settings(
     auto_backup_enabled: bool = None,
     backup_time: str = None,
+    backup_interval_minutes: int = None,
     keep_days: int = None
 ) -> Dict:
     """更新备份设置"""
@@ -62,6 +65,8 @@ def update_backup_settings(
             settings["auto_backup_enabled"] = auto_backup_enabled
         if backup_time is not None:
             settings["backup_time"] = backup_time
+        if backup_interval_minutes is not None:
+            settings["backup_interval_minutes"] = max(0, min(1440, backup_interval_minutes))  # 0-1440分钟
         if keep_days is not None:
             settings["keep_days"] = max(1, min(30, keep_days))  # 1-30天
         
@@ -273,7 +278,7 @@ def cleanup_old_backups():
 
 
 def should_auto_backup() -> bool:
-    """检查是否应该执行自动备份"""
+    """检查是否应该执行自动备份（定时备份）"""
     settings = get_backup_settings()
     
     if not settings.get("auto_backup_enabled"):
@@ -308,14 +313,57 @@ def should_auto_backup() -> bool:
     return True
 
 
+def should_interval_backup() -> bool:
+    """检查是否应该执行间隔备份"""
+    settings = get_backup_settings()
+    
+    interval_minutes = settings.get("backup_interval_minutes", 0)
+    if interval_minutes <= 0:
+        return False
+    
+    last_interval_str = settings.get("last_interval_backup")
+    now = datetime.now()
+    
+    if not last_interval_str:
+        return True
+    
+    try:
+        last_interval = datetime.fromisoformat(last_interval_str)
+        elapsed_minutes = (now - last_interval).total_seconds() / 60
+        return elapsed_minutes >= interval_minutes
+    except:
+        return True
+
+
 def run_auto_backup():
     """执行自动备份（由调度器调用）"""
     if should_auto_backup():
         result = create_backup(manual=False, created_by="scheduler")
         if result["success"]:
-            logger.info(f"自动备份完成: {result['backup_name']}")
+            logger.info(f"定时备份完成: {result['backup_name']}")
         else:
-            logger.error(f"自动备份失败: {result.get('error')}")
+            logger.error(f"定时备份失败: {result.get('error')}")
+
+
+def run_interval_backup():
+    """执行间隔备份（由调度器调用）"""
+    if should_interval_backup():
+        result = create_backup(manual=False, created_by="interval_scheduler")
+        if result["success"]:
+            # 更新上次间隔备份时间
+            settings = get_backup_settings()
+            settings["last_interval_backup"] = datetime.now().isoformat()
+            with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+            logger.info(f"间隔备份完成: {result['backup_name']}")
+        else:
+            logger.error(f"间隔备份失败: {result.get('error')}")
+
+
+def check_and_run_backups():
+    """检查并执行所有类型的备份"""
+    run_auto_backup()
+    run_interval_backup()
 
 
 def format_size(size_bytes: int) -> str:

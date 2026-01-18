@@ -90,8 +90,9 @@ export default function AdminPage() {
   const [backupSettings, setBackupSettings] = useState<{
     auto_backup_enabled: boolean;
     backup_time: string;
+    backup_interval_minutes: number;
     keep_days: number;
-  }>({ auto_backup_enabled: true, backup_time: '03:00', keep_days: 7 });
+  }>({ auto_backup_enabled: true, backup_time: '03:00', backup_interval_minutes: 0, keep_days: 7 });
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [backupOperating, setBackupOperating] = useState<string | null>(null);
 
@@ -110,6 +111,13 @@ export default function AdminPage() {
     trading_rule: 'T+1',
     is_qdii: false,
   });
+  
+  // 市场标的搜索
+  const [showMarketModal, setShowMarketModal] = useState(false);
+  const [marketType, setMarketType] = useState<'etf' | 'stock' | 'bond'>('etf');
+  const [marketKeyword, setMarketKeyword] = useState('');
+  const [marketSymbols, setMarketSymbols] = useState<{symbol: string; name: string; type: string}[]>([]);
+  const [marketLoading, setMarketLoading] = useState(false);
 
   const getToken = () => {
     if (typeof window !== "undefined") {
@@ -247,6 +255,7 @@ export default function AdminPage() {
             setBackupSettings({
               auto_backup_enabled: data.auto_backup_enabled ?? true,
               backup_time: data.backup_time || '03:00',
+              backup_interval_minutes: data.backup_interval_minutes || 0,
               keep_days: data.keep_days || 7,
             });
           }
@@ -319,6 +328,7 @@ export default function AdminPage() {
         setBackupSettings({
           auto_backup_enabled: data.auto_backup_enabled ?? true,
           backup_time: data.backup_time || '03:00',
+          backup_interval_minutes: data.backup_interval_minutes || 0,
           keep_days: data.keep_days || 7,
         });
       }
@@ -656,7 +666,10 @@ export default function AdminPage() {
 
   // 从自选列表导入标的
   const handleImportFromWatchlist = async (symbols: string[]) => {
-    if (!selectedStrategy || symbols.length === 0) return;
+    if (!selectedStrategy || symbols.length === 0) {
+      alert("请先选择策略，且自选列表不能为空");
+      return;
+    }
     
     const token = getToken();
     if (!token) return;
@@ -676,6 +689,8 @@ export default function AdminPage() {
       });
       
       if (response.ok) {
+        const result = await response.json();
+        alert(`成功导入 ${result.imported_count || 0} 个标的`);
         // 刷新策略列表
         const res = await fetch(`${API_BASE}/api/strategy/assets`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -684,9 +699,87 @@ export default function AdminPage() {
           const data = await res.json();
           setStrategies(data.strategies || []);
         }
+      } else {
+        const err = await response.json();
+        alert(`导入失败: ${err.detail || '未知错误'}`);
       }
     } catch (error) {
       console.error("导入标的失败:", error);
+      alert("导入标的失败，请检查网络连接");
+    } finally {
+      setAssetOperating(null);
+    }
+  };
+
+  // 搜索市场标的
+  const handleSearchMarketSymbols = async () => {
+    const token = getToken();
+    if (!token) return;
+    
+    setMarketLoading(true);
+    try {
+      const params = new URLSearchParams({
+        type: marketType,
+        keyword: marketKeyword,
+      });
+      const response = await fetch(`${API_BASE}/api/market/symbols?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setMarketSymbols(data.symbols || []);
+      } else {
+        alert("获取标的列表失败");
+      }
+    } catch (error) {
+      console.error("搜索市场标的失败:", error);
+      alert("搜索失败，请检查网络");
+    } finally {
+      setMarketLoading(false);
+    }
+  };
+
+  // 从市场标的添加到策略
+  const handleAddFromMarket = async (item: {symbol: string; name: string; type: string}) => {
+    if (!selectedStrategy) return;
+    
+    const token = getToken();
+    if (!token) return;
+    
+    setAssetOperating(item.symbol);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/strategy/assets/${selectedStrategy}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          symbol: item.symbol,
+          name: item.name,
+          category: 'risk',
+          trading_rule: item.type === 'ETF' ? 'T+1' : 'T+1',
+          is_qdii: false,
+        }),
+      });
+      
+      if (response.ok) {
+        alert(`成功添加 ${item.name}`);
+        // 刷新策略列表
+        const res = await fetch(`${API_BASE}/api/strategy/assets`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setStrategies(data.strategies || []);
+        }
+      } else {
+        const err = await response.json();
+        alert(`添加失败: ${err.detail || '未知错误'}`);
+      }
+    } catch (error) {
+      console.error("添加标的失败:", error);
     } finally {
       setAssetOperating(null);
     }
@@ -1070,9 +1163,9 @@ export default function AdminPage() {
                 </button>
               </div>
               <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-2">自动备份</label>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">定时备份</label>
                     <button
                       onClick={() => setBackupSettings(prev => ({ ...prev, auto_backup_enabled: !prev.auto_backup_enabled }))}
                       className={`w-full px-4 py-3 rounded-xl border transition-all ${
@@ -1092,6 +1185,19 @@ export default function AdminPage() {
                       onChange={(e) => setBackupSettings(prev => ({ ...prev, backup_time: e.target.value }))}
                       className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">间隔备份(分钟)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1440"
+                      value={backupSettings.backup_interval_minutes}
+                      onChange={(e) => setBackupSettings(prev => ({ ...prev, backup_interval_minutes: parseInt(e.target.value) || 0 }))}
+                      placeholder="0表示禁用"
+                      className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">0表示禁用，建议60-240分钟</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-2">保留天数</label>
@@ -1249,19 +1355,29 @@ export default function AdminPage() {
                     </h2>
                     <span className="text-xs text-slate-500">（共 {currentStrategyAssets.length} 个）</span>
                   </div>
-                  <button
-                    onClick={() => {
-                      const symbols = watchlist.map(w => w.symbol);
-                      if (symbols.length > 0) {
-                        handleImportFromWatchlist(symbols);
-                      }
-                    }}
-                    disabled={assetOperating === 'import' || watchlist.length === 0}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-all disabled:opacity-50"
-                  >
-                    {assetOperating === 'import' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Import className="w-4 h-4" />}
-                    从自选导入 ({watchlist.length})
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowMarketModal(true)}
+                      disabled={!selectedStrategy}
+                      className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-all disabled:opacity-50"
+                    >
+                      <Search className="w-4 h-4" />
+                      从市场搜索
+                    </button>
+                    <button
+                      onClick={() => {
+                        const symbols = watchlist.map(w => w.symbol);
+                        if (symbols.length > 0) {
+                          handleImportFromWatchlist(symbols);
+                        }
+                      }}
+                      disabled={assetOperating === 'import' || watchlist.length === 0}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-all disabled:opacity-50"
+                    >
+                      {assetOperating === 'import' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Import className="w-4 h-4" />}
+                      从自选导入 ({watchlist.length})
+                    </button>
+                  </div>
                 </div>
                 
                 {currentStrategyAssets.length === 0 ? (
@@ -1615,6 +1731,113 @@ export default function AdminPage() {
                 >
                   {assetOperating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   添加
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 市场标的搜索弹窗 */}
+      <AnimatePresence>
+        {showMarketModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setShowMarketModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                  <Search className="w-5 h-5 text-indigo-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">从市场搜索标的</h3>
+              </div>
+
+              <div className="flex gap-4 mb-4">
+                <div className="flex gap-2">
+                  {(['etf', 'stock', 'bond'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setMarketType(t)}
+                      className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                        marketType === t
+                          ? 'bg-indigo-500/30 text-indigo-300 border border-indigo-500/50'
+                          : 'bg-white/[0.03] text-slate-400 border border-white/[0.06]'
+                      }`}
+                    >
+                      {t === 'etf' ? 'ETF' : t === 'stock' ? '股票' : '可转债'}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex-1 flex gap-2">
+                  <input
+                    type="text"
+                    value={marketKeyword}
+                    onChange={(e) => setMarketKeyword(e.target.value)}
+                    placeholder="输入关键字搜索..."
+                    className="flex-1 px-4 py-2 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearchMarketSymbols()}
+                  />
+                  <button
+                    onClick={handleSearchMarketSymbols}
+                    disabled={marketLoading}
+                    className="px-4 py-2 bg-indigo-500/20 text-indigo-400 rounded-xl hover:bg-indigo-500/30 transition-all disabled:opacity-50"
+                  >
+                    {marketLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto min-h-[300px]">
+                {marketSymbols.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500">
+                    <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>点击搜索按钮获取标的列表</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {marketSymbols.map((item) => (
+                      <div
+                        key={item.symbol}
+                        className="flex items-center justify-between p-3 bg-white/[0.02] rounded-lg hover:bg-white/[0.04] transition-all"
+                      >
+                        <div>
+                          <span className="text-sm font-mono text-indigo-400">{item.symbol}</span>
+                          <span className="text-sm text-white ml-3">{item.name}</span>
+                          <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                            item.type === 'ETF' ? 'bg-indigo-500/20 text-indigo-400' :
+                            item.type === '股票' ? 'bg-emerald-500/20 text-emerald-400' :
+                            'bg-amber-500/20 text-amber-400'
+                          }`}>{item.type}</span>
+                        </div>
+                        <button
+                          onClick={() => handleAddFromMarket(item)}
+                          disabled={assetOperating === item.symbol}
+                          className="px-3 py-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-all disabled:opacity-50 text-sm"
+                        >
+                          {assetOperating === item.symbol ? <Loader2 className="w-4 h-4 animate-spin" /> : '添加'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                <button
+                  onClick={() => setShowMarketModal(false)}
+                  className="w-full py-2.5 bg-white/[0.05] text-slate-300 rounded-xl hover:bg-white/[0.08] transition-all"
+                >
+                  关闭
                 </button>
               </div>
             </motion.div>
