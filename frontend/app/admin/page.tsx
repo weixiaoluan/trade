@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { 
   Shield, Users, Check, X, ArrowLeft, 
   Crown, Clock, UserCheck, UserX, Eye, Trash2, Loader2, UserPlus, Star, RefreshCw,
-  Database, Download, Upload, Settings, Save, RotateCcw, Layers, Plus, Search, Import
+  Database, Download, Upload, Settings, Save, RotateCcw, Layers, Plus, Search, Import,
+  AlertCircle, CheckCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -118,6 +119,15 @@ export default function AdminPage() {
   const [marketKeyword, setMarketKeyword] = useState('');
   const [marketSymbols, setMarketSymbols] = useState<{symbol: string; name: string; type: string}[]>([]);
   const [marketLoading, setMarketLoading] = useState(false);
+
+  // Toast通知
+  const [toast, setToast] = useState<{type: 'success' | 'error'; message: string} | null>(null);
+
+  // 显示Toast通知
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const getToken = () => {
     if (typeof window !== "undefined") {
@@ -374,7 +384,7 @@ export default function AdminPage() {
       });
 
       if (response.ok) {
-        alert("备份恢复成功！");
+        showToast('success', '备份恢复成功！');
         fetchBackups();
       }
     } catch (error) {
@@ -425,7 +435,7 @@ export default function AdminPage() {
       });
 
       if (response.ok) {
-        alert("设置保存成功！");
+        showToast('success', '设置保存成功！');
       }
     } catch (error) {
       console.error("保存设置失败:", error);
@@ -667,7 +677,7 @@ export default function AdminPage() {
   // 从自选列表导入标的
   const handleImportFromWatchlist = async (symbols: string[]) => {
     if (!selectedStrategy || symbols.length === 0) {
-      alert("请先选择策略，且自选列表不能为空");
+      showToast('error', '请先选择策略，且自选列表不能为空');
       return;
     }
     
@@ -690,7 +700,7 @@ export default function AdminPage() {
       
       if (response.ok) {
         const result = await response.json();
-        alert(`成功导入 ${result.imported_count || 0} 个标的`);
+        showToast('success', `成功导入 ${result.imported_count || 0} 个标的`);
         // 刷新策略列表
         const res = await fetch(`${API_BASE}/api/strategy/assets`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -701,11 +711,11 @@ export default function AdminPage() {
         }
       } else {
         const err = await response.json();
-        alert(`导入失败: ${err.detail || '未知错误'}`);
+        showToast('error', `导入失败: ${err.detail || '未知错误'}`);
       }
     } catch (error) {
       console.error("导入标的失败:", error);
-      alert("导入标的失败，请检查网络连接");
+      showToast('error', '导入标的失败，请检查网络连接');
     } finally {
       setAssetOperating(null);
     }
@@ -730,11 +740,11 @@ export default function AdminPage() {
         const data = await response.json();
         setMarketSymbols(data.symbols || []);
       } else {
-        alert("获取标的列表失败");
+        showToast('error', '获取标的列表失败');
       }
     } catch (error) {
       console.error("搜索市场标的失败:", error);
-      alert("搜索失败，请检查网络");
+      showToast('error', '搜索失败，请检查网络');
     } finally {
       setMarketLoading(false);
     }
@@ -765,7 +775,7 @@ export default function AdminPage() {
       });
       
       if (response.ok) {
-        alert(`成功添加 ${item.name}`);
+        showToast('success', `成功添加 ${item.name}`);
         // 刷新策略列表
         const res = await fetch(`${API_BASE}/api/strategy/assets`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -776,7 +786,7 @@ export default function AdminPage() {
         }
       } else {
         const err = await response.json();
-        alert(`添加失败: ${err.detail || '未知错误'}`);
+        showToast('error', `添加失败: ${err.detail || '未知错误'}`);
       }
     } catch (error) {
       console.error("添加标的失败:", error);
@@ -848,6 +858,28 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white">
+      {/* Toast通知 */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -50, x: '-50%' }}
+            className={`fixed top-4 left-1/2 z-[100] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 ${
+              toast.type === 'success' 
+                ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400' 
+                : 'bg-red-500/20 border border-red-500/50 text-red-400'
+            }`}
+          >
+            {toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+            <span className="text-sm font-medium">{toast.message}</span>
+            <button onClick={() => setToast(null)} className="ml-2 hover:opacity-70">
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 -left-1/4 w-[600px] h-[600px] bg-amber-500/5 rounded-full blur-[120px]" />
