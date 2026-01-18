@@ -2392,14 +2392,14 @@ def db_get_total_allocated_capital(username: str) -> float:
         username: 用户名
         
     Returns:
-        已分配总资金
+        已分配总资金（包含所有配置，不只是已启用的）
     """
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT COALESCE(SUM(allocated_capital), 0)
             FROM strategy_configs
-            WHERE username = ? AND enabled = 1
+            WHERE username = ?
         ''', (username,))
         return cursor.fetchone()[0]
 
