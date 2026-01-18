@@ -10,7 +10,6 @@ interface SearchBoxProps {
   isCompact?: boolean;
 }
 
-// 默认快速访问标的（在没有统计数据时使用�?
 const DEFAULT_QUICK_TICKERS = [
   { symbol: '159941', name: '纳指100ETF' },
   { symbol: '159915', name: '创业板ETF' },
@@ -23,7 +22,7 @@ const suggestions = [
   { symbol: 'AAPL', name: 'Apple Inc.', type: 'US' },
   { symbol: 'TSLA', name: 'Tesla Inc.', type: 'US' },
   { symbol: 'NVDA', name: 'NVIDIA Corp', type: 'US' },
-  { symbol: '600519', name: '贵州茅台', type: 'A�? },
+  { symbol: '600519', name: '贵州茅台', type: 'A股' },
   { symbol: '513180', name: '恒生科技ETF', type: 'ETF' },
   { symbol: '159941', name: '纳指100ETF', type: 'ETF' },
   { symbol: '020398', name: '诺安创新驱动混合A', type: '基金' },
@@ -69,7 +68,7 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
           );
         }
       } catch {
-        // 忽略错误，保持默认快速访问列�?
+        // ignore
       }
     };
 
@@ -79,13 +78,12 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
   return (
     <div className={`relative w-full ${isCompact ? 'max-w-md' : 'max-w-2xl'} mx-auto`}>
       <form onSubmit={handleSubmit}>
-        {/* Search Input */}
         <div
           className={`
-            relative bg-slate-900/80 backdrop-blur-sm rounded-2xl 
+            relative bg-slate-900/80 backdrop-blur-sm rounded-2xl
             border transition-all duration-300
-            ${isFocused 
-              ? 'border-indigo-500/50 ring-2 ring-indigo-500/20' 
+            ${isFocused
+              ? 'border-indigo-500/50 ring-2 ring-indigo-500/20'
               : 'border-white/[0.08] hover:border-white/[0.15]'
             }
           `}
@@ -115,9 +113,9 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
                 setIsFocused(false);
                 setTimeout(() => setShowSuggestions(false), 200);
               }}
-              placeholder="输入代码（推荐直接输�?位数字，�? 600519�?59941；美股可输入 AAPL�?
+              placeholder="输入代码（推荐直接输入6位数字，如: 600519、159941；美股可输入 AAPL）"
               className={`
-                flex-1 bg-transparent border-none outline-none 
+                flex-1 bg-transparent border-none outline-none
                 text-slate-100 placeholder-slate-500 font-medium
                 w-full min-w-0
                 ${isCompact ? 'py-3 px-2 text-sm' : 'py-4 px-3 text-sm sm:text-base'}
@@ -133,18 +131,18 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
               className={`
                 shrink-0
                 ${isCompact ? 'mx-1 px-3 py-2' : 'mx-1.5 sm:mx-3 px-3 sm:px-5 py-2 sm:py-2.5'}
-                bg-gradient-to-r from-indigo-600 to-violet-600 
+                bg-gradient-to-r from-indigo-600 to-violet-600
                 hover:from-indigo-500 hover:to-violet-500
-                text-white text-xs sm:text-sm font-medium rounded-xl 
-                transition-all duration-300 
-                disabled:opacity-40 disabled:cursor-not-allowed 
+                text-white text-xs sm:text-sm font-medium rounded-xl
+                transition-all duration-300
+                disabled:opacity-40 disabled:cursor-not-allowed
                 flex items-center gap-1 sm:gap-2
               `}
             >
               {isLoading ? (
                 <>
                   <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
-                  <span className={isCompact ? 'hidden' : 'hidden sm:inline'}>分析�?/span>
+                  <span className={isCompact ? 'hidden' : 'hidden sm:inline'}>分析中</span>
                 </>
               ) : (
                 <>
@@ -157,13 +155,14 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
         </div>
       </form>
 
-      {/* Quick Tickers - Only show on non-compact */}
       {!isCompact && !isFocused && (
-        <div 
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
           className="flex flex-wrap items-center justify-center gap-2 mt-4"
         >
-          <span className="text-xs text-slate-600 mr-1">快速访�?</span>
+          <span className="text-xs text-slate-600 mr-1">快速访问:</span>
           {quickTickers.map((ticker) => (
             <button
               key={ticker.symbol}
@@ -179,17 +178,22 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
               {ticker.symbol}
             </button>
           ))}
-        </div>
+        </motion.div>
       )}
 
-      {/* Suggestions Dropdown */}
-      {showSuggestions && query && filteredSuggestions.length > 0 && (
-          <div
+      <AnimatePresence>
+        {showSuggestions && query && filteredSuggestions.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
             className="absolute w-full mt-2 bg-slate-900/95 backdrop-blur-md rounded-xl border border-white/[0.08] overflow-hidden z-50 shadow-2xl"
           >
             {filteredSuggestions.map((suggestion, index) => (
               <motion.button
                 key={suggestion.symbol}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ delay: index * 0.03 }}
                 onClick={() => handleSuggestionClick(suggestion.symbol)}
                 className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.05] transition-colors text-left group"
@@ -211,8 +215,9 @@ export function SearchBox({ onSearch, isLoading = false, isCompact = false }: Se
                 </div>
               </motion.button>
             ))}
-          </div>
+          </motion.div>
         )}
+      </AnimatePresence>
     </div>
   );
 }
