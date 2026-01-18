@@ -556,22 +556,20 @@ export default function SimTradePage() {
     );
   }, [getToken, showConfirmModal, showAlertModal, fetchAccountInfo, fetchRecords, fetchMonitorData]);
 
-  // 初始化加载 - 优化：先加载核心数据，再加载次要数据
+  // 初始化加载 - 极致优化：所有API并行请求，立即显示骨架屏
   useEffect(() => {
-    const initLoad = async () => {
-      const token = getToken();
-      if (!token) return;
-      
-      // 先加载核心账户数据（最重要）
-      await fetchAccountInfo();
+    const token = getToken();
+    if (!token) return;
+    
+    // 立即显示骨架屏，所有API并行加载
+    Promise.all([
+      fetchAccountInfo(),
+      fetchRecords(),
+      fetchMonitorData(),
+      fetchEnabledStrategies(),
+    ]).finally(() => {
       setLoading(false);
-      
-      // 后台加载次要数据（不阻塞渲染）
-      fetchRecords();
-      fetchMonitorData();
-      fetchEnabledStrategies();
-    };
-    initLoad();
+    });
   }, [getToken, fetchAccountInfo, fetchRecords, fetchMonitorData, fetchEnabledStrategies]);
 
   // 实时行情轮询 - 优化：延迟启动，降低非交易时段频率
@@ -638,10 +636,77 @@ export default function SimTradePage() {
     }
   };
 
+  // 骨架屏组件 - 立即显示，提升感知速度
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+        {/* 顶部导航骨架 */}
+        <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-slate-700/50">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-slate-700/50 animate-pulse" />
+              <div>
+                <div className="h-5 w-32 bg-slate-700/50 rounded animate-pulse" />
+                <div className="h-3 w-20 bg-slate-700/30 rounded mt-1 animate-pulse" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-9 h-9 rounded-lg bg-slate-700/50 animate-pulse" />
+              <div className="w-9 h-9 rounded-lg bg-slate-700/50 animate-pulse" />
+            </div>
+          </div>
+        </header>
+        <main className="max-w-7xl mx-auto px-4 py-4 space-y-4">
+          {/* 免责声明骨架 */}
+          <div className="h-10 bg-amber-500/10 border border-amber-500/30 rounded-xl animate-pulse" />
+          {/* 账户概览骨架 */}
+          <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-4 h-4 bg-indigo-400/30 rounded animate-pulse" />
+              <div className="h-4 w-20 bg-slate-700/50 rounded animate-pulse" />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="h-3 w-12 bg-slate-700/30 rounded mb-2 animate-pulse" />
+                  <div className="h-6 w-24 bg-slate-700/50 rounded mb-1 animate-pulse" />
+                  <div className="h-3 w-16 bg-slate-700/30 rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* 风险指标骨架 */}
+          <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-4 h-4 bg-amber-400/30 rounded animate-pulse" />
+              <div className="h-4 w-20 bg-slate-700/50 rounded animate-pulse" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[1,2,3].map(i => (
+                <div key={i} className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="h-3 w-12 bg-slate-700/30 rounded mb-2 animate-pulse" />
+                  <div className="h-5 w-16 bg-slate-700/50 rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* 自动交易骨架 */}
+          <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-slate-700/50 rounded-lg animate-pulse" />
+                <div>
+                  <div className="h-4 w-40 bg-slate-700/50 rounded mb-1 animate-pulse" />
+                  <div className="h-3 w-32 bg-slate-700/30 rounded animate-pulse" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <div className="w-16 h-8 bg-slate-700/50 rounded-lg animate-pulse" />
+                <div className="w-12 h-8 bg-slate-700/50 rounded-lg animate-pulse" />
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
