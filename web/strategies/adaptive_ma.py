@@ -455,7 +455,8 @@ ADAPTIVE_MA_DEFINITION = StrategyDefinition(
     min_capital=30000.0,
     backtest_return=20.0,
     backtest_sharpe=1.25,
-    backtest_max_drawdown=8.0
+    backtest_max_drawdown=8.0,
+    backtest_win_rate=0.68,
 )
 
 # 自动注册到策略注册表

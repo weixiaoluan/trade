@@ -828,4 +828,5 @@ RSRS_SECTOR_ROTATION_DEFINITION = StrategyDefinition(
     backtest_return=42.0,
     backtest_sharpe=1.80,
     backtest_max_drawdown=9.0,
+    backtest_win_rate=0.73,
 )

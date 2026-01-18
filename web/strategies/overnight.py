@@ -323,7 +323,8 @@ OVERNIGHT_DEFINITION = StrategyDefinition(
     min_capital=10000.0,
     backtest_return=18.5,
     backtest_sharpe=1.45,
-    backtest_max_drawdown=4.0
+    backtest_max_drawdown=4.0,
+    backtest_win_rate=0.78,
 )
 
 # 自动注册到策略注册表

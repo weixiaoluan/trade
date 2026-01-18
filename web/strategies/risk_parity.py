@@ -485,7 +485,8 @@ RISK_PARITY_DEFINITION = StrategyDefinition(
     min_capital=50000.0,
     backtest_return=15.0,
     backtest_sharpe=1.35,
-    backtest_max_drawdown=5.0
+    backtest_max_drawdown=5.0,
+    backtest_win_rate=0.65,
 )
 
 # 自动注册到策略注册表

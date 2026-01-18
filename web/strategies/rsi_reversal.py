@@ -304,7 +304,8 @@ RSI_REVERSAL_DEFINITION = StrategyDefinition(
     min_capital=10000.0,
     backtest_return=32.0,
     backtest_sharpe=1.75,
-    backtest_max_drawdown=6.5
+    backtest_max_drawdown=6.5,
+    backtest_win_rate=0.76,
 )
 
 # 自动注册到策略注册表

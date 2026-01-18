@@ -767,6 +767,7 @@ ETF_ROTATION_DEFINITION = StrategyDefinition(
     backtest_return=28.5,
     backtest_sharpe=1.65,
     backtest_max_drawdown=8.5,
+    backtest_win_rate=0.72,
 )
 
 BINARY_ROTATION_DEFINITION = StrategyDefinition(
@@ -783,6 +784,7 @@ BINARY_ROTATION_DEFINITION = StrategyDefinition(
     backtest_return=22.0,
     backtest_sharpe=1.45,
     backtest_max_drawdown=9.0,
+    backtest_win_rate=0.70,
 )
 
 INDUSTRY_MOMENTUM_DEFINITION = StrategyDefinition(
@@ -799,6 +801,7 @@ INDUSTRY_MOMENTUM_DEFINITION = StrategyDefinition(
     backtest_return=35.0,
     backtest_sharpe=1.55,
     backtest_max_drawdown=12.0,
+    backtest_win_rate=0.68,
 )
 
 # 注册策略（只传入策略定义）

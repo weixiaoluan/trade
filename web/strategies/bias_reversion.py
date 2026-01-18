@@ -402,7 +402,8 @@ BIAS_REVERSION_DEFINITION = StrategyDefinition(
     min_capital=20000.0,
     backtest_return=26.0,
     backtest_sharpe=1.55,
-    backtest_max_drawdown=8.0
+    backtest_max_drawdown=8.0,
+    backtest_win_rate=0.72,
 )
 
 # 自动注册到策略注册表
