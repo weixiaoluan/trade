@@ -485,6 +485,7 @@ CB_INTRADAY_BURST_DEFINITION = StrategyDefinition(
     backtest_return=55.0,
     backtest_sharpe=2.10,
     backtest_max_drawdown=6.0,
+    backtest_win_rate=0.78,
 )
 
 
