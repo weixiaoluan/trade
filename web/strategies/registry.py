@@ -43,6 +43,7 @@ class StrategyDefinition:
     backtest_return: Optional[float] = None    # 历史回测收益率
     backtest_sharpe: Optional[float] = None    # 历史回测夏普比率
     backtest_max_drawdown: Optional[float] = None  # 历史回测最大回撤
+    backtest_win_rate: Optional[float] = None  # 历史回测胜率
 
 
 class StrategyRegistry:
