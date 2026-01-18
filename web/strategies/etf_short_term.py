@@ -91,35 +91,35 @@ SHORT_TERM_ETF_POOL: Dict[str, ETFInfo] = {
 
 @dataclass
 class ShortTermConfig:
-    """短线策略配置"""
-    # RSI参数
-    rsi_period: int = 6              # RSI周期（短周期更敏感）
-    rsi_oversold: float = 25         # 超卖阈值
-    rsi_overbought: float = 75       # 超买阈值
+    """短线策略配置 - 优化版：目标年化30%+，回撤<10%"""
+    # RSI参数 - 更严格的超卖条件
+    rsi_period: int = 5              # RSI周期（更短更敏感）
+    rsi_oversold: float = 20         # 超卖阈值（更严格）
+    rsi_overbought: float = 70       # 超买阈值（更早止盈）
     
-    # 动量参数
-    momentum_period: int = 5         # 动量计算周期
-    momentum_threshold: float = 0.02  # 动量阈值(2%)
+    # 动量参数 - 更严格的入场条件
+    momentum_period: int = 3         # 动量计算周期（更短）
+    momentum_threshold: float = 0.015 # 动量阈值(1.5%)
     
     # 均线参数
-    ma_short: int = 5                # 短期均线
-    ma_long: int = 20                # 长期均线
+    ma_short: int = 3                # 短期均线（更敏感）
+    ma_long: int = 10                # 长期均线（更敏感）
     
     # 量能参数
-    volume_ratio: float = 1.5        # 量能放大倍数
-    volume_ma_period: int = 10       # 量能均值周期
+    volume_ratio: float = 1.2        # 量能放大倍数（降低要求）
+    volume_ma_period: int = 5        # 量能均值周期
     
-    # 止损止盈
-    stop_loss_pct: float = 0.03      # 止损比例(3%)
-    take_profit_pct: float = 0.05    # 止盈比例(5%)
-    trailing_stop_pct: float = 0.02  # 移动止盈回撤(2%)
+    # 止损止盈 - 严格控制回撤，快速止盈
+    stop_loss_pct: float = 0.02      # 止损比例(2%) - 严格止损
+    take_profit_pct: float = 0.04    # 止盈比例(4%) - 快速止盈
+    trailing_stop_pct: float = 0.015 # 移动止盈回撤(1.5%)
     
     # 持仓控制
-    max_holding_days: int = 5        # 最大持仓天数
-    position_size: float = 0.95      # 单次仓位
+    max_holding_days: int = 3        # 最大持仓天数（更短）
+    position_size: float = 0.90      # 单次仓位（降低杠杆）
     
     # 交易成本
-    slippage_rate: float = 0.002     # 滑点+手续费
+    slippage_rate: float = 0.001     # 滑点+手续费（ETF成本较低）
 
 
 class ETFShortTermStrategy(BaseStrategy):
@@ -141,21 +141,21 @@ class ETFShortTermStrategy(BaseStrategy):
     STRATEGY_ID = "etf_short_term"
     
     DEFAULT_PARAMS = {
-        'rsi_period': 6,
-        'rsi_oversold': 25,
-        'rsi_overbought': 75,
-        'momentum_period': 5,
-        'momentum_threshold': 0.02,
-        'ma_short': 5,
-        'ma_long': 20,
-        'volume_ratio': 1.5,
-        'volume_ma_period': 10,
-        'stop_loss_pct': 0.03,
-        'take_profit_pct': 0.05,
-        'trailing_stop_pct': 0.02,
-        'max_holding_days': 5,
-        'position_size': 0.95,
-        'slippage_rate': 0.002,
+        'rsi_period': 5,
+        'rsi_oversold': 20,
+        'rsi_overbought': 70,
+        'momentum_period': 3,
+        'momentum_threshold': 0.015,
+        'ma_short': 3,
+        'ma_long': 10,
+        'volume_ratio': 1.2,
+        'volume_ma_period': 5,
+        'stop_loss_pct': 0.02,
+        'take_profit_pct': 0.04,
+        'trailing_stop_pct': 0.015,
+        'max_holding_days': 3,
+        'position_size': 0.90,
+        'slippage_rate': 0.001,
     }
     
     def __init__(self, params: Dict = None, ticker_pool: Dict[str, ETFInfo] = None):

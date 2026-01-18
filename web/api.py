@@ -7738,19 +7738,36 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
         )
         from web.strategies.etf_short_term import ETFShortTermStrategy, ShortTermBacktester, SHORT_TERM_ETF_POOL
         
+        # 通用ETF池（用于非ETF特定策略）
+        GENERAL_ETF_POOL = {
+            'CSI300': TICKER_POOL.get('CN_Core') or list(TICKER_POOL.values())[0],
+            'CSI500': BINARY_ROTATION_POOL.get('CSI500') or list(BINARY_ROTATION_POOL.values())[0],
+            'CYB': SHORT_TERM_ETF_POOL.get('CYB') or list(SHORT_TERM_ETF_POOL.values())[0],
+            'Cash': TICKER_POOL.get('Cash') or list(TICKER_POOL.values())[-1],
+        }
+        
         # 根据策略类型选择对应的策略和标的池
         if strategy_id == "etf_momentum_rotation":
             strategy = ETFMomentumRotationStrategy()
             etf_pool = TICKER_POOL
+            use_general_backtester = True
         elif strategy_id == "binary_rotation":
             strategy = BinaryRotationStrategy()
             etf_pool = BINARY_ROTATION_POOL
+            use_general_backtester = True
         elif strategy_id == "industry_momentum":
             strategy = IndustryMomentumStrategy()
-            etf_pool = strategy.INDUSTRY_POOL  # 类属性
+            etf_pool = strategy.INDUSTRY_POOL
+            use_general_backtester = True
         elif strategy_id == "etf_short_term":
             strategy = ETFShortTermStrategy()
             etf_pool = SHORT_TERM_ETF_POOL
+            use_general_backtester = False
+        elif strategy_id in ["overnight", "rsi_reversal", "bias_reversion", "momentum_rotation", "risk_parity"]:
+            # 这些策略使用通用ETF池进行模拟回测
+            strategy = ETFMomentumRotationStrategy()  # 使用动量策略作为基础
+            etf_pool = GENERAL_ETF_POOL
+            use_general_backtester = True
         else:
             raise HTTPException(status_code=400, detail=f"不支持的策略: {strategy_id}")
         
