@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+// framer-motion removed for performance
 import { Gauge, Activity, Waves } from 'lucide-react';
 
 interface QuantDashboardCardProps {
@@ -16,22 +16,22 @@ interface QuantDashboardCardProps {
 function mapRegime(regime?: string): { label: string; tone: string } {
   switch (regime) {
     case 'trending':
-      return { label: '趋势�?, tone: 'text-emerald-400' };
+      return { label: '趋势市', tone: 'text-emerald-400' };
     case 'ranging':
-      return { label: '震荡�?, tone: 'text-amber-400' };
+      return { label: '震荡市', tone: 'text-amber-400' };
     case 'squeeze':
       return { label: '窄幅整理 / 突破蓄势', tone: 'text-sky-400' };
     default:
-      return { label: '待判�?, tone: 'text-slate-400' };
+      return { label: '待判定', tone: 'text-slate-400' };
   }
 }
 
 function mapVolatility(vol?: string): { label: string; tone: string } {
   switch (vol) {
     case 'low':
-      return { label: '低波�?, tone: 'text-emerald-400' };
+      return { label: '低波动', tone: 'text-emerald-400' };
     case 'high':
-      return { label: '高波�?, tone: 'text-rose-400' };
+      return { label: '高波动', tone: 'text-rose-400' };
     default:
       return { label: '中等波动', tone: 'text-amber-400' };
   }
@@ -40,9 +40,9 @@ function mapVolatility(vol?: string): { label: string; tone: string } {
 function mapAdxStrength(strength?: string): string {
   switch (strength) {
     case 'strong':
-      return '趋势�?;
+      return '趋势强';
     case 'weak':
-      return '趋势�?;
+      return '趋势弱';
     case 'moderate':
       return '趋势中等';
     default:
@@ -62,7 +62,7 @@ function deriveStrategyMode(
     };
   }
 
-  // 高分 + 趋势�?�?趋势跟随
+  // 高分 + 趋势市 → 趋势跟随
   if (score >= 60 && regime === 'trending') {
     return {
       label: '趋势跟随',
@@ -71,7 +71,7 @@ function deriveStrategyMode(
     };
   }
 
-  // 中高�?+ 震荡�?�?区间交易
+  // 中高分 + 震荡市 → 区间交易
   if (score >= 60 && regime === 'ranging') {
     return {
       label: '区间交易',
@@ -80,7 +80,7 @@ function deriveStrategyMode(
     };
   }
 
-  // 其他情况以观�?防守为主
+  // 其他情况以观望/防守为主
   return {
     label: '观望',
     en: 'OBSERVE',
@@ -126,10 +126,8 @@ export function QuantDashboardCard({
       : 'from-rose-400 to-red-500';
 
   return (
-    <div
-      className="glass-card rounded-xl border border-white/[0.06] p-3 sm:p-4 flex flex-col gap-3 sm:gap-4"
-    >
-      {/* Header - 移动端优�?*/}
+    <div className="glass-card rounded-xl border border-white/[0.06] p-3 sm:p-4 flex flex-col gap-3 sm:gap-4 animate-fadeIn">
+      {/* Header - 移动端优化 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
@@ -163,11 +161,11 @@ export function QuantDashboardCard({
           )}
         </div>
 
-        {/* 市场状�?*/}
+        {/* 市场状态 */}
         <div className="flex sm:flex-col items-start gap-1.5 sm:gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-400">
             <Activity className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
-            <span>市场状�?/span>
+            <span>市场状态</span>
           </div>
           <div className="text-xs sm:text-sm font-medium flex flex-col gap-0.5 sm:gap-1">
             <span className={regimeInfo.tone}>{regimeInfo.label}</span>
@@ -177,8 +175,8 @@ export function QuantDashboardCard({
                 : marketRegime === 'ranging'
                 ? '区间震荡，适合高抛低吸'
                 : marketRegime === 'squeeze'
-                ? '波动收窄，警惕突�?
-                : '信号有限，建议降低仓�?}
+                ? '波动收窄，警惕突破'
+                : '信号有限，建议降低仓位'}
             </span>
           </div>
         </div>
@@ -195,14 +193,14 @@ export function QuantDashboardCard({
               {volatilityState === 'low'
                 ? '价格相对平稳，适合稳健资金'
                 : volatilityState === 'high'
-                ? '波动放大，需严格控制仓位与止�?
+                ? '波动放大，需严格控制仓位与止损'
                 : '波动适中，可根据策略灵活调仓'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Footer - 移动端优�?*/}
+      {/* Footer - 移动端优化 */}
       <div className="mt-1 sm:mt-3 flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-slate-500">
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {adxText && <span className="font-mono text-[9px] sm:text-[11px]">ADX {adxText}</span>}
@@ -229,7 +227,7 @@ export function QuantDashboardCard({
                     : 'bg-slate-900/80 border-slate-700 text-slate-400'
                 }`}
               >
-                {h === 'short' ? '�? : h === 'mid' ? '�? : '�?}
+                {h === 'short' ? '短' : h === 'mid' ? '中' : '长'}
               </span>
             ))}
           </div>

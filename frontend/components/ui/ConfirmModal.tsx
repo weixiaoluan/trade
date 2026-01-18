@@ -76,17 +76,17 @@ export const ConfirmModal = memo(function ConfirmModal({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[1000] p-4"
-          onClick={onClose}
-        >
-          <div
-            transition={{ type: "spring", duration: 0.3 }}
-            className={`w-full max-w-sm ${colors.bg} border ${colors.border} rounded-2xl shadow-2xl overflow-hidden`}
-            onClick={(e) => e.stopPropagation()}
-          >
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 modal-overlay"
+      onClick={onClose}
+    >
+      <div
+        className={`w-full max-w-sm ${colors.bg} border ${colors.border} rounded-2xl shadow-2xl overflow-hidden modal-content`}
+        onClick={(e) => e.stopPropagation()}
+      >
             {/* Header */}
             <div className="px-6 pt-6 pb-4">
               <div className="flex items-start gap-4">
@@ -127,8 +127,7 @@ export const ConfirmModal = memo(function ConfirmModal({
                 {confirmText}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </div>
+    </div>
   );
 });
