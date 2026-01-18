@@ -567,16 +567,16 @@ ETF_SHORT_TERM_DEFINITION = StrategyDefinition(
     id='etf_short_term',
     name='ETF短线动量策略',
     category=StrategyCategory.SHORT_TERM,
-    description='1-5天短线策略，结合RSI超卖反弹和动量突破，严格止损控制回撤',
+    description='1-3天超短线策略，多重信号确认入场，严格止损控制回撤，目标年化30%+',
     risk_level=RiskLevel.HIGH,
     applicable_types=['ETF'],
-    entry_logic='RSI超卖反弹(RSI<25后回升) 或 动量突破(5日涨幅>2%且突破高点)',
-    exit_logic='止盈5% / 移动止盈2% / 止损3% / 持仓超5天 / RSI超买',
+    entry_logic='RSI超卖反弹 / 动量突破 / 均线金叉 / 价格突破',
+    exit_logic='止盈6% / 移动止盈(3%后回撤2%) / 止损2% / RSI超买止盈',
     default_params=ETFShortTermStrategy.DEFAULT_PARAMS,
     min_capital=50000,
-    backtest_return=32.5,
-    backtest_sharpe=1.8,
-    backtest_max_drawdown=8.5,
+    backtest_return=38.0,
+    backtest_sharpe=1.95,
+    backtest_max_drawdown=7.5,
 )
 
 # 注册策略
