@@ -120,6 +120,15 @@ export default function AdminPage() {
   const [marketSymbols, setMarketSymbols] = useState<{symbol: string; name: string; type: string}[]>([]);
   const [marketLoading, setMarketLoading] = useState(false);
 
+  // 批量删除
+  const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
+
+  // 复制到其他策略
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copyTargetStrategies, setCopyTargetStrategies] = useState<Set<string>>(new Set());
+  const [copying, setCopying] = useState(false);
+
   // Toast通知
   const [toast, setToast] = useState<{type: 'success' | 'error'; message: string} | null>(null);
 
@@ -795,8 +804,103 @@ export default function AdminPage() {
     }
   };
 
+  // 批量删除标的
+  const handleBatchDelete = async () => {
+    if (selectedAssets.size === 0 || !selectedStrategy) return;
+    
+    const token = getToken();
+    if (!token) return;
+    
+    if (!confirm(`确定删除选中的 ${selectedAssets.size} 个标的吗？`)) return;
+    
+    setBatchDeleting(true);
+    let successCount = 0;
+    
+    for (const symbol of selectedAssets) {
+      try {
+        const response = await fetch(`${API_BASE}/api/admin/strategy/assets/${selectedStrategy}/${encodeURIComponent(symbol)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) successCount++;
+      } catch (error) {
+        console.error("删除失败:", symbol, error);
+      }
+    }
+    
+    // 刷新策略列表
+    const res = await fetch(`${API_BASE}/api/strategy/assets`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setStrategies(data.strategies || []);
+    }
+    
+    setSelectedAssets(new Set());
+    setBatchDeleting(false);
+    showToast('success', `成功删除 ${successCount} 个标的`);
+  };
+
+  // 复制标的到其他策略
+  const handleCopyToStrategies = async () => {
+    if (copyTargetStrategies.size === 0 || currentStrategyAssets.length === 0) return;
+    
+    const token = getToken();
+    if (!token) return;
+    
+    setCopying(true);
+    let totalAdded = 0;
+    
+    for (const targetId of copyTargetStrategies) {
+      try {
+        const response = await fetch(`${API_BASE}/api/admin/strategy/assets/${targetId}/batch`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            assets: currentStrategyAssets.map(a => ({
+              symbol: a.symbol,
+              name: a.name,
+              asset_type: a.asset_type,
+              category: a.category,
+              trading_rule: a.trading_rule,
+              is_qdii: a.is_qdii === 1,
+              max_premium_rate: a.max_premium_rate,
+            })),
+          }),
+        });
+        if (response.ok) {
+          const result = await response.json();
+          totalAdded += result.added_count || 0;
+        }
+      } catch (error) {
+        console.error("复制失败:", targetId, error);
+      }
+    }
+    
+    // 刷新策略列表
+    const res = await fetch(`${API_BASE}/api/strategy/assets`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setStrategies(data.strategies || []);
+    }
+    
+    setCopying(false);
+    setShowCopyModal(false);
+    setCopyTargetStrategies(new Set());
+    showToast('success', `成功复制 ${totalAdded} 个标的到 ${copyTargetStrategies.size} 个策略`);
+  };
+
   // 获取当前选中策略的标的列表
   const currentStrategyAssets = strategies.find(s => s.id === selectedStrategy)?.assets || [];
+  
+  // 当前策略已有的标的代码集合（用于市场搜索时判断是否已添加）
+  const existingSymbols = new Set(currentStrategyAssets.map(a => a.symbol));
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -1387,7 +1491,26 @@ export default function AdminPage() {
                     </h2>
                     <span className="text-xs text-slate-500">（共 {currentStrategyAssets.length} 个）</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
+                    {selectedAssets.size > 0 && (
+                      <button
+                        onClick={handleBatchDelete}
+                        disabled={batchDeleting}
+                        className="flex items-center gap-2 px-4 py-2 bg-rose-500/20 text-rose-400 rounded-lg hover:bg-rose-500/30 transition-all disabled:opacity-50"
+                      >
+                        {batchDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        删除选中 ({selectedAssets.size})
+                      </button>
+                    )}
+                    {currentStrategyAssets.length > 0 && (
+                      <button
+                        onClick={() => setShowCopyModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-all"
+                      >
+                        <Layers className="w-4 h-4" />
+                        复制到其他策略
+                      </button>
+                    )}
                     <button
                       onClick={() => setShowMarketModal(true)}
                       disabled={!selectedStrategy}
@@ -1422,6 +1545,20 @@ export default function AdminPage() {
                     <table className="w-full">
                       <thead className="bg-white/[0.02]">
                         <tr>
+                          <th className="px-3 py-3 w-10">
+                            <input
+                              type="checkbox"
+                              checked={selectedAssets.size === currentStrategyAssets.length && currentStrategyAssets.length > 0}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedAssets(new Set(currentStrategyAssets.map(a => a.symbol)));
+                                } else {
+                                  setSelectedAssets(new Set());
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500"
+                            />
+                          </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">代码</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">名称</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">分类</th>
@@ -1432,6 +1569,22 @@ export default function AdminPage() {
                       <tbody className="divide-y divide-white/[0.06]">
                         {currentStrategyAssets.map((asset) => (
                           <tr key={asset.symbol} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="px-3 py-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedAssets.has(asset.symbol)}
+                                onChange={(e) => {
+                                  const newSet = new Set(selectedAssets);
+                                  if (e.target.checked) {
+                                    newSet.add(asset.symbol);
+                                  } else {
+                                    newSet.delete(asset.symbol);
+                                  }
+                                  setSelectedAssets(newSet);
+                                }}
+                                className="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500"
+                              />
+                            </td>
                             <td className="px-6 py-4">
                               <span className="text-sm font-mono text-indigo-400">{asset.symbol}</span>
                             </td>
@@ -1799,7 +1952,21 @@ export default function AdminPage() {
                   {(['etf', 'stock', 'bond'] as const).map((t) => (
                     <button
                       key={t}
-                      onClick={() => setMarketType(t)}
+                      onClick={() => {
+                        setMarketType(t);
+                        // 切换类型时自动搜索
+                        setTimeout(() => {
+                          const token = getToken();
+                          if (!token) return;
+                          setMarketLoading(true);
+                          const params = new URLSearchParams({ type: t, keyword: marketKeyword });
+                          fetch(`${API_BASE}/api/market/symbols?${params}`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                          }).then(res => res.ok ? res.json() : null)
+                            .then(data => data && setMarketSymbols(data.symbols || []))
+                            .finally(() => setMarketLoading(false));
+                        }, 0);
+                      }}
                       className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
                         marketType === t
                           ? 'bg-indigo-500/30 text-indigo-300 border border-indigo-500/50'
@@ -1851,13 +2018,20 @@ export default function AdminPage() {
                             'bg-amber-500/20 text-amber-400'
                           }`}>{item.type}</span>
                         </div>
-                        <button
-                          onClick={() => handleAddFromMarket(item)}
-                          disabled={assetOperating === item.symbol}
-                          className="px-3 py-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-all disabled:opacity-50 text-sm"
-                        >
-                          {assetOperating === item.symbol ? <Loader2 className="w-4 h-4 animate-spin" /> : '添加'}
-                        </button>
+                        {existingSymbols.has(item.symbol) ? (
+                          <span className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg text-sm flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            已添加
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleAddFromMarket(item)}
+                            disabled={assetOperating === item.symbol}
+                            className="px-3 py-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-all disabled:opacity-50 text-sm"
+                          >
+                            {assetOperating === item.symbol ? <Loader2 className="w-4 h-4 animate-spin" /> : '添加'}
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1870,6 +2044,82 @@ export default function AdminPage() {
                   className="w-full py-2.5 bg-white/[0.05] text-slate-300 rounded-xl hover:bg-white/[0.08] transition-all"
                 >
                   关闭
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 复制到其他策略弹窗 */}
+      <AnimatePresence>
+        {showCopyModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setShowCopyModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center">
+                  <Layers className="w-5 h-5 text-violet-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">复制标的到其他策略</h3>
+                  <p className="text-xs text-slate-500">将当前 {currentStrategyAssets.length} 个标的复制到选中的策略</p>
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-[300px] overflow-y-auto mb-6">
+                {strategies.filter(s => s.id !== selectedStrategy).map((strategy) => (
+                  <label
+                    key={strategy.id}
+                    className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg hover:bg-white/[0.04] cursor-pointer transition-all"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={copyTargetStrategies.has(strategy.id)}
+                      onChange={(e) => {
+                        const newSet = new Set(copyTargetStrategies);
+                        if (e.target.checked) {
+                          newSet.add(strategy.id);
+                        } else {
+                          newSet.delete(strategy.id);
+                        }
+                        setCopyTargetStrategies(newSet);
+                      }}
+                      className="w-4 h-4 rounded border-white/20 bg-white/5 text-violet-500 focus:ring-violet-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm text-white">{strategy.name}</span>
+                      <span className="text-xs text-slate-500 ml-2">({strategy.assets?.length || 0} 个标的)</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCopyModal(false)}
+                  className="flex-1 py-2.5 bg-white/[0.05] text-slate-300 rounded-xl hover:bg-white/[0.08] transition-all"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleCopyToStrategies}
+                  disabled={copyTargetStrategies.size === 0 || copying}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 hover:from-violet-600 hover:to-purple-700 transition-all"
+                >
+                  {copying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
+                  复制到 {copyTargetStrategies.size} 个策略
                 </button>
               </div>
             </motion.div>
