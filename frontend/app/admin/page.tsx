@@ -852,7 +852,7 @@ export default function AdminPage() {
     setCopying(true);
     let totalAdded = 0;
     
-    for (const targetId of copyTargetStrategies) {
+    for (const targetId of Array.from(copyTargetStrategies)) {
       try {
         const response = await fetch(`${API_BASE}/api/admin/strategy/assets/${targetId}/batch`, {
           method: "POST",
