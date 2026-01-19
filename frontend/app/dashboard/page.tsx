@@ -652,8 +652,28 @@ export default function DashboardPage() {
         return;
       }
 
-      // 确保 authChecked 为 true，立即触发数据加载
-      // 这样用户登录后可以立即看到自选列表
+      // 立即加载 dashboard 数据（不依赖 authChecked 状态变化）
+      try {
+        const dashboardResponse = await fetch(`${API_BASE}/api/dashboard/init`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        if (dashboardResponse.ok) {
+          const dashboardData = await dashboardResponse.json();
+          setWatchlist(dashboardData.watchlist || []);
+          setTasks(dashboardData.tasks || {});
+          setReports(dashboardData.reports || []);
+          setUserSettings(dashboardData.settings);
+          setWechatOpenId(dashboardData.settings?.wechat_openid || "");
+          if (dashboardData.quotes) {
+            setQuotes(dashboardData.quotes);
+          }
+        }
+      } catch (error) {
+        console.error("获取dashboard数据失败:", error);
+      }
+
+      // 设置 authChecked 用于后续轮询
       setAuthChecked(true);
 
       // 后台静默验证 token 有效性
