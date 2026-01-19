@@ -652,7 +652,10 @@ export default function DashboardPage() {
         return;
       }
 
-      // 已经从 localStorage 初始化了用户信息，页面可以立即显示
+      // 确保 authChecked 为 true，立即触发数据加载
+      // 这样用户登录后可以立即看到自选列表
+      setAuthChecked(true);
+
       // 后台静默验证 token 有效性
       try {
         const response = await fetch(`${API_BASE}/api/auth/me`, {
