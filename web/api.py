@@ -6979,10 +6979,10 @@ async def get_watchlist_realtime_prices(authorization: str = Header(None)):
             change_pct = quote.get('change_percent', 0)
             prev_close = quote.get('prev_close', 0)
             
-            # 从数据库获取缓存的价位数据
-            support = item.get(f'{holding_period}_support') or item.get('ai_buy_price', 0)
-            resistance = item.get(f'{holding_period}_resistance') or item.get('ai_sell_price', 0)
-            risk = item.get(f'{holding_period}_risk', 0)
+            # 从数据库获取缓存的价位数据（确保 None 值转为 0）
+            support = item.get(f'{holding_period}_support') or item.get('ai_buy_price') or 0
+            resistance = item.get(f'{holding_period}_resistance') or item.get('ai_sell_price') or 0
+            risk = item.get(f'{holding_period}_risk') or 0
             
             # 计算距离
             dist_to_support = None
