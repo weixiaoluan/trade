@@ -6940,6 +6940,8 @@ async def get_watchlist_realtime_prices(authorization: str = Header(None)):
     - 支撑位/阻力位/风险位（从数据库缓存读取）
     - 距离支撑位/阻力位的百分比
     """
+    import traceback
+    
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -6951,78 +6953,83 @@ async def get_watchlist_realtime_prices(authorization: str = Header(None)):
     
     username = user['username']
     
-    # 获取自选列表
-    watchlist = get_user_watchlist(username)
-    if not watchlist:
-        return {"status": "success", "items": [], "message": "自选列表为空"}
-    
-    # 批量获取实时行情
-    symbols = [item['symbol'] for item in watchlist]
-    from tools.data_fetcher import get_batch_quotes
-    quotes_result = get_batch_quotes(symbols)
-    quotes = {}
-    if quotes_result.get('status') == 'success':
-        for q in quotes_result.get('quotes', []):
-            quotes[q['symbol'].upper()] = q
-    
-    # 构建返回数据
-    items = []
-    for item in watchlist:
-        symbol = item['symbol'].upper()
-        quote = quotes.get(symbol, {})
-        holding_period = item.get('holding_period', 'swing')
+    try:
+        # 获取自选列表
+        watchlist = get_user_watchlist(username)
+        if not watchlist:
+            return {"status": "success", "items": [], "message": "自选列表为空"}
         
-        current_price = quote.get('current_price', 0)
-        change_pct = quote.get('change_percent', 0)
-        prev_close = quote.get('prev_close', 0)
+        # 批量获取实时行情
+        symbols = [item['symbol'] for item in watchlist]
+        from tools.data_fetcher import get_batch_quotes
+        quotes_result = get_batch_quotes(symbols)
+        quotes = {}
+        if quotes_result.get('status') == 'success':
+            for q in quotes_result.get('quotes', []):
+                quotes[q['symbol'].upper()] = q
         
-        # 从数据库获取缓存的价位数据
-        support = item.get(f'{holding_period}_support') or item.get('ai_buy_price', 0)
-        resistance = item.get(f'{holding_period}_resistance') or item.get('ai_sell_price', 0)
-        risk = item.get(f'{holding_period}_risk', 0)
+        # 构建返回数据
+        items = []
+        for item in watchlist:
+            symbol = item['symbol'].upper()
+            quote = quotes.get(symbol, {})
+            holding_period = item.get('holding_period', 'swing')
+            
+            current_price = quote.get('current_price', 0)
+            change_pct = quote.get('change_percent', 0)
+            prev_close = quote.get('prev_close', 0)
+            
+            # 从数据库获取缓存的价位数据
+            support = item.get(f'{holding_period}_support') or item.get('ai_buy_price', 0)
+            resistance = item.get(f'{holding_period}_resistance') or item.get('ai_sell_price', 0)
+            risk = item.get(f'{holding_period}_risk', 0)
+            
+            # 计算距离
+            dist_to_support = None
+            dist_to_resistance = None
+            
+            if current_price > 0 and support > 0:
+                dist_to_support = round((current_price - support) / support * 100, 2)
+            
+            if current_price > 0 and resistance > 0:
+                dist_to_resistance = round((resistance - current_price) / current_price * 100, 2)
+            
+            items.append({
+                'symbol': symbol,
+                'name': item.get('name', symbol),
+                'type': item.get('type', 'stock'),
+                'holding_period': holding_period,
+                'current_price': current_price,
+                'change_pct': round(change_pct, 2),
+                'prev_close': prev_close,
+                'support': support,
+                'resistance': resistance,
+                'risk': risk,
+                'dist_to_support': dist_to_support,
+                'dist_to_resistance': dist_to_resistance,
+                'starred': item.get('starred', 0),
+                # 多周期价位
+                'short_support': item.get('short_support', 0),
+                'short_resistance': item.get('short_resistance', 0),
+                'short_risk': item.get('short_risk', 0),
+                'swing_support': item.get('swing_support', 0),
+                'swing_resistance': item.get('swing_resistance', 0),
+                'swing_risk': item.get('swing_risk', 0),
+                'long_support': item.get('long_support', 0),
+                'long_resistance': item.get('long_resistance', 0),
+                'long_risk': item.get('long_risk', 0),
+            })
         
-        # 计算距离
-        dist_to_support = None
-        dist_to_resistance = None
-        
-        if current_price > 0 and support > 0:
-            dist_to_support = round((current_price - support) / support * 100, 2)
-        
-        if current_price > 0 and resistance > 0:
-            dist_to_resistance = round((resistance - current_price) / current_price * 100, 2)
-        
-        items.append({
-            'symbol': symbol,
-            'name': item.get('name', symbol),
-            'type': item.get('type', 'stock'),
-            'holding_period': holding_period,
-            'current_price': current_price,
-            'change_pct': round(change_pct, 2),
-            'prev_close': prev_close,
-            'support': support,
-            'resistance': resistance,
-            'risk': risk,
-            'dist_to_support': dist_to_support,
-            'dist_to_resistance': dist_to_resistance,
-            'starred': item.get('starred', 0),
-            # 多周期价位
-            'short_support': item.get('short_support', 0),
-            'short_resistance': item.get('short_resistance', 0),
-            'short_risk': item.get('short_risk', 0),
-            'swing_support': item.get('swing_support', 0),
-            'swing_resistance': item.get('swing_resistance', 0),
-            'swing_risk': item.get('swing_risk', 0),
-            'long_support': item.get('long_support', 0),
-            'long_resistance': item.get('long_resistance', 0),
-            'long_risk': item.get('long_risk', 0),
-        })
-    
-    return {
-        "status": "success",
-        "items": items,
-        "count": len(items),
-        "timestamp": get_beijing_now().isoformat()
-    }
+        return {
+            "status": "success",
+            "items": items,
+            "count": len(items),
+            "timestamp": get_beijing_now().isoformat()
+        }
+    except Exception as e:
+        error_msg = f"获取实时价位失败: {str(e)}\n{traceback.format_exc()}"
+        print(f"[API ERROR] {error_msg}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/watchlist/calculate-prices")
