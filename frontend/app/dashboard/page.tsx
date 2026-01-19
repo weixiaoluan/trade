@@ -131,6 +131,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const initialDataLoadedRef = useRef(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [tasks, setTasks] = useState<Record<string, TaskStatus>>({});
   const [reports, setReports] = useState<ReportSummary[]>([]);
@@ -668,6 +669,8 @@ export default function DashboardPage() {
           if (dashboardData.quotes) {
             setQuotes(dashboardData.quotes);
           }
+          // 标记初始数据已加载，防止 authChecked useEffect 重复加载
+          initialDataLoadedRef.current = true;
         }
       } catch (error) {
         console.error("获取dashboard数据失败:", error);
@@ -1377,8 +1380,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authChecked) {
-      // 初始加载 - 一次性获取所有数据
-      fetchDashboardInit();
+      // 如果初始数据已经在 checkAuth 中加载过，跳过重复加载
+      if (!initialDataLoadedRef.current) {
+        fetchDashboardInit();
+      }
       // 获取研究列表（用于显示角标）
       fetchAiPicks();
 
