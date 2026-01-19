@@ -764,10 +764,10 @@ ETF_ROTATION_DEFINITION = StrategyDefinition(
     exit_logic='当信号切换到其他标的时换仓',
     default_params=ETFMomentumRotationStrategy.DEFAULT_PARAMS,
     min_capital=50000,
-    backtest_return=25.0,
-    backtest_sharpe=1.90,
-    backtest_max_drawdown=6.5,
-    backtest_win_rate=0.85,
+    backtest_return=None,  # 点击回测获取真实数据
+    backtest_sharpe=None,
+    backtest_max_drawdown=None,
+    backtest_win_rate=None,
 )
 
 BINARY_ROTATION_DEFINITION = StrategyDefinition(
@@ -781,10 +781,10 @@ BINARY_ROTATION_DEFINITION = StrategyDefinition(
     exit_logic='当另一指数动量更强时换仓',
     default_params=BinaryRotationStrategy.DEFAULT_PARAMS,
     min_capital=30000,
-    backtest_return=20.0,
-    backtest_sharpe=1.75,
-    backtest_max_drawdown=7.0,
-    backtest_win_rate=0.85,
+    backtest_return=None,  # 点击回测获取真实数据
+    backtest_sharpe=None,
+    backtest_max_drawdown=None,
+    backtest_win_rate=None,
 )
 
 INDUSTRY_MOMENTUM_DEFINITION = StrategyDefinition(
@@ -798,10 +798,10 @@ INDUSTRY_MOMENTUM_DEFINITION = StrategyDefinition(
     exit_logic='定期再平衡，动量排名变化时换仓',
     default_params=IndustryMomentumStrategy.DEFAULT_PARAMS,
     min_capital=100000,
-    backtest_return=30.0,
-    backtest_sharpe=1.85,
-    backtest_max_drawdown=9.0,
-    backtest_win_rate=0.85,
+    backtest_return=None,  # 点击回测获取真实数据
+    backtest_sharpe=None,
+    backtest_max_drawdown=None,
+    backtest_win_rate=None,
 )
 
 # 注册策略（只传入策略定义）

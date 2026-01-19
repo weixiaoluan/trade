@@ -483,10 +483,10 @@ RISK_PARITY_DEFINITION = StrategyDefinition(
     exit_logic="双周再平衡，或权重偏离目标超过3%时调仓",
     default_params=RiskParityStrategy.DEFAULT_PARAMS,
     min_capital=50000.0,
-    backtest_return=12.0,
-    backtest_sharpe=1.50,
-    backtest_max_drawdown=4.0,
-    backtest_win_rate=0.85,
+    backtest_return=None,  # 点击回测获取真实数据
+    backtest_sharpe=None,
+    backtest_max_drawdown=None,
+    backtest_win_rate=None,
 )
 
 # 自动注册到策略注册表

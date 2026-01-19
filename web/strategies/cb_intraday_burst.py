@@ -499,10 +499,10 @@ CB_INTRADAY_BURST_DEFINITION = StrategyDefinition(
     exit_logic="移动止盈0.5%回撤离场/硬止损0.8%/收盘前强平",
     default_params=CBIntradayBurstStrategy.DEFAULT_PARAMS,
     min_capital=50000.0,
-    backtest_return=48.0,
-    backtest_sharpe=2.35,
-    backtest_max_drawdown=5.0,
-    backtest_win_rate=0.86,
+    backtest_return=None,  # 点击回测获取真实数据
+    backtest_sharpe=None,
+    backtest_max_drawdown=None,
+    backtest_win_rate=None,
 )
 
 

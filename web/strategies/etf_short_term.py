@@ -674,10 +674,10 @@ ETF_SHORT_TERM_DEFINITION = StrategyDefinition(
     exit_logic='止盈6% / 移动止盈(3%后回撤2%) / 止损2% / RSI超买止盈',
     default_params=ETFShortTermStrategy.DEFAULT_PARAMS,
     min_capital=50000,
-    backtest_return=28.0,
-    backtest_sharpe=2.50,
-    backtest_max_drawdown=4.0,
-    backtest_win_rate=0.90,
+    backtest_return=None,  # 点击回测获取真实数据
+    backtest_sharpe=None,
+    backtest_max_drawdown=None,
+    backtest_win_rate=None,
 )
 
 # 注册策略

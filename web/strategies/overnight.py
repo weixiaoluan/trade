@@ -321,10 +321,10 @@ OVERNIGHT_DEFINITION = StrategyDefinition(
     exit_logic="开盘后(9:30-9:35)卖出，最大持有1个交易日",
     default_params=OvernightStrategy.DEFAULT_PARAMS,
     min_capital=10000.0,
-    backtest_return=16.0,
-    backtest_sharpe=1.65,
-    backtest_max_drawdown=3.5,
-    backtest_win_rate=0.86,
+    backtest_return=None,  # 点击回测获取真实数据
+    backtest_sharpe=None,
+    backtest_max_drawdown=None,
+    backtest_win_rate=None,
 )
 
 # 自动注册到策略注册表

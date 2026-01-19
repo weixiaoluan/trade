@@ -400,10 +400,10 @@ BIAS_REVERSION_DEFINITION = StrategyDefinition(
     exit_logic="价格回到布林带中轨或上轨时止盈出场，或触发3%止损",
     default_params=BiasReversionStrategy.DEFAULT_PARAMS,
     min_capital=20000.0,
-    backtest_return=22.0,
-    backtest_sharpe=1.85,
-    backtest_max_drawdown=6.0,
-    backtest_win_rate=0.85,
+    backtest_return=None,  # 点击回测获取真实数据
+    backtest_sharpe=None,
+    backtest_max_drawdown=None,
+    backtest_win_rate=None,
 )
 
 # 自动注册到策略注册表
