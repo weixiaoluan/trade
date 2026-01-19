@@ -645,6 +645,7 @@ async def admin_set_ai_picks_permission(
 async def get_dashboard_init_data(authorization: str = Header(None)):
     """一次性获取dashboard所有初始数据，减少请求次数"""
     import time
+    import traceback
     start = time.time()
     print(f"[API] /api/dashboard/init 请求开始")
     
@@ -659,47 +660,52 @@ async def get_dashboard_init_data(authorization: str = Header(None)):
     
     username = user['username']
     
-    # 获取所有数据
-    t1 = time.time()
-    watchlist = get_user_watchlist(username)
-    print(f"[API] watchlist 耗时: {time.time() - t1:.3f}s")
-    
-    t2 = time.time()
-    tasks = get_user_analysis_tasks(username)
-    print(f"[API] tasks 耗时: {time.time() - t2:.3f}s")
-    
-    # 使用摘要查询，避免加载完整报告数据
-    t3 = time.time()
-    from web.database import db_get_user_reports_summary
-    reports = db_get_user_reports_summary(username)
-    print(f"[API] reports 耗时: {time.time() - t3:.3f}s")
-    
-    # 获取用户设置
-    t4 = time.time()
-    from web.database import get_db
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT pushplus_token, wechat_openid FROM users WHERE username = ?", (username,))
-        row = cursor.fetchone()
-        pushplus_token = row['pushplus_token'] if row else None
-        wechat_openid = row['wechat_openid'] if row else None
-    print(f"[API] settings 耗时: {time.time() - t4:.3f}s")
-    
-    wechat_configured = bool(wechat_openid and WECHAT_APP_SECRET and WECHAT_TEMPLATE_ID)
-    
-    print(f"[API] /api/dashboard/init 总耗时: {time.time() - start:.3f}s")
-    
-    return {
-        "status": "success",
-        "watchlist": watchlist,
-        "tasks": tasks,
-        "reports": reports,
-        "settings": {
-            "pushplus_token": pushplus_token or "",
-            "wechat_openid": wechat_openid or "",
-            "wechat_configured": wechat_configured
+    try:
+        # 获取所有数据
+        t1 = time.time()
+        watchlist = get_user_watchlist(username)
+        print(f"[API] watchlist 耗时: {time.time() - t1:.3f}s, 数量: {len(watchlist)}")
+        
+        t2 = time.time()
+        tasks = get_user_analysis_tasks(username)
+        print(f"[API] tasks 耗时: {time.time() - t2:.3f}s")
+        
+        # 使用摘要查询，避免加载完整报告数据
+        t3 = time.time()
+        from web.database import db_get_user_reports_summary
+        reports = db_get_user_reports_summary(username)
+        print(f"[API] reports 耗时: {time.time() - t3:.3f}s")
+        
+        # 获取用户设置
+        t4 = time.time()
+        from web.database import get_db
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT pushplus_token, wechat_openid FROM users WHERE username = ?", (username,))
+            row = cursor.fetchone()
+            pushplus_token = row['pushplus_token'] if row else None
+            wechat_openid = row['wechat_openid'] if row else None
+        print(f"[API] settings 耗时: {time.time() - t4:.3f}s")
+        
+        wechat_configured = bool(wechat_openid and WECHAT_APP_SECRET and WECHAT_TEMPLATE_ID)
+        
+        print(f"[API] /api/dashboard/init 总耗时: {time.time() - start:.3f}s")
+        
+        return {
+            "status": "success",
+            "watchlist": watchlist,
+            "tasks": tasks,
+            "reports": reports,
+            "settings": {
+                "pushplus_token": pushplus_token or "",
+                "wechat_openid": wechat_openid or "",
+                "wechat_configured": wechat_configured
+            }
         }
-    }
+    except Exception as e:
+        error_msg = f"获取dashboard数据失败: {str(e)}\n{traceback.format_exc()}"
+        print(f"[API ERROR] {error_msg}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/watchlist")
