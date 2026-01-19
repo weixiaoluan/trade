@@ -727,12 +727,14 @@ export default function StrategiesPage() {
                       <p className="text-gray-500">回测收益</p>
                       <p
                         className={`font-medium ${
-                          (strategy.backtest_return || 0) >= 0
+                          (backtestResults[strategy.id]?.annual_return ?? strategy.backtest_return ?? 0) >= 0
                             ? "text-green-400"
                             : "text-red-400"
                         }`}
                       >
-                        {strategy.backtest_return
+                        {backtestResults[strategy.id]
+                          ? `${backtestResults[strategy.id].annual_return > 0 ? "+" : ""}${backtestResults[strategy.id].annual_return}%`
+                          : strategy.backtest_return
                           ? `${strategy.backtest_return > 0 ? "+" : ""}${strategy.backtest_return}%`
                           : "-"}
                       </p>
