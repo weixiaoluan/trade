@@ -309,6 +309,8 @@ export default function StrategiesPage() {
       if (response.ok && data.success) {
         setBacktestResults((prev) => ({ ...prev, [strategyId]: data }));
         setSuccessMsg(`回测完成: 年化${data.annual_return}%, 回撤${data.max_drawdown}%`);
+        // 刷新策略列表以获取更新后的回测数据
+        await fetchStrategies();
       } else {
         setError(data.detail || "回测失败");
       }

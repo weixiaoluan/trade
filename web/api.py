@@ -7781,14 +7781,71 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
             etf_pool = SHORT_TERM_ETF_POOL
             use_general_backtester = False
         elif strategy_id in ["overnight", "rsi_reversal", "bias_reversion", "momentum_rotation", "risk_parity", "adaptive_ma", "rsrs_sector_rotation", "cb_intraday_burst"]:
-            # 这些策略使用通用ETF池进行模拟回测
-            strategy = ETFMomentumRotationStrategy()  # 使用动量策略作为基础
-            etf_pool = GENERAL_ETF_POOL
-            use_general_backtester = True
+            # 使用策略专属回测器
+            from web.strategies.generic_backtester import get_strategy_backtester
+            
+            # 获取历史价格数据
+            prices_dict = {}
+            for key, etf_info in GENERAL_ETF_POOL.items():
+                symbol = etf_info.symbol
+                df = db_get_etf_daily(symbol, limit=days + 50)
+                if not df.empty:
+                    df = df.sort_values('date')
+                    df.set_index('date', inplace=True)
+                    prices_dict[symbol] = df['close']
+            
+            if not prices_dict:
+                raise HTTPException(status_code=400, detail="无法获取历史数据，请先同步ETF数据")
+            
+            prices_df = pd.DataFrame(prices_dict)
+            prices_df = prices_df.dropna(how='all')
+            
+            if len(prices_df) < 30:
+                raise HTTPException(status_code=400, detail=f"历史数据不足，仅有{len(prices_df)}条记录")
+            
+            # 使用策略专属回测器
+            backtester = get_strategy_backtester(strategy_id, initial_capital)
+            if not backtester:
+                raise HTTPException(status_code=400, detail=f"不支持的策略: {strategy_id}")
+            
+            result = backtester.run(prices_df)
+            
+            execution_time = round(time.time() - start_time, 2)
+            final_value = round(initial_capital * (1 + result.total_return))
+            
+            annual_return = round(result.annual_return * 100, 2)
+            max_drawdown = round(result.max_drawdown * 100, 2)
+            sharpe_ratio = round(result.sharpe_ratio, 2)
+            win_rate = round(result.win_rate * 100, 1)
+            
+            # 更新策略注册表中的回测结果
+            from web.strategies.registry import StrategyRegistry
+            strategy_def = StrategyRegistry.get_by_id(strategy_id)
+            if strategy_def:
+                strategy_def.backtest_return = annual_return
+                strategy_def.backtest_sharpe = sharpe_ratio
+                strategy_def.backtest_max_drawdown = max_drawdown
+                strategy_def.backtest_win_rate = win_rate
+            
+            return {
+                "success": True,
+                "strategy_id": strategy_id,
+                "initial_capital": initial_capital,
+                "final_value": final_value,
+                "total_return": round(result.total_return * 100, 2),
+                "annual_return": annual_return,
+                "max_drawdown": max_drawdown,
+                "sharpe_ratio": sharpe_ratio,
+                "win_rate": win_rate,
+                "trade_count": result.trade_count,
+                "execution_time": execution_time,
+                "data_days": len(prices_df),
+                "backtest_period": f"{prices_df.index[0].strftime('%Y-%m-%d')} ~ {prices_df.index[-1].strftime('%Y-%m-%d')}",
+            }
         else:
             raise HTTPException(status_code=400, detail=f"不支持的策略: {strategy_id}")
         
-        # 获取历史价格数据
+        # 获取历史价格数据 (用于ETF策略)
         prices_dict = {}
         for key, etf_info in etf_pool.items():
             symbol = etf_info.symbol
@@ -7808,7 +7865,7 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
         if len(prices_df) < 30:
             raise HTTPException(status_code=400, detail=f"历史数据不足，仅有{len(prices_df)}条记录")
         
-        # 运行回测
+        # 运行回测 (ETF策略)
         if strategy_id == "etf_short_term":
             backtester = ShortTermBacktester(strategy, initial_capital=initial_capital)
         else:
@@ -7822,16 +7879,30 @@ async def run_strategy_backtest(strategy_id: str, request: Request, authorizatio
         # 计算最终资产
         final_value = round(initial_capital * (1 + result.total_return))
         
+        annual_return = round(result.annual_return * 100, 2)
+        max_drawdown = round(result.max_drawdown * 100, 2)
+        sharpe_ratio = round(result.sharpe_ratio, 2)
+        win_rate = round(result.win_rate * 100, 1)
+        
+        # 更新策略注册表中的回测结果
+        from web.strategies.registry import StrategyRegistry
+        strategy_def = StrategyRegistry.get_by_id(strategy_id)
+        if strategy_def:
+            strategy_def.backtest_return = annual_return
+            strategy_def.backtest_sharpe = sharpe_ratio
+            strategy_def.backtest_max_drawdown = max_drawdown
+            strategy_def.backtest_win_rate = win_rate
+        
         return {
             "success": True,
             "strategy_id": strategy_id,
             "initial_capital": initial_capital,
             "final_value": final_value,
             "total_return": round(result.total_return * 100, 2),
-            "annual_return": round(result.annual_return * 100, 2),
-            "max_drawdown": round(result.max_drawdown * 100, 2),
-            "sharpe_ratio": round(result.sharpe_ratio, 2),
-            "win_rate": round(result.win_rate * 100, 1),
+            "annual_return": annual_return,
+            "max_drawdown": max_drawdown,
+            "sharpe_ratio": sharpe_ratio,
+            "win_rate": win_rate,
             "trade_count": result.trade_count,
             "execution_time": execution_time,
             "data_days": len(prices_df),
