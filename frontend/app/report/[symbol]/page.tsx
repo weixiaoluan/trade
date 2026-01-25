@@ -76,36 +76,7 @@ export default function ReportPage() {
 
   const getToken = () => localStorage.getItem("token");
 
-  // 获取自选列表中该标的的周期设置
-  useEffect(() => {
-    const fetchWatchlistPeriod = async () => {
-      const token = getToken();
-      if (!token || !symbol) return;
-      
-      try {
-        const response = await fetch(
-          `${API_BASE}/api/watchlist`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          const watchlist = data.watchlist || [];
-          const item = watchlist.find((w: any) => 
-            w.symbol?.toUpperCase() === symbol.toUpperCase()
-          );
-          if (item?.holding_period) {
-            setDefaultPeriod(item.holding_period as 'short' | 'swing' | 'long');
-          }
-        }
-      } catch (err) {
-        console.error("获取自选周期失败:", err);
-      }
-    };
-    
-    fetchWatchlistPeriod();
-  }, [symbol]);
-
+  // 一次性获取报告和周期设置（合并请求，提升速度）
   useEffect(() => {
     const fetchReport = async () => {
       const token = getToken();
@@ -130,6 +101,11 @@ export default function ReportPage() {
 
         const data = await response.json();
         setReport(data.report);
+        
+        // 从报告API响应中获取周期设置（减少一次请求）
+        if (data.holding_period) {
+          setDefaultPeriod(data.holding_period as 'short' | 'swing' | 'long');
+        }
       } catch (err: any) {
         setError(err.message);
       } finally {

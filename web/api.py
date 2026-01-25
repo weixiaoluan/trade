@@ -1559,7 +1559,7 @@ async def get_reports_list(authorization: str = Header(None)):
 
 
 @app.get("/api/reports/{symbol}")
-async def get_report_detail(symbol: str, authorization: str = Header(None)):
+async def get_report_detail(symbol: str, authorization: str = Header(None), response: Response = None):
     """获取某个标的的详细报告"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未登录")
@@ -1591,9 +1591,23 @@ async def get_report_detail(symbol: str, authorization: str = Header(None)):
             raise HTTPException(status_code=404, detail="未找到该标的的报告")
         
         print(f"[报告查询] 返回报告数据，ID: {report.get('id')}")
+        
+        # 同时返回该标的的自选周期设置，减少前端请求次数
+        holding_period = None
+        try:
+            from web.database import get_watchlist
+            watchlist = get_watchlist(user['username'])
+            for item in watchlist:
+                if item.get('symbol', '').upper() == symbol.upper():
+                    holding_period = item.get('holding_period')
+                    break
+        except:
+            pass
+        
         return {
             "status": "success",
-            "report": report
+            "report": report,
+            "holding_period": holding_period
         }
     except HTTPException:
         raise
