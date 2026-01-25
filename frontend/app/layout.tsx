@@ -50,8 +50,8 @@ export default function RootLayout({
         <div className="fixed inset-0 bg-grid pointer-events-none opacity-50" aria-hidden="true" />
         <div className="fixed inset-0 bg-gradient-radial from-electric-blue/5 via-transparent to-transparent pointer-events-none" aria-hidden="true" />
         
-        {/* Main Content - 使用 contain 优化 */}
-        <main className="relative z-10 contain-layout">
+        {/* Main Content */}
+        <main className="relative z-10">
           {children}
         </main>
       </body>

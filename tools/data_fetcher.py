@@ -1063,7 +1063,7 @@ def get_currency_symbol(ticker: str) -> str:
 
 def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
     """
-    使用东方财富API获取中国A股的历史行情数据
+    使用多数据源获取中国A股的历史行情数据（优先akshare，备用东方财富API）
     
     Args:
         ticker: 股票代码 (如: 605289.SH, 600519.SH, 000001.SZ)
@@ -1076,22 +1076,8 @@ def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
     os.environ['NO_PROXY'] = '*'
     os.environ['no_proxy'] = '*'
     
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://quote.eastmoney.com/"
-    }
-    proxies = {"http": None, "https": None}
-    
     # 提取纯数字代码
     code = ticker.replace('.SH', '').replace('.SZ', '').replace('.sh', '').replace('.sz', '')
-    
-    # 判断交易所: 6开头是上海(1)，0/3开头是深圳(0)
-    if code.startswith('6'):
-        market = "1"
-        secid = f"1.{code}"
-    else:
-        market = "0"
-        secid = f"0.{code}"
     
     # 计算数据量
     limit_map = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "max": 1500}
@@ -1099,103 +1085,98 @@ def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
     
     stock_name = f"股票 {code}"
     ohlcv_data = []
+    data_source = "unknown"
     
-    # 带重试的请求函数
-    def fetch_with_retry(url, params=None, max_retries=3):
-        last_error = None
-        for attempt in range(max_retries):
-            try:
-                resp = requests.get(url, headers=headers, params=params, timeout=15, proxies=proxies)
-                if resp.status_code == 200:
-                    return resp.json()
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                last_error = e
-                if attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 2
-                    print(f"[A股数据] 请求失败，{wait_time}秒后重试({attempt + 1}/{max_retries}): {str(e)[:50]}")
-                    time.sleep(wait_time)
-        if last_error:
-            print(f"[A股数据] 重试{max_retries}次后仍失败: {code}")
-        return None
-    
+    # ========== 方法1: 优先使用 akshare（更稳定）==========
+    print(f"[A股数据] {code} 尝试akshare获取数据...")
     try:
-        # 获取股票名称
-        info_url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f57,f58"
-        info_data = fetch_with_retry(info_url)
-        if info_data and info_data.get("data"):
-            stock_name = info_data["data"].get("f58", stock_name)
-        
-        # 获取历史K线数据
-        kline_url = f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
-        params = {
-            "secid": secid,
-            "fields1": "f1,f2,f3,f4,f5,f6",
-            "fields2": "f51,f52,f53,f54,f55,f56,f57",
-            "klt": "101",  # 日K
-            "fqt": "1",    # 前复权
-            "end": "20500101",
-            "lmt": limit
-        }
-        
-        kline_result = fetch_with_retry(kline_url, params)
-        
-        if kline_result:
-            kline_data = kline_result.get("data", {})
-            if kline_data:
-                stock_name = kline_data.get("name", stock_name)
-                klines = kline_data.get("klines", [])
-                print(f"[A股数据] {code} 东方财富返回 {len(klines)} 条K线数据")
-                
-                for kline in klines:
-                    # 格式: 日期,开盘,收盘,最高,最低,成交量,成交额
-                    parts = kline.split(",")
-                    if len(parts) >= 7:
-                        ohlcv_data.append({
-                            "Date": parts[0],
-                            "Open": float(parts[1]),
-                            "Close": float(parts[2]),
-                            "High": float(parts[3]),
-                            "Low": float(parts[4]),
-                            "Volume": int(float(parts[5])),
-                        })
+        import akshare as ak
+        df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="qfq")
+        if df is not None and len(df) > 0:
+            df = df.tail(limit)
+            for _, row in df.iterrows():
+                ohlcv_data.append({
+                    "Date": str(row['日期']),
+                    "Open": float(row['开盘']),
+                    "Close": float(row['收盘']),
+                    "High": float(row['最高']),
+                    "Low": float(row['最低']),
+                    "Volume": int(row['成交量']),
+                })
+            data_source = "akshare"
+            print(f"[A股数据] {code} akshare获取成功，共 {len(ohlcv_data)} 条数据")
+    except Exception as ak_err:
+        print(f"[A股数据] {code} akshare失败: {ak_err}")
+    
+    # ========== 方法2: 备用东方财富API ==========
+    if not ohlcv_data:
+        print(f"[A股数据] {code} 尝试东方财富API...")
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://quote.eastmoney.com/"
+            }
+            proxies = {"http": None, "https": None}
+            
+            # 判断交易所: 6开头是上海(1)，0/3开头是深圳(0)
+            if code.startswith('6'):
+                secid = f"1.{code}"
             else:
-                print(f"[A股数据] {code} 东方财富返回空数据: {kline_result}")
-        else:
-            print(f"[A股数据] {code} 东方财富请求失败")
-        
-        # 如果东方财富API失败，尝试使用akshare作为备用
-        if not ohlcv_data:
-            print(f"[A股数据] {code} 尝试使用akshare获取数据...")
-            try:
-                import akshare as ak
-                # 根据市场选择正确的接口
-                symbol_ak = f"{code}"
-                df = ak.stock_zh_a_hist(symbol=symbol_ak, period="daily", adjust="qfq")
-                if df is not None and len(df) > 0:
-                    # 限制数据量
-                    df = df.tail(limit)
-                    stock_name = f"股票 {code}"
-                    for _, row in df.iterrows():
-                        ohlcv_data.append({
-                            "Date": str(row['日期']),
-                            "Open": float(row['开盘']),
-                            "Close": float(row['收盘']),
-                            "High": float(row['最高']),
-                            "Low": float(row['最低']),
-                            "Volume": int(row['成交量']),
-                        })
-                    print(f"[A股数据] {code} akshare获取成功，共 {len(ohlcv_data)} 条数据")
-            except Exception as ak_err:
-                print(f"[A股数据] {code} akshare也失败: {ak_err}")
-        
-        if not ohlcv_data:
-            return json.dumps({
-                "status": "error",
-                "ticker": ticker,
-                "message": f"无法获取 {ticker} 的行情数据"
-            }, ensure_ascii=False)
-        
-        # 计算统计数据
+                secid = f"0.{code}"
+            
+            # 获取历史K线数据
+            kline_url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+            params = {
+                "secid": secid,
+                "fields1": "f1,f2,f3,f4,f5,f6",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57",
+                "klt": "101",
+                "fqt": "1",
+                "end": "20500101",
+                "lmt": limit
+            }
+            
+            for attempt in range(3):
+                try:
+                    resp = requests.get(kline_url, headers=headers, params=params, timeout=15, proxies=proxies)
+                    if resp.status_code == 200:
+                        kline_result = resp.json()
+                        kline_data = kline_result.get("data", {})
+                        if kline_data:
+                            stock_name = kline_data.get("name", stock_name)
+                            klines = kline_data.get("klines", [])
+                            print(f"[A股数据] {code} 东方财富返回 {len(klines)} 条K线数据")
+                            
+                            for kline in klines:
+                                parts = kline.split(",")
+                                if len(parts) >= 6:
+                                    ohlcv_data.append({
+                                        "Date": parts[0],
+                                        "Open": float(parts[1]),
+                                        "Close": float(parts[2]),
+                                        "High": float(parts[3]),
+                                        "Low": float(parts[4]),
+                                        "Volume": int(float(parts[5])),
+                                    })
+                            data_source = "eastmoney"
+                            break
+                except Exception as e:
+                    print(f"[A股数据] 东方财富请求失败({attempt+1}/3): {str(e)[:50]}")
+                    if attempt < 2:
+                        time.sleep(2)
+        except Exception as em_err:
+            print(f"[A股数据] {code} 东方财富API失败: {em_err}")
+    
+    # ========== 返回结果 ==========
+    if not ohlcv_data:
+        return json.dumps({
+            "status": "error",
+            "ticker": ticker,
+            "message": f"无法获取 {ticker} 的行情数据，akshare和东方财富API均失败"
+        }, ensure_ascii=False)
+    
+    # 计算统计数据
+    try:
         latest_price = ohlcv_data[-1]["Close"]
         first_price = ohlcv_data[0]["Close"]
         price_change = latest_price - first_price
@@ -1227,14 +1208,13 @@ def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
                 "52_week_low": low_52w,
             },
             "ohlcv": ohlcv_data,
-            "source": "eastmoney"
+            "source": data_source
         }, ensure_ascii=False)
-        
     except Exception as e:
         return json.dumps({
             "status": "error",
             "ticker": ticker,
-            "message": f"获取A股数据失败: {str(e)}"
+            "message": f"计算统计数据失败: {str(e)}"
         }, ensure_ascii=False)
 
 
