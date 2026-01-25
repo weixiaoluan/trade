@@ -182,10 +182,14 @@ const nextConfig = {
   },
   
   async rewrites() {
+    // Docker 环境使用内部服务名，本地开发使用 localhost
+    const apiHost = process.env.NODE_ENV === 'production' 
+      ? 'http://backend:8000' 
+      : 'http://127.0.0.1:8000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:8000/api/:path*',
+        destination: `${apiHost}/api/:path*`,
       },
     ];
   },
