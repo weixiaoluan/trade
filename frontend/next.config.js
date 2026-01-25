@@ -44,8 +44,8 @@ const nextConfig = {
       'clsx',
       'tailwind-merge',
     ],
-    // 启用更激进的代码分割
-    optimizeCss: true,
+    // CSS 优化 (需要 critters 包，Docker 环境下禁用)
+    // optimizeCss: true,
   },
   
   // 模块化导入优化
