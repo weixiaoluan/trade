@@ -50,6 +50,15 @@ export default function LoginPage() {
       });
 
       console.log("响应状态:", response.status);
+      
+      // 检查响应是否为JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        // 服务器返回了非JSON响应（如HTML错误页面）
+        console.error("服务器返回非JSON响应:", contentType);
+        throw new Error("服务器连接异常，请稍后重试");
+      }
+      
       const data = await response.json();
       console.log("响应数据:", data);
 
