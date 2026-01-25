@@ -2,8 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+/* 字体优化：使用系统字体栈，避免外部字体加载延迟 */
+/* 移除 Google Fonts 外部导入，使用本地系统字体 */
 
 :root {
   --background: #020617; /* Deep Navy */
@@ -318,15 +318,10 @@ html, body {
   animation: slideUp 0.4s ease-out forwards;
 }
 
-/* 优化字体加载 */
-@font-face {
-  font-family: 'Inter';
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-display: swap;
+/* 优化字体加载 - 使用系统字体栈实现零延迟 */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* ============ 轻量级动画替代 framer-motion ============ */
@@ -404,4 +399,176 @@ html, body {
 /* 页面骨架屏优化 */
 .page-skeleton {
   @apply animate-pulse bg-slate-800/50;
+}
+
+/* ============ 极致性能优化 ============ */
+
+/* GPU 加速层 - 用于频繁动画的元素 */
+.gpu-layer {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* 内容可见性优化 - 大幅提升长列表性能 */
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 500px;
+}
+
+/* 包含约束 - 隔离重绘区域 */
+.contain-layout {
+  contain: layout;
+}
+
+.contain-paint {
+  contain: paint;
+}
+
+.contain-strict {
+  contain: strict;
+}
+
+/* 即时渲染提示 */
+.render-instant {
+  text-rendering: optimizeSpeed;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 平滑滚动容器 */
+.scroll-smooth-container {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+/* 惰性加载占位符 */
+.lazy-placeholder {
+  min-height: 100px;
+  background: linear-gradient(90deg, rgba(30,41,59,0.5) 0%, rgba(51,65,85,0.5) 50%, rgba(30,41,59,0.5) 100%);
+  background-size: 200% 100%;
+}
+
+/* 低端设备优化 */
+@media (prefers-reduced-motion: reduce), (max-device-memory: 4gb) {
+  .gpu-layer {
+    transform: none;
+    will-change: auto;
+  }
+  
+  .skeleton {
+    animation: none;
+    background: rgba(255,255,255,0.05);
+  }
+  
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  .glass-card {
+    border-width: 2px;
+    backdrop-filter: none;
+  }
+}
+
+/* 打印优化 */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: white !important;
+    color: black !important;
+  }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  /* 增大触摸目标 */
+  .touch-target-lg {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px;
+  }
+  
+  /* 禁用悬停效果 */
+  .hover-effect {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  
+  /* 快速点击响应 */
+  * {
+    touch-action: manipulation;
+  }
+}
+
+/* 数据密集型表格优化 */
+.data-table {
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.data-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 数字等宽显示 */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* 快速淡入 */
+.fade-in-fast {
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* 骨架屏行 */
+.skeleton-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.skeleton-cell {
+  height: 1rem;
+  border-radius: 0.25rem;
+  background: rgba(255,255,255,0.05);
+}
+
+/* 加载指示器 - 轻量级 */
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.loading-dot:nth-child(2) { animation-delay: 0.2s; }
+.loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* 文字截断 */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

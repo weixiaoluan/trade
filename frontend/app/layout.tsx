@@ -7,6 +7,7 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   themeColor: '#020617',
+  colorScheme: 'dark',
 };
 
 export const metadata: Metadata = {
@@ -18,6 +19,11 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  other: {
+    'mobile-web-app-capable': 'yes',
+    'apple-mobile-web-app-capable': 'yes',
+    'apple-mobile-web-app-status-bar-style': 'black-translucent',
+  },
 };
 
 export default function RootLayout({
@@ -26,17 +32,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN" className="dark">
-      <body className="bg-obsidian min-h-screen antialiased">
-        {/* Background Effects */}
-        <div className="fixed inset-0 bg-grid pointer-events-none" />
-        <div className="fixed inset-0 bg-gradient-radial from-electric-blue/5 via-transparent to-transparent pointer-events-none" />
-        <div className="fixed inset-0 noise pointer-events-none" />
+    <html lang="zh-CN" className="dark" suppressHydrationWarning>
+      <head>
+        {/* DNS 预解析和预连接 */}
+        <link rel="dns-prefetch" href="//127.0.0.1:8000" />
+        <link rel="preconnect" href="http://127.0.0.1:8000" crossOrigin="anonymous" />
         
-        {/* Main Content */}
-        <div className="relative z-10">
+        {/* 关键资源预加载提示 */}
+        <meta httpEquiv="x-dns-prefetch-control" content="on" />
+        
+        {/* 性能优化 meta */}
+        <meta name="renderer" content="webkit" />
+        <meta name="force-rendering" content="webkit" />
+      </head>
+      <body className="bg-obsidian min-h-screen antialiased render-instant">
+        {/* 简化背景效果 - 使用 CSS 变量减少重绘 */}
+        <div className="fixed inset-0 bg-grid pointer-events-none opacity-50" aria-hidden="true" />
+        <div className="fixed inset-0 bg-gradient-radial from-electric-blue/5 via-transparent to-transparent pointer-events-none" aria-hidden="true" />
+        
+        {/* Main Content - 使用 contain 优化 */}
+        <main className="relative z-10 contain-layout">
           {children}
-        </div>
+        </main>
       </body>
     </html>
   );

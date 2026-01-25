@@ -2007,10 +2007,17 @@ def get_batch_quotes(symbols: list) -> dict:
     cache_ttl = get_quote_cache_ttl()
     market_session = get_market_session()
     
-    # 提取纯数字代码
+    # 提取纯数字代码 - 支持多种格式: sz000001, 000001.SZ, 000001
     code_map = {}
     for symbol in symbols:
-        code = symbol[2:] if symbol.startswith(("sz", "sh")) else symbol
+        # 处理 sz/sh 前缀格式
+        if symbol.lower().startswith(("sz", "sh")):
+            code = symbol[2:]
+        # 处理 .SZ/.SH/.SS 后缀格式
+        elif "." in symbol:
+            code = symbol.split(".")[0]
+        else:
+            code = symbol
         code_map[code] = symbol
     
     codes = set(code_map.keys())
