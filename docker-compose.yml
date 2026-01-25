@@ -1,10 +1,10 @@
 services:
-  # Nginx 反向代理
+  # Nginx 反向代理 (使用独立端口，不占用主机80端口)
   nginx:
     image: nginx:alpine
     container_name: ai-trade-nginx
     ports:
-      - "80:80"
+      - "3080:80"  # 使用3080端口，避免与其他项目冲突
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
