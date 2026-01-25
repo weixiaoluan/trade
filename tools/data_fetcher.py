@@ -1144,6 +1144,7 @@ def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
             if kline_data:
                 stock_name = kline_data.get("name", stock_name)
                 klines = kline_data.get("klines", [])
+                print(f"[A股数据] {code} 东方财富返回 {len(klines)} 条K线数据")
                 
                 for kline in klines:
                     # 格式: 日期,开盘,收盘,最高,最低,成交量,成交额
@@ -1157,6 +1158,35 @@ def get_cn_a_stock_data(ticker: str, period: str = "1y") -> str:
                             "Low": float(parts[4]),
                             "Volume": int(float(parts[5])),
                         })
+            else:
+                print(f"[A股数据] {code} 东方财富返回空数据: {kline_result}")
+        else:
+            print(f"[A股数据] {code} 东方财富请求失败")
+        
+        # 如果东方财富API失败，尝试使用akshare作为备用
+        if not ohlcv_data:
+            print(f"[A股数据] {code} 尝试使用akshare获取数据...")
+            try:
+                import akshare as ak
+                # 根据市场选择正确的接口
+                symbol_ak = f"{code}"
+                df = ak.stock_zh_a_hist(symbol=symbol_ak, period="daily", adjust="qfq")
+                if df is not None and len(df) > 0:
+                    # 限制数据量
+                    df = df.tail(limit)
+                    stock_name = f"股票 {code}"
+                    for _, row in df.iterrows():
+                        ohlcv_data.append({
+                            "Date": str(row['日期']),
+                            "Open": float(row['开盘']),
+                            "Close": float(row['收盘']),
+                            "High": float(row['最高']),
+                            "Low": float(row['最低']),
+                            "Volume": int(row['成交量']),
+                        })
+                    print(f"[A股数据] {code} akshare获取成功，共 {len(ohlcv_data)} 条数据")
+            except Exception as ak_err:
+                print(f"[A股数据] {code} akshare也失败: {ak_err}")
         
         if not ohlcv_data:
             return json.dumps({
