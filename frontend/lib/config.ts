@@ -14,16 +14,15 @@ function getApiBase(): string {
   
   // 客户端：根据访问地址决定 API 地址
   const hostname = window.location.hostname;
-  const protocol = window.location.protocol;
   
-  // 本地开发环境
+  // 本地开发环境 - 直接访问后端
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'http://localhost:8000';
   }
   
-  // 生产环境：使用 Nginx 反向代理，API 路径为 /api
-  // 不暴露内部端口，所有请求通过同一域名
-  return `${protocol}//${hostname}`;
+  // 生产环境：使用相对路径，让 Nginx 反向代理处理
+  // 返回空字符串，这样 /api/xxx 会作为相对路径请求当前域名
+  return '';
 }
 
 export const API_BASE = getApiBase();
