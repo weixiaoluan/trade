@@ -295,7 +295,7 @@ export function useMomentumScroll(ref: React.RefObject<HTMLElement>) {
     if (!element) return;
 
     // 启用 iOS 惯性滚动
-    element.style.webkitOverflowScrolling = 'touch';
+    (element.style as any).webkitOverflowScrolling = 'touch';
     element.style.overscrollBehavior = 'contain';
   }, [ref]);
 }
