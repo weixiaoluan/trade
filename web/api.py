@@ -106,6 +106,33 @@ def restore_symbol_from_url(symbol: str) -> str:
 # 存储分析任务状态
 analysis_tasks: Dict[str, Dict[str, Any]] = {}
 
+# ============================================
+# 全局 HTTP 客户端（连接池复用，提升性能）
+# ============================================
+import httpx
+
+_ai_http_client: httpx.Client = None
+
+def get_ai_http_client() -> httpx.Client:
+    """获取全局复用的 HTTP 客户端，避免每次请求都创建新连接"""
+    global _ai_http_client
+    if _ai_http_client is None:
+        transport = httpx.HTTPTransport(
+            proxy=None,
+            retries=2,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10)
+        )
+        _ai_http_client = httpx.Client(
+            transport=transport,
+            timeout=httpx.Timeout(
+                300.0,  # 总超时300秒
+                connect=30.0,
+                read=300.0,
+                write=30.0
+            )
+        )
+    return _ai_http_client
+
 # 启动定时任务调度器
 try:
     from web.scheduler import start_scheduler
@@ -1992,9 +2019,18 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
                 'current_step': '获取基金净值数据'
             })
             
-            # 获取基金数据
-            stock_data = await asyncio.to_thread(get_cn_fund_data, pure_code, "2y")
-            stock_info = await asyncio.to_thread(get_cn_fund_info, pure_code)
+            # 获取基金数据（并行获取 + 超时保护）
+            try:
+                fund_data_task = asyncio.create_task(asyncio.to_thread(get_cn_fund_data, pure_code, "2y"))
+                fund_info_task = asyncio.create_task(asyncio.to_thread(get_cn_fund_info, pure_code))
+                stock_data, stock_info = await asyncio.wait_for(
+                    asyncio.gather(fund_data_task, fund_info_task),
+                    timeout=120  # 2分钟超时
+                )
+            except asyncio.TimeoutError:
+                fund_data_task.cancel()
+                fund_info_task.cancel()
+                raise Exception(f"获取 {ticker} 的基金数据超时，请稍后重试")
             
             stock_data_dict = json.loads(stock_data)
             stock_info_dict = json.loads(stock_info)
@@ -2005,21 +2041,36 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             print(f"[分析] {ticker} 基金数据获取完成 耗时{time.time()-start_time:.1f}s")
         else:
             # 非场外基金使用原有逻辑
-            search_result = await asyncio.to_thread(search_ticker, ticker)
-            search_dict = json.loads(search_result)
-            if search_dict.get("status") == "success":
-                ticker = search_dict.get("ticker", ticker)
+            try:
+                search_result = await asyncio.wait_for(
+                    asyncio.to_thread(search_ticker, ticker),
+                    timeout=30  # 30秒超时
+                )
+                search_dict = json.loads(search_result)
+                if search_dict.get("status") == "success":
+                    ticker = search_dict.get("ticker", ticker)
+            except asyncio.TimeoutError:
+                print(f"[分析] {ticker} 代码识别超时，使用原始代码继续")
             
             update_analysis_task(username, original_symbol, {
                 'progress': 8,
                 'current_step': '获取行情和基本面数据'
             })
             
-            # 并行获取数据
+            # 并行获取数据（添加超时保护）
             stock_data_task = asyncio.create_task(asyncio.to_thread(get_stock_data, ticker, "2y", "1d"))
             stock_info_task = asyncio.create_task(asyncio.to_thread(get_stock_info, ticker))
             
-            stock_data, stock_info = await asyncio.gather(stock_data_task, stock_info_task)
+            try:
+                stock_data, stock_info = await asyncio.wait_for(
+                    asyncio.gather(stock_data_task, stock_info_task),
+                    timeout=180  # 3分钟超时
+                )
+            except asyncio.TimeoutError:
+                # 取消未完成的任务
+                stock_data_task.cancel()
+                stock_info_task.cancel()
+                raise Exception(f"获取 {ticker} 的行情数据超时，请稍后重试")
             stock_data_dict = json.loads(stock_data)
             stock_info_dict = json.loads(stock_info)
             
@@ -2034,11 +2085,19 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
             'current_step': '计算技术指标'
         })
         
-        # 并行计算指标和支撑阻力
+        # 并行计算指标和支撑阻力（添加超时保护）
         indicators_task = asyncio.create_task(asyncio.to_thread(calculate_all_indicators, stock_data))
         levels_task = asyncio.create_task(asyncio.to_thread(get_support_resistance_levels, stock_data))
         
-        indicators, levels = await asyncio.gather(indicators_task, levels_task)
+        try:
+            indicators, levels = await asyncio.wait_for(
+                asyncio.gather(indicators_task, levels_task),
+                timeout=60  # 1分钟超时
+            )
+        except asyncio.TimeoutError:
+            indicators_task.cancel()
+            levels_task.cancel()
+            raise Exception(f"计算 {ticker} 的技术指标超时，请稍后重试")
         indicators_dict = json.loads(indicators)
         levels_dict = json.loads(levels)
         
@@ -2051,7 +2110,13 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         })
         
         # === 阶段3：趋势分析（25-30%）===
-        trend = await asyncio.to_thread(analyze_trend, indicators)
+        try:
+            trend = await asyncio.wait_for(
+                asyncio.to_thread(analyze_trend, indicators),
+                timeout=30  # 30秒超时
+            )
+        except asyncio.TimeoutError:
+            raise Exception(f"分析 {ticker} 的趋势超时，请稍后重试")
         trend_dict = json.loads(trend)
         
         if trend_dict.get("status") == "error":
@@ -2073,14 +2138,20 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         trend_analysis_for_signal = trend_dict.get("trend_analysis", trend_dict)
         
         # 生成交易信号（整合AI分析+量化数据指标，包含多周期信号）
-        trading_signals = await asyncio.to_thread(
-            generate_trading_signals, 
-            indicators, 
-            levels,
-            quant_analysis_for_signal,
-            trend_analysis_for_signal,
-            holding_period
-        )
+        try:
+            trading_signals = await asyncio.wait_for(
+                asyncio.to_thread(
+                    generate_trading_signals, 
+                    indicators, 
+                    levels,
+                    quant_analysis_for_signal,
+                    trend_analysis_for_signal,
+                    holding_period
+                ),
+                timeout=30  # 30秒超时
+            )
+        except asyncio.TimeoutError:
+            raise Exception(f"生成 {ticker} 的交易信号超时，请稍后重试")
         trading_signals_dict = json.loads(trading_signals)
         
         print(f"[分析] {ticker} 量化分析完成 耗时{time.time()-start_time:.1f}s")
@@ -2092,17 +2163,23 @@ async def run_background_analysis_full(username: str, ticker: str, task_id: str,
         })
         
         try:
-            report, predictions = await generate_ai_report_with_predictions(
-                ticker, stock_data_dict, stock_info_dict, 
-                indicators_dict, trend_dict, levels_dict,
-                holding_period=holding_period,
-                position_info={'position': user_position, 'cost_price': user_cost_price},
-                # 传入进度回调
-                progress_callback=lambda p, s: update_analysis_task(username, original_symbol, {
-                    'progress': 30 + int(p * 0.65),  # 30-95%
-                    'current_step': s
-                })
+            report, predictions = await asyncio.wait_for(
+                generate_ai_report_with_predictions(
+                    ticker, stock_data_dict, stock_info_dict, 
+                    indicators_dict, trend_dict, levels_dict,
+                    holding_period=holding_period,
+                    position_info={'position': user_position, 'cost_price': user_cost_price},
+                    # 传入进度回调
+                    progress_callback=lambda p, s: update_analysis_task(username, original_symbol, {
+                        'progress': 30 + int(p * 0.65),  # 30-95%
+                        'current_step': s
+                    })
+                ),
+                timeout=600  # 10分钟超时
             )
+        except asyncio.TimeoutError:
+            print(f"[分析] {ticker} AI报告生成超时（600秒）")
+            raise Exception(f"AI报告生成超时，请稍后重试")
         except Exception as ai_error:
             print(f"[分析] {ticker} AI报告生成失败: {ai_error}")
             raise Exception(f"AI报告生成失败: {ai_error}")
@@ -3259,25 +3336,11 @@ async def generate_ai_report_with_predictions(
     
     api_key = APIConfig.SILICONFLOW_API_KEY
     
-    # 创建优化的 HTTP 客户端配置
-    transport = httpx.HTTPTransport(
-        proxy=None,
-        retries=3  # 自动重试3次
-    )
-    http_client = httpx.Client(
-        transport=transport,
-        timeout=httpx.Timeout(
-            900.0,  # 总超时900秒
-            connect=60.0,  # 连接超时60秒
-            read=600.0,  # 读取超时600秒
-            write=60.0  # 写入超时60秒
-        )
-    )
-    
+    # 使用全局复用的 HTTP 客户端（连接池优化）
     client = OpenAI(
         api_key=api_key,
         base_url="https://api.siliconflow.cn/v1",
-        http_client=http_client
+        http_client=get_ai_http_client()
     )
     
     # 准备数据摘要
@@ -3493,25 +3556,11 @@ async def generate_ai_report(
     
     api_key = APIConfig.SILICONFLOW_API_KEY
     
-    # 创建优化的 HTTP 客户端配置（流式输出需要更长超时）
-    transport = httpx.HTTPTransport(
-        proxy=None,
-        retries=2  # 自动重试2次
-    )
-    http_client = httpx.Client(
-        transport=transport,
-        timeout=httpx.Timeout(
-            300.0,  # 总超时300秒（5分钟）
-            connect=30.0,  # 连接超时30秒
-            read=300.0,  # 读取超时300秒
-            write=30.0  # 写入超时30秒
-        )
-    )
-    
+    # 使用全局复用的 HTTP 客户端（连接池优化）
     client = OpenAI(
         api_key=api_key,
         base_url="https://api.siliconflow.cn/v1",
-        http_client=http_client
+        http_client=get_ai_http_client()
     )
     
     # 准备数据摘要
